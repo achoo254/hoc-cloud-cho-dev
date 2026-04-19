@@ -534,30 +534,72 @@
 <script type="application/json" id="lab-data">
 {
   "title": "TCP vs UDP — Handshake & Port",
+  "estimatedMinutes": 40,
+  "dependsOn": ["Mô hình OSI", "IP cơ bản"],
+  "enables": ["HTTP/HTTPS", "DNS", "Load balancing", "Firewall rules", "Socket programming"],
+  "misconceptions": [
+    {
+      "wrong": "UDP luôn nhanh hơn TCP",
+      "right": "UDP nhanh hơn khi mạng ổn. Khi packet loss cao, UDP mất gói không retransmit → app phải tự xử lý hoặc mất data. TCP retransmit tự động — đôi khi TCP throughput cao hơn UDP trong mạng kém.",
+      "why": "Tốc độ phụ thuộc vào use case và điều kiện mạng, không phải protocol một chiều."
+    },
+    {
+      "wrong": "Connection refused = server bị tắt hoặc không có mạng",
+      "right": "Connection refused = SYN tới được máy đích nhưng không có process listen port đó. Máy vẫn sống, mạng vẫn thông, chỉ là service chưa chạy hoặc chạy sai port.",
+      "why": "Phân biệt refused vs timeout giúp debug đúng hướng và tiết kiệm thời gian."
+    },
+    {
+      "wrong": "HTTP/3 không reliable vì dùng UDP",
+      "right": "HTTP/3 dùng QUIC trên UDP nhưng QUIC tự implement reliability ở tầng app — mỗi stream độc lập, mất 1 stream không block stream khác.",
+      "why": "Reliability là tính năng, không gắn liền với protocol. UDP chỉ là transport layer không có reliability built-in."
+    },
+    {
+      "wrong": "Port number nhỏ thì packet ưu tiên xử lý nhanh hơn",
+      "right": "Port chỉ là số 16-bit dùng để phân biệt service, không ảnh hưởng tới priority hay performance của packet.",
+      "why": "Routing/QoS dùng DSCP/ToS trong IP header, không dựa vào port number."
+    },
+    {
+      "wrong": "UDP không có checksum nên không detect lỗi",
+      "right": "UDP header 8 byte bao gồm checksum field — detect corruption trong transit. Điểm khác biệt: UDP không retransmit khi phát hiện lỗi, application tự quyết định bỏ qua hay retry.",
+      "why": "Hiểu điều này giúp không nhầm 'UDP unreliable' với 'UDP không detect lỗi' — hai khái niệm khác nhau."
+    }
+  ],
   "tldr": [
     {
       "what": "TCP — Transmission Control Protocol",
-      "why": "Dùng khi dữ liệu phải đến đủ và đúng thứ tự (web, SSH, DB). TCP đảm bảo bằng cách retransmit khi mất gói — bạn không phải tự xử lý mất gói trong code."
+      "why": "Dùng khi dữ liệu phải đến đủ và đúng thứ tự (web, SSH, DB). TCP đảm bảo bằng cách retransmit khi mất gói — bạn không phải tự xử lý mất gói trong code.",
+      "whyBreaks": "Dùng TCP cho game multiplayer real-time: retransmit gói cũ block gói mới → Head-of-Line blocking → lag spike không kiểm soát được, đặc biệt khi mạng có >1% packet loss.",
+      "deploymentUse": "Mọi service cần data integrity: HTTP/HTTPS (nginx), database (MySQL port 3306, Postgres 5432), SSH (port 22), file transfer. Nếu mất 1 byte là corrupt → dùng TCP."
     },
     {
       "what": "UDP — User Datagram Protocol",
-      "why": "Dùng khi tốc độ quan trọng hơn độ chính xác (DNS, VoIP, game, streaming). Mỗi ms latency trong game = cảm giác lag rõ ràng — TCP overhead quá đắt."
+      "why": "Dùng khi tốc độ quan trọng hơn độ chính xác (DNS, VoIP, game, streaming). Mỗi ms latency trong game = cảm giác lag rõ ràng — TCP overhead quá đắt.",
+      "whyBreaks": "Dùng UDP cho HTTP web thông thường mà không có reliability layer (như QUIC) → trang hiển thị thiếu/lỗi khi mạng kém, không có cơ chế retransmit tự động.",
+      "deploymentUse": "DNS (port 53), game server (Unity/Unreal thường UDP), video streaming (WebRTC), VoIP (SIP/RTP), monitoring (syslog UDP 514, SNMP UDP 161). Khi latency quan trọng hơn completeness."
     },
     {
       "what": "3-way Handshake: SYN → SYN-ACK → ACK",
-      "why": "TCP cần xác nhận cả 2 chiều đều thông trước khi gửi data. Nếu bỏ qua bước này, 1 bên có thể gửi vào hư không khi mạng bất đối xứng."
+      "why": "TCP cần xác nhận cả 2 chiều đều thông trước khi gửi data. Nếu bỏ qua bước này, 1 bên có thể gửi vào hư không khi mạng bất đối xứng.",
+      "whyBreaks": "SYN flood attack: attacker gửi hàng nghìn SYN giả, server tốn memory/CPU cho half-open connections đang chờ ACK → server không nhận được connection hợp lệ (DoS). Phòng: SYN cookies.",
+      "deploymentUse": "Khi debug connection slow: đo RTT của handshake bằng tcpdump timestamp. 3 RTT cho handshake + 1-2 RTT cho TLS → baseline latency trước khi data đi = lý do cần CDN/edge gần user."
     },
     {
       "what": "Port 0–65535, well-known < 1024",
-      "why": "Port phân biệt nhiều service trên cùng 1 IP. Không có port, server không biết giao packet cho nginx hay ssh. Well-known cần root để bảo vệ khỏi giả mạo."
+      "why": "Port phân biệt nhiều service trên cùng 1 IP. Không có port, server không biết giao packet cho nginx hay ssh. Well-known cần root để bảo vệ khỏi giả mạo.",
+      "whyBreaks": "Bind service non-root trên port < 1024: Permission denied. Bind port đang dùng: Address already in use (TIME_WAIT chưa hết hoặc service chưa dừng hẳn). Cả hai là lỗi deploy phổ biến.",
+      "deploymentUse": "nginx production: chạy master process root để bind :80/:443, worker process drop xuống www-data. Node.js dev thường dùng :3000/:8080 (không cần root). Container: map host port 80 → container port 3000."
     },
     {
       "what": "TCP header 20–60 byte vs UDP header 8 byte",
-      "why": "Overhead lớn = tốn bandwidth hơn. Với DNS (hàng tỷ query/giây), tiết kiệm 12 byte mỗi packet = tiết kiệm hàng GB/giây băng thông mạng toàn cầu."
+      "why": "Overhead lớn = tốn bandwidth hơn. Với DNS (hàng tỷ query/giây), tiết kiệm 12 byte mỗi packet = tiết kiệm hàng GB/giây băng thông mạng toàn cầu.",
+      "whyBreaks": "Không liên quan trực tiếp đến lỗi — nhưng với IoT device gửi 100 byte payload, TCP header chiếm 20% overhead. Trên mạng cellular đắt tiền, UDP tiết kiệm chi phí bandwidth đáng kể.",
+      "deploymentUse": "Chọn giao thức IoT sensor: MQTT over TCP (reliable, overhead cao hơn) vs UDP custom protocol (minimal overhead). Khi battery và data plan quan trọng → UDP. Khi data phải đến đủ → TCP/MQTT."
     },
     {
       "what": "HTTP/3 dùng UDP (QUIC)",
-      "why": "QUIC xây reliability ở tầng app trên UDP, tránh Head-of-Line blocking của TCP — khi mất 1 stream không chặn stream khác. Đây là lý do HTTP/3 nhanh hơn HTTP/2."
+      "why": "QUIC xây reliability ở tầng app trên UDP, tránh Head-of-Line blocking của TCP — khi mất 1 stream không chặn stream khác. Đây là lý do HTTP/3 nhanh hơn HTTP/2.",
+      "whyBreaks": "Corporate firewall block UDP outbound ngoài port 53/123 → HTTP/3 bị block → browser fallback sang HTTP/2 TCP → không gây lỗi visible nhưng performance tệ hơn kỳ vọng.",
+      "deploymentUse": "Cloudflare, nginx 1.25+, Caddy hỗ trợ HTTP/3. Bật bằng thêm Alt-Svc header. Cần mở port UDP 443 trên firewall/security group ngoài TCP 443. Verify bằng: curl --http3 https://yourdomain.com."
     }
   ],
   "walkthrough": [
@@ -565,42 +607,56 @@
       "step": 1,
       "what": "Mở TCP listener với nc",
       "why": "Hiểu port binding thực tế — nc tạo 1 process lắng nghe port 9000. Không có process listen thì TCP SYN nhận RST ngay (connection refused). Đây là nền tảng để debug 'connection refused'.",
+      "whyBreaks": "Nếu quên mở server trước khi connect → Connection refused ngay lập tức. Nếu port đang dùng bởi process khác → Address already in use. Cả 2 lỗi này chiếm >50% câu hỏi debug của junior dev.",
+      "observeWith": "ss -tlnp | grep 9000  # Xem process nào đang listen port 9000\nsudo tcpdump -i lo -n 'port 9000' -v  # Capture gói trên loopback khi connect",
       "code": "# Terminal 1 — khởi động TCP server\nnc -l 9000\n\n# Terminal 2 — kết nối TCP client\nnc 127.0.0.1 9000\n# Gõ text bất kỳ → hiện ở Terminal 1\n# Ctrl+C để đóng"
     },
     {
       "step": 2,
       "what": "Capture 3-way handshake bằng tcpdump",
       "why": "Nhìn tận mắt SYN/SYN-ACK/ACK là cách học nhanh nhất. Flag [S] = SYN, [S.] = SYN-ACK, [.] = ACK. Khi debug 'connection timeout', tcpdump cho biết SYN đi được không.",
+      "whyBreaks": "Nếu chỉ thấy SYN mà không thấy SYN-ACK → firewall hoặc server không listen. Nếu thấy SYN + RST → port đóng. Nếu không thấy gì → packet bị drop (firewall DROP). Phân biệt 3 pattern này là core network debug skill.",
+      "observeWith": "sudo tcpdump -i lo -n 'port 9000' -v  # Flag: [S]=SYN, [S.]=SYN-ACK, [.]=ACK, [R]=RST\n# Đọc output: client:port > server:port Flags [S], seq N",
       "code": "# Terminal 1 — capture trên loopback\nsudo tcpdump -i lo -n 'port 9000' -v\n\n# Terminal 2 — tạo server\nnc -l 9000\n\n# Terminal 3 — connect để xem handshake\nnc 127.0.0.1 9000\n# tcpdump hiển thị: SYN → SYN-ACK → ACK"
     },
     {
       "step": 3,
       "what": "Thử UDP — không có handshake",
       "why": "Thấy rõ sự khác biệt: UDP gửi thẳng không cần server sẵn sàng. Nếu server chưa lắng nghe, gói vẫn gửi đi — UDP không báo lỗi. Đây là lý do cần timeout ở tầng app khi dùng UDP.",
+      "whyBreaks": "Gửi UDP khi không có server listen → không báo lỗi ở phía gửi (khác TCP refused ngay). Kernel đích gửi ICMP Port Unreachable — nhưng nếu firewall block ICMP thì sender không biết gì. Debug UDP failure khó hơn TCP vì thiếu connection state.",
+      "observeWith": "sudo tcpdump -i lo -n 'port 9001' -v  # Xem UDP datagram không có handshake flags\nss -ulnp  # Kiểm tra UDP socket đang listen",
       "code": "# Terminal 1 — UDP server\nnc -u -l 9000\n\n# Terminal 2 — UDP client (không handshake)\nnc -u 127.0.0.1 9000\n# Gõ text → hiện ở Terminal 1 ngay, không cần bắt tay trước\n\n# So sánh: gửi UDP khi không có server\nnc -u 127.0.0.1 9001  # port chưa mở\necho 'hello' | nc -u 127.0.0.1 9001  # gửi không báo lỗi"
     },
     {
       "step": 4,
       "what": "So sánh TCP vs UDP với Wireshark / tcpdump",
       "why": "Wireshark hiển thị đúng số RTT: TCP thấy 3 packet đầu là handshake trước khi data. UDP thấy data ngay packet đầu tiên. Đây là bằng chứng trực tiếp về trade-off latency.",
+      "whyBreaks": "Nếu chỉ capture một bên mà không thấy ACK → network asymmetric (gói một chiều bị block). Common khi debug cloud VM: inbound OK nhưng outbound bị chặn bởi security group → SYN đi nhưng không có SYN-ACK về.",
+      "observeWith": "sudo tcpdump -i lo -n 'port 9000 or port 9001'  # So sánh cùng lúc\n# TCP: thấy [S] [S.] [.] trước data | UDP: thấy data packet đầu tiên ngay",
       "code": "# Capture cả TCP và UDP cùng lúc\nsudo tcpdump -i lo -n 'port 9000 or port 9001'\n\n# Mở 2 cặp server/client (TCP port 9000, UDP port 9001)\n# TCP: nc -l 9000  /  nc 127.0.0.1 9000\n# UDP: nc -u -l 9001  /  nc -u 127.0.0.1 9001\n\n# Quan sát: TCP bắt đầu bằng 3 dòng SYN/SYN-ACK/ACK\n# UDP bắt đầu thẳng bằng data packet"
     },
     {
       "step": 5,
       "what": "Kiểm tra port đang listen — phân biệt TCP/UDP",
       "why": "ss/netstat phân biệt tcp vs udp trong output. Khi debug 'connection refused', bước đầu tiên là kiểm tra process nào đang listen port nào, bằng giao thức nào.",
+      "whyBreaks": "Service chạy trên UDP nhưng client connect TCP → refused ngay. Xảy ra khi cấu hình sai: DNS server (UDP 53) bị test bằng nc (TCP mặc định) → refused nhưng DNS vẫn hoạt động. Kiểm tra đúng protocol trước khi kết luận service down.",
+      "observeWith": "ss -tlunp  # t=TCP, u=UDP, l=listening, n=numeric, p=process\n# Output phân biệt rõ 'tcp' vs 'udp' ở cột đầu",
       "code": "# Xem tất cả port đang listen (cả TCP lẫn UDP)\nss -tlunp\n\n# Xem riêng TCP\nss -tlnp | grep LISTEN\n\n# Xem riêng UDP\nss -ulnp\n\n# Xem process nào bind port cụ thể\nsudo ss -tlnp | grep ':80'"
     },
     {
       "step": 6,
       "what": "DNS query qua UDP — thấy tại sao không cần TCP",
       "why": "DNS là ví dụ kinh điển nhất cho UDP: query và response fit vào 1 packet &lt;512 byte. Dùng dig với +tcp để so sánh latency — TCP thêm handshake overhead rõ ràng.",
+      "whyBreaks": "Firewall block UDP 53 outbound → mọi DNS query timeout → toàn bộ service phụ thuộc domain resolution đều fail. Dấu hiệu: ping IP OK nhưng ping hostname timeout. Verify: dig @8.8.8.8 google.com nếu không trả lời → firewall block UDP 53.",
+      "observeWith": "sudo tcpdump -i any -n 'port 53'  # Capture DNS: xem UDP vs TCP handshake\ndig google.com  # Default UDP\ndig +tcp google.com  # Force TCP — đếm số packet thêm",
       "code": "# DNS query mặc định dùng UDP\ndig google.com\n\n# Force DNS qua TCP để so sánh\ndig +tcp google.com\n\n# Capture DNS query (UDP port 53)\nsudo tcpdump -i any -n 'port 53' &\ndig google.com\nsudo pkill tcpdump\n# Thấy: 1 query packet + 1 response packet (UDP, không có handshake)"
     },
     {
       "step": 7,
       "what": "TCP FIN handshake — đóng kết nối đúng cách",
       "why": "TCP không chỉ bắt tay khi mở mà còn khi đóng: FIN → FIN-ACK → ACK. Hiểu TIME_WAIT giúp debug 'Address already in use' khi restart server — kernel chờ hết TIME_WAIT (60s).",
+      "whyBreaks": "Restart service ngay sau khi dừng → 'Address already in use' vì port vẫn ở TIME_WAIT. Fix: SO_REUSEADDR (hầu hết production server đã set). Nếu thấy quá nhiều TIME_WAIT → có thể connection không được reuse (thiếu keepalive/connection pool).",
+      "observeWith": "ss -tn state time-wait  # Xem connection đang ở TIME_WAIT\nwatch -n1 'ss -tn | grep TIME-WAIT | wc -l'  # Đếm real-time khi open/close connection",
       "code": "# Xem TCP states khi kết nối đóng\nss -tn\n\n# Xem TIME_WAIT (xuất hiện ngay sau khi đóng kết nối)\nss -tn | grep TIME-WAIT\n\n# Fix 'Address already in use' khi dev: SO_REUSEADDR\n# (nginx, node.js đều set flag này mặc định)"
     }
   ],
@@ -799,27 +855,33 @@
   "tryAtHome": [
     {
       "why": "Thấy tận mắt 3-way handshake — SYN/SYN-ACK/ACK — trước khi data đi",
-      "cmd": "# Terminal 1: start TCP server\nnc -l 9000\n\n# Terminal 2: capture\nsudo tcpdump -i lo -n 'port 9000' -v\n\n# Terminal 3: connect\nnc 127.0.0.1 9000"
+      "cmd": "# Terminal 1: start TCP server\nnc -l 9000\n\n# Terminal 2: capture\nsudo tcpdump -i lo -n 'port 9000' -v\n\n# Terminal 3: connect\nnc 127.0.0.1 9000",
+      "observeWith": "# Trong output tcpdump nhìn flags:\n# [S] = SYN (client xin kết nối)\n# [S.] = SYN-ACK (server đồng ý)\n# [.] = ACK (client xác nhận)\n# Đếm 3 dòng này = 3-way handshake hoàn tất trước data đầu tiên"
     },
     {
       "why": "Thấy UDP không có handshake — data đi thẳng không cần bắt tay",
-      "cmd": "# Terminal 1: UDP server\nnc -u -l 9001\n\n# Terminal 2: capture\nsudo tcpdump -i lo -n 'port 9001' -v\n\n# Terminal 3: UDP client\nnc -u 127.0.0.1 9001"
+      "cmd": "# Terminal 1: UDP server\nnc -u -l 9001\n\n# Terminal 2: capture\nsudo tcpdump -i lo -n 'port 9001' -v\n\n# Terminal 3: UDP client\nnc -u 127.0.0.1 9001",
+      "observeWith": "# Trong tcpdump: packet đầu tiên là DATA ngay\n# Không có [S] [S.] [.] nào — đây là bằng chứng UDP fire-and-forget\nss -ulnp | grep 9001  # Verify UDP server đang listen"
     },
     {
       "why": "Thấy DNS dùng UDP (port 53) — query + response chỉ 2 packet, không có handshake",
-      "cmd": "sudo tcpdump -i any -n 'port 53' &\ndig google.com\nsudo pkill tcpdump\n# So sánh: dig +tcp google.com (force TCP, thấy SYN trước)"
+      "cmd": "sudo tcpdump -i any -n 'port 53' &\ndig google.com\nsudo pkill tcpdump\n# So sánh: dig +tcp google.com (force TCP, thấy SYN trước)",
+      "observeWith": "# UDP DNS: chỉ 2 dòng trong tcpdump (query + response)\n# TCP DNS: thêm 3 dòng handshake trước 2 dòng data\ndig +stats google.com  # Xem 'SERVER:' và 'Query time:' để so sánh latency"
     },
     {
       "why": "Kiểm tra port đang listen để phân biệt TCP vs UDP — kỹ năng debug cơ bản",
-      "cmd": "# Xem tất cả TCP port đang LISTEN\nss -tlnp\n\n# Xem tất cả UDP socket\nss -ulnp\n\n# Xem process bind port cụ thể\nsudo ss -tlnp | grep ':80'"
+      "cmd": "# Xem tất cả TCP port đang LISTEN\nss -tlnp\n\n# Xem tất cả UDP socket\nss -ulnp\n\n# Xem process bind port cụ thể\nsudo ss -tlnp | grep ':80'",
+      "observeWith": "# Cột đầu tiên: 'tcp' hoặc 'udp' — đây là cách phân biệt\n# State 'LISTEN' chỉ có với TCP; UDP không có LISTEN state\n# Cột 'Local Address:Port' cho biết IP và port đang bind"
     },
     {
       "why": "Tái hiện 'connection refused' vs 'connection timeout' — 2 lỗi hay gặp nhất",
-      "cmd": "# Connection refused: port không có process listen\nnc -vz 127.0.0.1 65533\n\n# Connection timeout: IP không tồn tại hoặc firewall drop\nnc -vz -w 3 203.0.113.254 80\n\n# Quan sát thời gian phản hồi: refused ngay lập tức, timeout sau 3s"
+      "cmd": "# Connection refused: port không có process listen\nnc -vz 127.0.0.1 65533\n\n# Connection timeout: IP không tồn tại hoặc firewall drop\nnc -vz -w 3 203.0.113.254 80\n\n# Quan sát thời gian phản hồi: refused ngay lập tức, timeout sau 3s",
+      "observeWith": "# Refused: trả lời ngay trong <10ms — kernel gửi RST\n# Timeout: chờ đủ -w giây — SYN bị drop/firewall\ntime nc -vz 127.0.0.1 65533  # Đo thời gian refused\ntime nc -vz -w 2 203.0.113.254 80  # Đo thời gian timeout"
     },
     {
       "why": "Xem TCP states trong hệ thống — hiểu ESTABLISHED, TIME_WAIT, LISTEN",
-      "cmd": "# Xem tất cả TCP connections với state\nss -tn\n\n# Lọc theo state\nss -tn state established\nss -tn state time-wait\n\n# Watch real-time khi mở/đóng connection\nwatch -n1 'ss -tn | head -20'"
+      "cmd": "# Xem tất cả TCP connections với state\nss -tn\n\n# Lọc theo state\nss -tn state established\nss -tn state time-wait\n\n# Watch real-time khi mở/đóng connection\nwatch -n1 'ss -tn | head -20'",
+      "observeWith": "# Sau khi đóng nc connection: xem TIME-WAIT xuất hiện\n# ss -tn | grep TIME-WAIT — tồn tại ~60s trước khi biến mất\n# Đây chính là nguyên nhân 'Address already in use' khi restart nhanh"
     }
   ]
 }
