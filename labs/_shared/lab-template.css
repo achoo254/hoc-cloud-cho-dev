@@ -322,3 +322,69 @@ pre.code-plain { padding: 14px 16px; border-radius: 6px; overflow-x: auto; backg
 }
 h1:hover .header-anchor, h2:hover .header-anchor, h3:hover .header-anchor,
 h4:hover .header-anchor { opacity: 0.6; }
+
+/* ===== Schema v2 callouts (Breaks / Observe / Deploy / Misconception) ===== */
+.callout {
+  border-left: 3px solid var(--callout-color, var(--border));
+  background: var(--callout-bg, var(--bg-input));
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.55;
+}
+.callout-icon { margin-right: 4px; }
+.callout-label { color: var(--callout-color); margin-right: 4px; }
+.callout-breaks  { --callout-color: #f87171; --callout-bg: rgba(248, 113, 113, 0.08); }
+.callout-observe { --callout-color: #60a5fa; --callout-bg: rgba(96, 165, 250, 0.08); }
+.callout-deploy  { --callout-color: #a78bfa; --callout-bg: rgba(167, 139, 250, 0.08); }
+.callout-misconception { --callout-color: #fbbf24; --callout-bg: rgba(251, 191, 36, 0.08); }
+
+/* Misconceptions block (top of lab) */
+.misconceptions-block {
+  background: rgba(251, 191, 36, 0.06);
+  border-left: 3px solid #fbbf24;
+  padding: 14px 18px; border-radius: 6px; margin: 18px 0;
+}
+.misc-title { font-weight: 600; margin-bottom: 8px; color: #fbbf24; }
+.misc-list { margin: 0; padding-left: 22px; }
+.misc-list li { margin-bottom: 10px; font-size: 13px; }
+.misc-wrong { color: #f87171; }
+.misc-right { color: #34d399; margin-top: 2px; }
+.misc-why   { color: var(--text-dim); margin-top: 2px; font-style: italic; }
+
+/* DependsOn / Enables badges */
+.dep-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dep-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); font-family: var(--mono);
+}
+.dep-requires { border-color: rgba(96, 165, 250, 0.4); color: #60a5fa; }
+.dep-enables  { border-color: rgba(0, 255, 163, 0.4); color: var(--green); }
+
+/* Toggle group (WHY / BREAKS / OBSERVE / DEPLOY) — bottom-right floating */
+.why-toggle-group {
+  position: fixed; bottom: 18px; right: 18px; z-index: 20;
+  display: flex; gap: 4px; padding: 4px;
+  background: rgba(17, 24, 39, 0.9); border: 1px solid var(--border);
+  border-radius: 6px; backdrop-filter: blur(8px);
+}
+.why-toggle-btn {
+  padding: 6px 10px; font-size: 11px; font-family: var(--mono);
+  border-radius: 4px; background: transparent; color: var(--text);
+  border: 1px solid transparent; cursor: pointer;
+  transition: opacity 120ms, background 120ms;
+}
+.why-toggle-btn:hover { background: var(--bg-card-hover); }
+.why-toggle-btn.hidden-state { opacity: 0.4; background: transparent; }
+
+/* Toggle visibility rules */
+body.why-hidden     .why-block,
+body.why-hidden     .col-why > .why-block,
+body.why-hidden     .step-why,
+body.why-hidden     .try-why { display: none !important; }
+body.breaks-hidden  .callout-breaks  { display: none !important; }
+body.observe-hidden .callout-observe { display: none !important; }
+body.deploy-hidden  .callout-deploy  { display: none !important; }

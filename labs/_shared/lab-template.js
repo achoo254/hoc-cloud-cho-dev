@@ -183,11 +183,20 @@ function normalizePool(pool) {
   });
 }
 
-// ===== Validators — enforce WHY-first =====
+// ===== Validators — enforce WHY-first (Schema v2: WHY + WHEN-IT-BREAKS + SEE-IT-ON-VPS + DEPLOY-READY) =====
 function validateData(labId, data) {
-  const warn = (msg) => console.warn(`[lab:${labId}] WHY missing — ${msg}`);
-  (data.tldr || []).forEach((r, i) => { if (!r.why) warn(`tldr[${i}].why`); });
-  (data.walkthrough || []).forEach((s, i) => { if (!s.why) warn(`walkthrough[${i}].why`); });
+  if (window.SKIP_WHY_WARN) return;
+  const warn = (msg) => console.warn(`[lab:${labId}] missing — ${msg}`);
+  (data.tldr || []).forEach((r, i) => {
+    if (!r.why) warn(`tldr[${i}].why`);
+    if (!r.whyBreaks) warn(`tldr[${i}].whyBreaks`);
+    if (!r.deploymentUse) warn(`tldr[${i}].deploymentUse`);
+  });
+  (data.walkthrough || []).forEach((s, i) => {
+    if (!s.why) warn(`walkthrough[${i}].why`);
+    if (!s.whyBreaks) warn(`walkthrough[${i}].whyBreaks`);
+    if (!s.observeWith) warn(`walkthrough[${i}].observeWith`);
+  });
   (data.quiz || []).forEach((q, i) => {
     if (!q.whyCorrect) warn(`quiz[${i}].whyCorrect`);
     if (!q.whyOthersWrong) warn(`quiz[${i}].whyOthersWrong`);
@@ -195,7 +204,28 @@ function validateData(labId, data) {
     if (q.difficulty && !['easy', 'medium', 'hard'].includes(q.difficulty)) warn(`quiz[${i}].difficulty invalid`);
   });
   (data.flashcards || []).forEach((c, i) => { if (!c.why) warn(`flashcards[${i}].why`); });
-  (data.tryAtHome || []).forEach((t, i) => { if (!t.why) warn(`tryAtHome[${i}].why`); });
+  (data.tryAtHome || []).forEach((t, i) => {
+    if (!t.why) warn(`tryAtHome[${i}].why`);
+    if (!t.observeWith) warn(`tryAtHome[${i}].observeWith`);
+  });
+}
+
+// ===== Callout renderer (Schema v2) =====
+// type: 'breaks' | 'observe' | 'deploy' | 'misconception'
+const CALLOUT_META = {
+  breaks:        { icon: '⚠️', label: 'Khi hỏng' },
+  observe:       { icon: '👁️', label: 'Quan sát' },
+  deploy:        { icon: '🚀', label: 'Khi deploy thật' },
+  misconception: { icon: '📚', label: 'Hiểu lầm phổ biến' },
+};
+function renderCallout(type, html) {
+  if (!html) return null;
+  const meta = CALLOUT_META[type] || { icon: '•', label: '' };
+  return el('div', { class: `callout callout-${type}` }, [
+    el('span', { class: 'callout-icon' }, meta.icon + ' '),
+    el('strong', { class: 'callout-label' }, meta.label + ': '),
+    el('span', { class: 'callout-body', html }),
+  ]);
 }
 
 // ===== Renderers =====
@@ -215,7 +245,8 @@ function el(tag, props = {}, children = []) {
 function renderTldr(root, items) {
   if (!items?.length) return;
   const table = el('table', { class: 'tldr-table' });
-  const keys = Object.keys(items[0]).filter(k => k !== 'why');
+  const V2_FIELDS = new Set(['why', 'whyBreaks', 'deploymentUse', 'observeWith']);
+  const keys = Object.keys(items[0]).filter(k => !V2_FIELDS.has(k));
   const thead = el('thead', {}, [
     el('tr', {}, [
       ...keys.map(k => el('th', {}, k.charAt(0).toUpperCase() + k.slice(1))),
@@ -224,9 +255,13 @@ function renderTldr(root, items) {
   ]);
   const tbody = el('tbody');
   items.forEach(row => {
+    const whyCell = el('td', { class: 'col-why' });
+    if (row.why) whyCell.appendChild(el('div', { class: 'why-block', html: row.why }));
+    const breaks = renderCallout('breaks', row.whyBreaks);  if (breaks) whyCell.appendChild(breaks);
+    const deploy = renderCallout('deploy', row.deploymentUse); if (deploy) whyCell.appendChild(deploy);
     const tr = el('tr', {}, [
       ...keys.map(k => el('td', { html: String(row[k] ?? '') })),
-      el('td', { class: 'col-why', html: row.why || '' }),
+      whyCell,
     ]);
     tbody.appendChild(tr);
   });
@@ -242,7 +277,10 @@ function renderWalkthrough(root, steps) {
       el('span', { class: 'step-what', html: s.what || '' }),
     ]));
     if (s.why) div.appendChild(el('div', { class: 'why-block step-why', html: `<strong>Why:</strong> ${s.why}` }));
+    const breaks = renderCallout('breaks', s.whyBreaks);           if (breaks) div.appendChild(breaks);
     if (s.code) div.appendChild(makeCodeBlock(s.code, s.lang));
+    const observe = renderCallout('observe', s.observeWith);       if (observe) div.appendChild(observe);
+    const deploy = renderCallout('deploy', s.deploymentUse);       if (deploy) div.appendChild(deploy);
     if (s.note) div.appendChild(el('div', { class: 'text-dim mt-8', html: s.note, style: 'font-size:13px' }));
     root.appendChild(div);
   });
@@ -267,6 +305,17 @@ function makeCodeBlock(code, lang = 'bash') {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+// Lazy-load a shared script once per page.
+const _injected = new Set();
+function injectScript(src, onLoad) {
+  if (_injected.has(src)) { onLoad?.(); return; }
+  _injected.add(src);
+  const s = document.createElement('script');
+  s.src = src; s.defer = true;
+  if (onLoad) s.addEventListener('load', onLoad);
+  document.head.appendChild(s);
 }
 
 // Pick today's 20 questions from pool. Cache per (labId, date) so order is stable
@@ -328,6 +377,12 @@ function renderQuiz(root, pool, labId) {
         srs[q.id] = quizSrsUpdate(srs[q.id], isCorrect);
         store.set(srsKey, srs);
         updateProgress();
+        // Post quiz score to server (percent of correct among answered).
+        if (window.ProgressSync) {
+          const answered = items.filter(it => state.answers[it.id]).length;
+          const correctCt = items.filter(it => state.answers[it.id]?.correct).length;
+          if (answered >= items.length) window.ProgressSync.markQuizScore(labId, Math.round((correctCt / items.length) * 100));
+        }
       });
       opts.appendChild(opt);
     });
@@ -442,22 +497,74 @@ function renderTryAtHome(root, items) {
     const item = el('div', { class: 'try-item' });
     if (t.why) item.appendChild(el('div', { class: 'try-why', html: t.why }));
     item.appendChild(makeCodeBlock(t.cmd, 'bash'));
+    const observe = renderCallout('observe', t.observeWith);
+    if (observe) item.appendChild(observe);
     if (t.note) item.appendChild(el('div', { class: 'text-dim mt-8', html: t.note, style: 'font-size:13px' }));
     list.appendChild(item);
   });
   root.appendChild(list);
 }
 
-// ===== WHY toggle =====
+// Render misconceptions block at top of lab (optional).
+function renderMisconceptions(root, items) {
+  if (!items?.length) return;
+  const block = el('div', { class: 'misconceptions-block' });
+  block.appendChild(el('div', { class: 'misc-title', html: '📚 Hiểu lầm phổ biến — đọc trước' }));
+  const ol = el('ol', { class: 'misc-list' });
+  items.forEach(m => {
+    const li = el('li');
+    if (typeof m === 'string') li.innerHTML = m;
+    else {
+      if (m.wrong) li.appendChild(el('div', { class: 'misc-wrong', html: '❌ ' + m.wrong }));
+      if (m.right) li.appendChild(el('div', { class: 'misc-right', html: '✅ ' + m.right }));
+      if (m.why)   li.appendChild(el('div', { class: 'misc-why',   html: '→ ' + m.why }));
+    }
+    ol.appendChild(li);
+  });
+  block.appendChild(ol);
+  root.appendChild(block);
+}
+
+// Render dependsOn / enables badges on hero.
+function renderDepBadges(heroEl, data) {
+  if (!heroEl) return;
+  const row = el('div', { class: 'dep-badges' });
+  (data.dependsOn || []).forEach(d => row.appendChild(el('span', { class: 'dep-badge dep-requires' }, `← cần: ${d}`)));
+  (data.enables   || []).forEach(d => row.appendChild(el('span', { class: 'dep-badge dep-enables'  }, `→ dùng cho: ${d}`)));
+  if (row.childNodes.length) heroEl.appendChild(row);
+}
+
+// ===== Toggle group: WHY / BREAKS / OBSERVE / DEPLOY =====
+// Each toggle hides its class on <body>; state persisted in localStorage.
+const TOGGLES = [
+  { key: 'why',     label: '💡 WHY',     cls: 'why-hidden' },
+  { key: 'breaks',  label: '⚠️ BREAKS',  cls: 'breaks-hidden' },
+  { key: 'observe', label: '👁️ OBSERVE', cls: 'observe-hidden' },
+  { key: 'deploy',  label: '🚀 DEPLOY',  cls: 'deploy-hidden' },
+];
 function mountWhyToggle() {
-  const btn = el('button', {
-    class: 'why-toggle',
-    onclick: () => {
-      document.body.classList.toggle('why-hidden');
-      btn.textContent = document.body.classList.contains('why-hidden') ? '💡 Hiện WHY' : '💡 Ẩn WHY';
-    },
-  }, '💡 Ẩn WHY');
-  document.body.appendChild(btn);
+  // Migrate legacy `lab:hideWhy` → `lab:toggle:why`
+  const legacy = localStorage.getItem(STORAGE_PREFIX + 'hideWhy');
+  if (legacy !== null && store.get('toggle:why') === null) {
+    store.set('toggle:why', legacy === '1' || legacy === 'true');
+    localStorage.removeItem(STORAGE_PREFIX + 'hideWhy');
+  }
+  const group = el('div', { class: 'why-toggle-group' });
+  TOGGLES.forEach(t => {
+    const hidden = !!store.get(`toggle:${t.key}`);
+    if (hidden) document.body.classList.add(t.cls);
+    const btn = el('button', {
+      class: 'why-toggle-btn' + (hidden ? ' hidden-state' : ''),
+      onclick: () => {
+        const nowHidden = !document.body.classList.contains(t.cls);
+        document.body.classList.toggle(t.cls, nowHidden);
+        btn.classList.toggle('hidden-state', nowHidden);
+        store.set(`toggle:${t.key}`, nowHidden);
+      },
+    }, t.label);
+    group.appendChild(btn);
+  });
+  document.body.appendChild(group);
 }
 
 // ===== Progress tracking for dashboard =====
@@ -599,6 +706,11 @@ export const LabTemplate = {
       const node = document.getElementById(id);
       if (node && payload) fn(node, payload, labId);
     };
+    // Schema v2: misconceptions + dependsOn/enables badges
+    const miscMount = document.getElementById('mount-misconceptions');
+    if (miscMount) renderMisconceptions(miscMount, data.misconceptions);
+    renderDepBadges(document.querySelector('.lab-hero'), data);
+
     mount('mount-tldr', renderTldr, data.tldr);
     mount('mount-walkthrough', renderWalkthrough, data.walkthrough);
 
@@ -613,6 +725,16 @@ export const LabTemplate = {
     mountWhyToggle();
     trackReadingPosition(labId);
     maybeResumePosition(labId);
+
+    // Auto-inject global search widget + progress sync (shared runtime).
+    injectScript('/_shared/search-widget.js');
+    injectScript('/_shared/progress-sync.js', () => {
+      if (window.ProgressSync) {
+        window.ProgressSync.markOpened(labId);
+        window.ProgressSync.installCompletionWatcher(labId);
+        window.ProgressSync.migrateLocalStorageOnce();
+      }
+    });
   },
 
   // For dashboard
