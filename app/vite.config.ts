@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { visualizer } from 'rollup-plugin-visualizer'
 
-// Proxy target: existing Hono server
-const HONO_SERVER = 'http://localhost:3000'
+// Proxy target: Hono server. Port match .env PORT=8387 (xem server/server.js default).
+// Override bằng VITE_HONO_SERVER nếu chạy server ở port khác.
+const HONO_SERVER = process.env['VITE_HONO_SERVER'] || 'http://localhost:8387'
 
 export default defineConfig(({ mode }) => ({
   plugins: [

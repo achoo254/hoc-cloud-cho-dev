@@ -39,7 +39,11 @@ export function computeHeatmap(
   for (const p of progressEntries) {
     for (const ts of [p.opened_at, p.completed_at]) {
       if (!ts) continue
-      const d = ts.slice(0, 10) // YYYY-MM-DD
+      // Server may return ISO string OR unix timestamp (ms/sec) — normalize to ISO
+      const iso = typeof ts === 'number'
+        ? new Date(ts < 1e12 ? ts * 1000 : ts).toISOString()
+        : ts
+      const d = iso.slice(0, 10) // YYYY-MM-DD
       countMap.set(d, (countMap.get(d) ?? 0) + 1)
     }
   }
