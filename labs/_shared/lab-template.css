@@ -1,0 +1,286 @@
+/* Lab template shared theme — WHY-first learning labs
+   Font + palette kế thừa từ subnet-calculator.html để nhất quán */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg-deep: #0a0e17;
+  --bg-card: #111827;
+  --bg-card-hover: #1a2332;
+  --bg-input: #0d1321;
+  --border: #1e2d3d;
+  --border-focus: #00e5ff;
+  --accent: #00e5ff;
+  --accent-dim: rgba(0, 229, 255, 0.15);
+  --accent-glow: rgba(0, 229, 255, 0.3);
+  --why: #ffb86b;
+  --why-dim: rgba(255, 184, 107, 0.12);
+  --why-border: rgba(255, 184, 107, 0.35);
+  --green: #00ffa3;
+  --green-dim: rgba(0, 255, 163, 0.12);
+  --orange: #ff9f43;
+  --red: #ff6b6b;
+  --red-dim: rgba(255, 107, 107, 0.12);
+  --purple: #a78bfa;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --sans: 'Space Grotesk', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg-deep);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.lab-container { max-width: 1100px; margin: 0 auto; padding: 32px 20px 120px; }
+
+/* ===== Nav / header ===== */
+.lab-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: rgba(10, 14, 23, 0.9); backdrop-filter: blur(8px);
+  position: sticky; top: 0; z-index: 10;
+}
+.lab-topbar a { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 13px; }
+.lab-topbar a:hover { text-decoration: underline; }
+
+/* ===== Sections ===== */
+section.lab-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 24px;
+}
+.lab-section-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 20px; font-weight: 600; margin: 0 0 6px;
+  color: var(--text);
+}
+.lab-section-title .tag {
+  font-family: var(--mono); font-size: 11px;
+  background: var(--accent-dim); color: var(--accent);
+  padding: 3px 8px; border-radius: 4px; font-weight: 500;
+}
+.lab-section-subtitle { color: var(--text-dim); margin: 0 0 20px; font-size: 14px; }
+
+/* ===== Hero ===== */
+.lab-hero { padding: 40px 28px; text-align: left; }
+.lab-hero h1 { font-size: 32px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.02em; }
+.lab-hero .lab-hero-why {
+  color: var(--why); font-family: var(--mono); font-size: 14px;
+  background: var(--why-dim); border-left: 3px solid var(--why);
+  padding: 12px 16px; margin-top: 16px; border-radius: 4px;
+}
+.lab-hero .lab-hero-why::before { content: "💡 Why: "; font-weight: 600; }
+
+/* ===== WHY block — first-class citizen ===== */
+.why-block {
+  background: var(--why-dim);
+  border-left: 3px solid var(--why);
+  padding: 10px 14px;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 14px;
+  margin: 8px 0;
+}
+.why-block::before {
+  content: "💡 "; font-weight: 700; color: var(--why);
+}
+.why-block strong { color: var(--why); font-weight: 600; }
+
+/* ===== TL;DR table ===== */
+.tldr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tldr-table th, .tldr-table td {
+  text-align: left; padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tldr-table th {
+  font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+  color: var(--text-dim); letter-spacing: 0.05em;
+  background: var(--bg-input);
+}
+.tldr-table td.col-why { color: var(--why); font-family: var(--mono); font-size: 13px; }
+.tldr-table tr:hover td { background: var(--bg-card-hover); }
+
+/* ===== Walkthrough ===== */
+.walkthrough-step {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 14px;
+  background: var(--bg-input);
+}
+.walkthrough-step .step-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+}
+.walkthrough-step .step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: var(--bg-deep);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-family: var(--mono); font-size: 14px;
+}
+.walkthrough-step .step-what { font-weight: 600; font-size: 15px; }
+.walkthrough-step .step-why { margin: 10px 0; }
+
+/* ===== Code block + copy ===== */
+.code-block {
+  position: relative;
+  background: #05090f; border: 1px solid var(--border);
+  border-radius: 6px; padding: 14px 48px 14px 14px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.55;
+  overflow-x: auto; color: #d8e0ea;
+}
+.code-block .copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-dim); padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 11px; cursor: pointer;
+  transition: all 0.15s;
+}
+.code-block .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.code-block .copy-btn.copied { color: var(--green); border-color: var(--green); }
+.code-block .cmt { color: var(--text-muted); font-style: italic; }
+
+/* ===== Quiz ===== */
+.quiz-item {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px; margin-bottom: 14px; background: var(--bg-input);
+}
+.quiz-item .quiz-q { font-weight: 600; margin: 0 0 12px; }
+.quiz-item .quiz-options { display: flex; flex-direction: column; gap: 6px; }
+.quiz-item .quiz-opt {
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; transition: all 0.15s; font-size: 14px;
+  background: var(--bg-card);
+}
+.quiz-item .quiz-opt:hover { border-color: var(--accent); background: var(--bg-card-hover); }
+.quiz-item .quiz-opt.selected { border-color: var(--accent); background: var(--accent-dim); }
+.quiz-item.answered .quiz-opt { cursor: default; }
+.quiz-item.answered .quiz-opt.correct { border-color: var(--green); background: var(--green-dim); color: var(--green); }
+.quiz-item.answered .quiz-opt.wrong { border-color: var(--red); background: var(--red-dim); color: var(--red); }
+.quiz-reveal { margin-top: 14px; display: none; }
+.quiz-item.answered .quiz-reveal { display: block; }
+.quiz-reveal .why-correct { border-left-color: var(--green); background: rgba(0,255,163,0.08); color: var(--text); }
+.quiz-reveal .why-correct::before { content: "✓ Why đúng: "; color: var(--green); font-weight: 600; }
+.quiz-reveal .why-wrong-item { border-left-color: var(--red); background: var(--red-dim); color: var(--text); font-size: 13px; margin: 4px 0; padding: 6px 12px; border-left: 2px solid var(--red); border-radius: 3px; }
+.quiz-reveal .why-wrong-item::before { content: "✗ "; color: var(--red); font-weight: 700; }
+.quiz-progress {
+  font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+  margin-bottom: 16px;
+}
+.quiz-progress .score { color: var(--green); font-weight: 600; }
+
+/* ===== Flashcards ===== */
+.flashcard-area { text-align: center; }
+.flashcard-stat {
+  font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.flashcard-stat .due { color: var(--orange); }
+.flashcard-stat .new { color: var(--accent); }
+.flashcard-stat .done { color: var(--green); }
+.flashcard {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 12px; padding: 40px 28px; min-height: 180px;
+  display: flex; flex-direction: column; justify-content: center;
+  text-align: left; margin-bottom: 16px; cursor: pointer;
+  transition: all 0.2s;
+}
+.flashcard:hover { border-color: var(--accent); }
+.flashcard .fc-front { font-size: 18px; font-weight: 500; }
+.flashcard .fc-back { display: none; }
+.flashcard.flipped .fc-back { display: block; }
+.flashcard .fc-back .fc-answer { font-size: 16px; margin-bottom: 14px; color: var(--text); }
+.flashcard .fc-hint {
+  color: var(--text-muted); font-family: var(--mono); font-size: 12px;
+  text-align: center; margin-top: 12px;
+}
+.flashcard.flipped .fc-hint { display: none; }
+.fc-rating { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.fc-rating button {
+  padding: 10px 18px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text);
+  font-family: var(--mono); font-size: 13px; cursor: pointer;
+  transition: all 0.15s; min-width: 90px;
+}
+.fc-rating button .interval { display: block; font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.fc-rating .r-again { border-color: var(--red); color: var(--red); }
+.fc-rating .r-hard { border-color: var(--orange); color: var(--orange); }
+.fc-rating .r-good { border-color: var(--accent); color: var(--accent); }
+.fc-rating .r-easy { border-color: var(--green); color: var(--green); }
+.fc-rating button:hover { transform: translateY(-1px); }
+.fc-done { color: var(--green); padding: 40px; font-size: 16px; }
+
+/* ===== Try at home ===== */
+.try-list { display: flex; flex-direction: column; gap: 12px; }
+.try-item {
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); padding: 14px;
+}
+.try-item .try-why { color: var(--why); font-family: var(--mono); font-size: 12px; margin-bottom: 6px; }
+.try-item .try-why::before { content: "💡 "; }
+
+/* ===== Buttons generic ===== */
+.btn {
+  padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text);
+  font-family: var(--mono); font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--bg-deep); border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: transparent; color: var(--accent); }
+
+/* ===== Progress/Dashboard (index.html) ===== */
+.dashboard-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.lab-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px; text-decoration: none; color: var(--text);
+  display: block; transition: all 0.15s;
+}
+.lab-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.lab-card .lab-title { font-weight: 600; margin: 0 0 6px; }
+.lab-card .lab-meta { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.lab-card .lab-status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--mono); margin-right: 6px; }
+.status-new { background: var(--accent-dim); color: var(--accent); }
+.status-wip { background: var(--why-dim); color: var(--why); }
+.status-done { background: var(--green-dim); color: var(--green); }
+
+/* ===== Toggle WHY ===== */
+.why-toggle {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--bg-card); border: 1px solid var(--why);
+  color: var(--why); padding: 10px 14px; border-radius: 6px;
+  font-family: var(--mono); font-size: 13px; cursor: pointer;
+  z-index: 50;
+}
+body.why-hidden .why-block,
+body.why-hidden .lab-hero-why,
+body.why-hidden .tldr-table .col-why,
+body.why-hidden .try-why { display: none !important; }
+
+/* ===== Utilities ===== */
+.text-mono { font-family: var(--mono); }
+.text-dim { color: var(--text-dim); }
+.text-why { color: var(--why); }
+.mt-8 { margin-top: 8px; } .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; }
+.mb-8 { margin-bottom: 8px; } .mb-16 { margin-bottom: 16px; }
+.hidden { display: none !important; }
+
+@media (max-width: 640px) {
+  .lab-container { padding: 20px 14px 80px; }
+  section.lab-section { padding: 18px; }
+  .lab-hero h1 { font-size: 24px; }
+  .tldr-table th, .tldr-table td { padding: 8px; font-size: 13px; }
+}

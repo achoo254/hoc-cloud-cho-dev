@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DHCP — DORA flow</title>
+<link rel="stylesheet" href="../_shared/lab-template.css">
+<style>
+  /* ===== DHCP Playground styles ===== */
+  .dhcp-lab {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 16px;
+  }
+
+  /* Topology row: client + arrow area + server */
+  .dhcp-topology {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  @media (max-width: 700px) {
+    .dhcp-topology { grid-template-columns: 1fr; }
+    .dhcp-arrow-area { transform: rotate(90deg); min-height: 80px; }
+  }
+
+  .dhcp-node {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 12px;
+    background: var(--bg-card);
+    text-align: center;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    position: relative;
+  }
+  .dhcp-node.active-node {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 18px var(--accent-glow);
+  }
+  .dhcp-node .node-icon { font-size: 28px; margin-bottom: 6px; }
+  .dhcp-node .node-label { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .dhcp-node .node-ip {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    display: inline-block;
+    transition: all 0.4s;
+  }
+  .dhcp-node .node-ip.ip-assigned {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid var(--green);
+    font-weight: 700;
+  }
+
+  /* Arrow area */
+  .dhcp-arrow-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-height: 100px;
+    justify-content: center;
+    position: relative;
+  }
+
+  .dhcp-arrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity 0.4s, transform 0.4s;
+    position: relative;
+  }
+  .dhcp-arrow.visible { opacity: 1; transform: translateX(0); }
+  .dhcp-arrow.arrow-right { flex-direction: row; }
+  .dhcp-arrow.arrow-left { flex-direction: row-reverse; }
+
+  .arrow-line {
+    flex: 1;
+    height: 2px;
+    background: var(--accent);
+    position: relative;
+  }
+  .arrow-line::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid var(--accent);
+  }
+  .dhcp-arrow.arrow-left .arrow-line::after {
+    right: auto;
+    left: 0;
+    border-left: none;
+    border-right: 8px solid var(--accent);
+  }
+  .arrow-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+  .arrow-line.broadcast { background: var(--orange); }
+  .arrow-line.broadcast::after { border-left-color: var(--orange); }
+  .dhcp-arrow.arrow-left .arrow-line.broadcast::after {
+    border-right-color: var(--orange);
+    border-left-color: transparent;
+  }
+  .arrow-label.broadcast { background: var(--orange-dim, rgba(255,159,67,0.12)); color: var(--orange); }
+
+  /* Controls */
+  .dhcp-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .step-indicator {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    background: var(--bg-input);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .step-indicator .step-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    margin-right: 4px;
+    transition: background 0.3s;
+  }
+  .step-indicator .step-dot.done { background: var(--green); }
+  .step-indicator .step-dot.active { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  /* Packet detail pane */
+  .dhcp-pane {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    min-height: 120px;
+  }
+  .dhcp-pane-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .dhcp-pane-head h4 { margin: 0; font-size: 15px; }
+  .dora-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 3px;
+    letter-spacing: 0.05em;
+  }
+  .badge-discover { background: var(--orange-dim, rgba(255,159,67,0.12)); color: var(--orange); }
+  .badge-offer    { background: rgba(99,179,237,0.12); color: #63b3ed; }
+  .badge-request  { background: var(--orange-dim, rgba(255,159,67,0.12)); color: var(--orange); }
+  .badge-ack      { background: var(--green-dim); color: var(--green); }
+  .badge-idle     { background: var(--bg-card); color: var(--text-dim); }
+
+  .pane-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .pane-field {
+    background: var(--bg-card);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .pane-field .pf-label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+  .pane-field .pf-val { color: var(--text); }
+  .pane-field .pf-val.highlight { color: var(--accent); }
+  .pane-field .pf-val.green { color: var(--green); }
+  .pane-field .pf-val.orange { color: var(--orange); }
+
+  /* Lease timer visualization */
+  .lease-timer {
+    margin-top: 16px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: none;
+  }
+  .lease-timer.visible { display: block; }
+  .lease-timer-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .lease-bar-wrap {
+    position: relative;
+    height: 28px;
+    background: var(--bg-input);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .lease-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green) 0%, var(--green) 50%, var(--orange) 50%, var(--orange) 87.5%, var(--red, #fc5c65) 87.5%, var(--red, #fc5c65) 100%);
+    width: 100%;
+    opacity: 0.7;
+  }
+  .lease-marker {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: white;
+  }
+  .lease-marker::after {
+    content: attr(data-label);
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .lease-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .lease-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 2px;
+  }
+  .legend-dot.green { background: var(--green); }
+  .legend-dot.orange { background: var(--orange); }
+  .legend-dot.red { background: var(--red, #fc5c65); }
+
+  /* DORA step list below topology */
+  .dora-steps-list {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .dora-step-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    background: var(--bg-card);
+    transition: all 0.3s;
+    cursor: default;
+  }
+  .dora-step-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .dora-step-chip.done {
+    border-color: var(--green);
+    color: var(--green);
+    background: var(--green-dim);
+  }
+
+  /* Static IP comparison */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  @media (max-width: 600px) { .compare-grid { grid-template-columns: 1fr; } }
+  .compare-card {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .compare-card h4 { margin: 0 0 8px; font-size: 14px; }
+  .compare-card ul { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+  .compare-card ul li strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<nav class="lab-topbar">
+  <a href="../index.html">← Dashboard</a>
+  <span class="text-mono text-dim">net-06 · DHCP</span>
+</nav>
+
+<main class="lab-container">
+
+  <!-- HERO -->
+  <section class="lab-section lab-hero">
+    <h1>DHCP — DORA flow</h1>
+    <p class="text-dim">Câu hỏi cốt lõi: <em>"VM vừa boot, chưa có IP — làm sao nó tự lấy được địa chỉ mà không cần config tay?"</em></p>
+    <div class="lab-hero-why">Không phải học để thuộc tên DORA. Mục đích: debug được "máy không lên mạng sau khi boot", phân biệt DHCP fail vs static IP sai, hiểu tại sao broadcast, tại sao cần relay khi DHCP server ở subnet khác.</div>
+  </section>
+
+  <!-- TL;DR -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">TL;DR</span> DORA trong 1 bảng</h2>
+    <p class="lab-section-subtitle">Nhìn lại bảng này mỗi khi bí. Cột <em>Why</em> quan trọng nhất.</p>
+    <div id="mount-tldr"></div>
+  </section>
+
+  <!-- CORE -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Core</span> Tại sao DHCP dùng broadcast?</h2>
+    <p class="lab-section-subtitle">Đây là câu hỏi quan trọng nhất — khi hiểu được, toàn bộ DORA flow tự nhiên.</p>
+
+    <div class="why-block">
+      <strong>Client chưa có IP → không thể unicast.</strong> Giao thức TCP/IP yêu cầu source IP để gửi packet. Client vừa boot không có IP, chỉ biết địa chỉ broadcast toàn subnet <code>255.255.255.255</code>. Nó dùng <code>src=0.0.0.0</code> và <code>dst=255.255.255.255</code> để "kêu to trong LAN" — mọi host nhận được, nhưng chỉ DHCP server mới phản hồi.
+    </div>
+
+    <div style="margin-top: 16px; font-family: var(--mono); font-size: 13px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 16px;">
+      <div style="color: var(--text-dim); margin-bottom: 8px;"># Wireshark filter để bắt toàn bộ DORA</div>
+      <div style="color: var(--accent);">udp.port == 67 || udp.port == 68</div>
+      <div style="color: var(--text-dim); margin-top: 12px;"># Port convention</div>
+      <div>Port <span style="color: var(--orange);">67</span> → DHCP <strong>server</strong> lắng nghe (receives Discover + Request)</div>
+      <div>Port <span style="color: var(--green);">68</span> → DHCP <strong>client</strong> lắng nghe (receives Offer + Ack)</div>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <h3 style="font-size: 15px; margin-bottom: 10px;">Lease time — IP không phải vĩnh viễn</h3>
+      <p class="text-dim" style="font-size: 14px;">Server "cho mượn" IP trong một khoảng thời gian (<em>lease time</em>). Client phải gia hạn trước khi hết hạn:</p>
+      <ul style="color: var(--text-dim); font-size: 14px; line-height: 1.8; padding-left: 20px;">
+        <li><strong style="color: var(--green);">T1 (50% lease time):</strong> Client unicast thẳng tới DHCP server gốc để xin gia hạn</li>
+        <li><strong style="color: var(--orange);">T2 (87.5% lease time):</strong> Nếu T1 thất bại, client broadcast rebind — chấp nhận bất kỳ server nào</li>
+        <li><strong style="color: var(--red, #fc5c65);">100%:</strong> IP hết hạn, client phải bắt đầu DORA lại từ đầu</li>
+      </ul>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <h3 style="font-size: 15px; margin-bottom: 10px;">DHCP Relay — vượt subnet</h3>
+      <p class="text-dim" style="font-size: 14px;">Broadcast không qua được router. Khi DHCP server ở subnet khác, <em>relay agent</em> (thường là router) nhận broadcast từ client, chuyển thành unicast tới server, rồi forward response ngược lại.</p>
+      <div style="font-family: var(--mono); font-size: 12px; background: #05090f; padding: 12px; border-radius: 6px; margin-top: 8px; color: var(--text-dim);">
+        Client (broadcast) → [<span style="color: var(--accent);">Relay Agent / Router</span>] → DHCP Server (unicast)<br>
+        DHCP Server → [<span style="color: var(--accent);">Relay Agent</span>] → Client (unicast/broadcast)
+      </div>
+    </div>
+  </section>
+
+  <!-- PLAYGROUND -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Playground</span> DORA Flow Simulator</h2>
+    <p class="lab-section-subtitle">Click từng bước để xem packet detail, chiều mũi tên và WHY. DORA = 4 bước đủ để có IP.</p>
+
+    <div class="dhcp-lab">
+
+      <!-- Controls -->
+      <div class="dhcp-controls">
+        <button class="btn btn-primary" id="btn-next-dora">▶ Bước tiếp</button>
+        <button class="btn" id="btn-reset-dora">⟲ Reset</button>
+        <div class="step-indicator">
+          <span id="sd-0" class="step-dot"></span>
+          <span id="sd-1" class="step-dot"></span>
+          <span id="sd-2" class="step-dot"></span>
+          <span id="sd-3" class="step-dot"></span>
+          <span id="step-label" style="margin-left:4px">Bấm để bắt đầu</span>
+        </div>
+      </div>
+
+      <!-- DORA chips -->
+      <div class="dora-steps-list">
+        <div class="dora-step-chip" id="chip-0">D DISCOVER</div>
+        <div class="dora-step-chip" id="chip-1">O OFFER</div>
+        <div class="dora-step-chip" id="chip-2">R REQUEST</div>
+        <div class="dora-step-chip" id="chip-3">A ACK</div>
+      </div>
+
+      <!-- Topology -->
+      <div class="dhcp-topology">
+        <!-- Client -->
+        <div class="dhcp-node" id="node-client">
+          <div class="node-icon">💻</div>
+          <div class="node-label">Client</div>
+          <div class="node-ip" id="client-ip-display">IP: ???</div>
+          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 4px;">MAC: AA:BB:CC:11:22:33</div>
+        </div>
+
+        <!-- Arrow area -->
+        <div class="dhcp-arrow-area">
+          <!-- Step 1: Discover C→S broadcast -->
+          <div class="dhcp-arrow arrow-right" id="arrow-discover">
+            <div class="arrow-line broadcast"></div>
+            <div class="arrow-label broadcast">DISCOVER</div>
+          </div>
+          <!-- Step 2: Offer S→C broadcast -->
+          <div class="dhcp-arrow arrow-left" id="arrow-offer">
+            <div class="arrow-line"></div>
+            <div class="arrow-label">OFFER</div>
+          </div>
+          <!-- Step 3: Request C→S broadcast -->
+          <div class="dhcp-arrow arrow-right" id="arrow-request">
+            <div class="arrow-line broadcast"></div>
+            <div class="arrow-label broadcast">REQUEST</div>
+          </div>
+          <!-- Step 4: Ack S→C -->
+          <div class="dhcp-arrow arrow-left" id="arrow-ack">
+            <div class="arrow-line" style="background: var(--green)"></div>
+            <div class="arrow-label" style="background: var(--green-dim); color: var(--green)">ACK ✓</div>
+          </div>
+        </div>
+
+        <!-- Server -->
+        <div class="dhcp-node" id="node-server">
+          <div class="node-icon">🗄️</div>
+          <div class="node-label">DHCP Server</div>
+          <div class="node-ip" style="color: var(--text);">192.168.1.1</div>
+          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 4px;">Pool: .50 – .200</div>
+        </div>
+      </div>
+
+      <!-- Packet detail pane -->
+      <div class="dhcp-pane" id="dhcp-pane">
+        <div class="dhcp-pane-head">
+          <h4>Bấm "Bước tiếp" để xem packet detail</h4>
+          <span class="dora-badge badge-idle">IDLE</span>
+        </div>
+        <p class="text-dim" style="font-size: 13px;">Mỗi bước DORA là 1 UDP packet với trường BOOTP cụ thể. Click để xem src/dst IP, port, và các option DHCP.</p>
+      </div>
+
+      <!-- Lease timer (hiện sau ACK) -->
+      <div class="lease-timer" id="lease-timer">
+        <div class="lease-timer-title">Lease time visualization — 24 giờ ví dụ</div>
+        <div class="lease-bar-wrap">
+          <div class="lease-bar-fill"></div>
+          <div class="lease-marker" style="left: 50%" data-label="T1 (50%) — Renew"></div>
+          <div class="lease-marker" style="left: 87.5%" data-label="T2 (87.5%) — Rebind"></div>
+        </div>
+        <div class="lease-legend">
+          <div class="lease-legend-item"><div class="legend-dot green"></div> 0–50%: Bình thường</div>
+          <div class="lease-legend-item"><div class="legend-dot orange"></div> 50–87.5%: T1 → Unicast Renew tới server gốc</div>
+          <div class="lease-legend-item"><div class="legend-dot red"></div> 87.5–100%: T2 → Broadcast Rebind (server gốc không phản hồi)</div>
+        </div>
+        <div class="why-block" style="margin-top: 12px;"><strong>Why lease time tồn tại:</strong> DHCP server cần thu hồi IP của máy đã disconnect (laptop bị tắt đột ngột, VM bị xoá). Nếu IP vĩnh viễn thì pool sẽ cạn kiệt dần. Lease time đảm bảo IP được tái sử dụng.</div>
+      </div>
+
+    </div>
+
+    <!-- Static vs DHCP comparison -->
+    <div style="margin-top: 20px;">
+      <h3 style="font-size: 15px; margin-bottom: 4px;">So sánh: DHCP vs Static IP</h3>
+      <div class="compare-grid">
+        <div class="compare-card">
+          <h4>🔄 DHCP (Dynamic)</h4>
+          <ul>
+            <li><strong>Tự động:</strong> không cần config tay từng máy</li>
+            <li><strong>Scale:</strong> 1000 VM boot → 1000 IP, không cần admin can thiệp</li>
+            <li><strong>Reclaim:</strong> IP được thu hồi khi máy tắt</li>
+            <li><strong>Rủi ro:</strong> IP thay đổi mỗi lần renew → không làm DNS A record tay được</li>
+            <li><strong>Dùng khi:</strong> workstation, VM dev, container, user device</li>
+          </ul>
+        </div>
+        <div class="compare-card">
+          <h4>📌 Static IP</h4>
+          <ul>
+            <li><strong>Cố định:</strong> IP không thay đổi — DNS, firewall rule ổn định</li>
+            <li><strong>Không phụ thuộc:</strong> DHCP server chết cũng không ảnh hưởng</li>
+            <li><strong>Tốn công:</strong> config tay từng máy, dễ nhầm/conflict</li>
+            <li><strong>Dùng khi:</strong> server, database, gateway, NAS, printer</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WALKTHROUGH -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Walkthrough</span> DORA chi tiết từng bước</h2>
+    <p class="lab-section-subtitle">Mỗi bước có lệnh thực tế để verify trên Linux/VM.</p>
+    <div id="mount-walkthrough"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Quiz</span> Kiểm tra active recall</h2>
+    <p class="lab-section-subtitle">Làm trước — không nhìn lại TL;DR. Sai không sao, đáp án có giải thích Why.</p>
+    <div id="mount-quiz"></div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Flashcards</span> Ôn tập spaced repetition</h2>
+    <p class="lab-section-subtitle">Rate theo SM-2: Again / Hard / Good / Easy. Thẻ sẽ quay lại đúng ngày cần ôn.</p>
+    <div id="mount-flashcards"></div>
+  </section>
+
+  <!-- TRY AT HOME -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Try at home</span> Gõ ngay trên VM Linux</h2>
+    <div id="mount-tryAtHome"></div>
+  </section>
+
+</main>
+
+<!-- DATA ISLAND -->
+<script type="application/json" id="lab-data">
+{
+  "title": "DHCP — DORA flow",
+  "tldr": [
+    { "step": "D", "name": "Discover", "src_dst": "0.0.0.0 → 255.255.255.255", "port": "68 → 67", "payload": "xid, MAC client", "why": "Client chưa có IP → chỉ có cách broadcast. src=0.0.0.0 vì chưa có địa chỉ, dst=255.255.255.255 để đến tất cả host trong LAN." },
+    { "step": "O", "name": "Offer", "src_dst": "192.168.1.1 → 255.255.255.255", "port": "67 → 68", "payload": "IP đề xuất, lease time, gateway, DNS", "why": "Server vẫn broadcast vì client chưa có IP để unicast tới. Server đề xuất IP từ pool, cùng các tham số mạng." },
+    { "step": "R", "name": "Request", "src_dst": "0.0.0.0 → 255.255.255.255", "port": "68 → 67", "payload": "IP được chọn, server identifier", "why": "Client broadcast để các DHCP server khác biết nó chọn server nào. Tại thời điểm này IP vẫn chưa chính thức được gán." },
+    { "step": "A", "name": "Ack", "src_dst": "192.168.1.1 → 255.255.255.255", "port": "67 → 68", "payload": "IP xác nhận, lease time, options đầy đủ", "why": "Server xác nhận chính thức. Client nhận ACK mới bắt đầu dùng IP. Nếu Ack mang NACK → client phải Discover lại." },
+    { "step": "T1", "name": "Renew (50%)", "src_dst": "client → server (unicast)", "port": "68 → 67", "payload": "Request gia hạn", "why": "Tại T1=50% lease, client unicast tới server gốc để gia hạn. Nếu thành công, lease được reset về đầu." },
+    { "step": "T2", "name": "Rebind (87.5%)", "src_dst": "client → 255.255.255.255", "port": "68 → 67", "payload": "Request rebind", "why": "Server gốc không phản hồi T1 → client broadcast rebind. Bất kỳ DHCP server nào cũng có thể xác nhận." },
+    { "step": "Relay", "name": "Relay Agent", "src_dst": "client → server (qua router)", "port": "67 → 67", "payload": "Giforward broadcast thành unicast", "why": "Broadcast không vượt được router. Relay agent (router) nhận broadcast, đổi thành unicast gửi tới DHCP server ở subnet khác." }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "what": "DHCPDISCOVER — Client kêu cứu trong LAN",
+      "why": "Client vừa boot, chỉ có MAC address. Nó phải broadcast vì chưa có IP — đây là điểm khởi đầu bắt buộc. Không có Discover thì không có gì xảy ra tiếp theo.",
+      "code": "# Capture DHCP traffic trên VM Linux\nsudo tcpdump -i eth0 -n 'udp port 67 or udp port 68'\n\n# Hoặc bằng Wireshark filter:\n# udp.port == 67 || udp.port == 68\n\n# Force client gửi Discover ngay (Debian/Ubuntu):\nsudo dhclient -v eth0"
+    },
+    {
+      "step": 2,
+      "what": "DHCPOFFER — Server đề xuất IP",
+      "why": "Server nhận Discover, chọn IP trống từ pool, rồi broadcast Offer. Tại sao vẫn broadcast? Vì client chưa có IP để unicast tới. Server có thể nhớ IP đề xuất trong thời gian ngắn chờ Request từ client.",
+      "code": "# Xem DHCP pool configuration (isc-dhcp-server)\ncat /etc/dhcp/dhcpd.conf\n\n# Xem lease hiện tại của server\ncat /var/lib/dhcp/dhcpd.leases\n\n# Ví dụ cấu hình pool:\n# subnet 192.168.1.0 netmask 255.255.255.0 {\n#   range 192.168.1.50 192.168.1.200;\n#   option routers 192.168.1.1;\n#   option domain-name-servers 8.8.8.8;\n#   default-lease-time 86400;\n# }"
+    },
+    {
+      "step": 3,
+      "what": "DHCPREQUEST — Client xác nhận chọn IP",
+      "why": "Client broadcast Request để tất cả DHCP server trong LAN biết nó đã chọn server nào. Các server không được chọn sẽ giải phóng IP đã dự trữ. Đây là bước 'thông báo công khai' để tránh IP conflict.",
+      "code": "# Xem IP hiện tại của interface (sau khi hoàn thành DORA)\nip addr show eth0\n\n# Xem DHCP lease client đang giữ (NetworkManager)\nnmcli device show eth0 | grep -E 'IP4|DHCP'\n\n# Xem lease file của client\ncat /var/lib/dhcp/dhclient.leases"
+    },
+    {
+      "step": 4,
+      "what": "DHCPACK — Server xác nhận chính thức",
+      "why": "Server ghi lease vào database rồi gửi Ack. Chỉ khi nhận được Ack, client mới thực sự cấu hình IP, gateway, DNS vào interface. Trước Ack, IP vẫn chỉ là 'đang đàm phán'.",
+      "code": "# Verify IP được gán sau DORA\nip addr show eth0\nip route  # Gateway đã có chưa?\ncat /etc/resolv.conf  # DNS đã config chưa?\n\n# Ping gateway để verify kết nối\nping -c 1 $(ip route | awk '/default/ {print $3}')"
+    },
+    {
+      "step": 5,
+      "what": "Lease renewal — Gia hạn trước khi hết hạn",
+      "why": "Không gia hạn = IP bị thu hồi = mất kết nối mạng đột ngột. T1 và T2 là buffer tránh gián đoạn dịch vụ. Hiểu cơ chế này giúp debug 'mạng tự mất sau vài giờ/ngày'.",
+      "code": "# Xem lease time còn lại (dhclient)\nsudo dhclient -v -r eth0  # Release\nsudo dhclient -v eth0     # Renew (DORA lại)\n\n# Xem lease details\ncat /var/lib/dhcp/dhclient.leases | grep -A10 'lease'\n\n# Kiểm tra thời điểm expire\nip -details addr show eth0"
+    },
+    {
+      "step": 6,
+      "what": "DHCP Relay — khi server ở subnet khác",
+      "why": "Enterprise network thường có 1 DHCP server trung tâm phục vụ nhiều subnet. Relay agent (interface ip helper) trên router đóng vai trò 'phiên dịch viên' giữa broadcast và unicast. Không có relay → DHCP chỉ hoạt động trong 1 subnet.",
+      "code": "# Cấu hình relay agent (isc-dhcp-relay)\nsudo apt install isc-dhcp-relay\n\n# /etc/default/isc-dhcp-relay\n# SERVERS=\"10.0.0.1\"  # DHCP server IP\n# INTERFACES=\"eth0 eth1\"  # Interfaces cần relay\n\n# Verify relay đang chạy\nsudo systemctl status isc-dhcp-relay\n\n# Cisco router (ip helper-address)\n# interface GigabitEthernet0/1\n#   ip helper-address 10.0.0.1"
+    },
+    {
+      "step": 7,
+      "what": "Debug DHCP fail — không lấy được IP",
+      "why": "Đây là lý do thực tế bạn học DHCP: debug được. Biết DORA flow → biết lỗi ở bước nào. Không có Offer → server chết hoặc pool hết. Có Offer nhưng không có Ack → conflict hoặc server config sai.",
+      "code": "# 1. Check interface có UP không (L1/L2)\nip link show eth0\n\n# 2. Force DORA, xem verbose output\nsudo dhclient -v eth0 2>&1\n\n# 3. Capture để thấy bước nào fail\nsudo tcpdump -i eth0 -n -vv 'udp port 67 or udp port 68'\n\n# 4. Nếu không có Offer: check DHCP server running\n# sudo systemctl status isc-dhcp-server\n\n# 5. Fallback: set static IP tạm\nsudo ip addr add 192.168.1.99/24 dev eth0\nsudo ip route add default via 192.168.1.1"
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Tại sao DHCPDISCOVER dùng src=0.0.0.0 thay vì IP thực?",
+      "options": [
+        "Để ẩn danh, bảo mật",
+        "Client chưa có IP, 0.0.0.0 là địa chỉ đặc biệt nghĩa là 'chưa có IP'",
+        "0.0.0.0 là địa chỉ broadcast tiêu chuẩn",
+        "Để DHCP server dễ nhận ra packet Discover"
+      ],
+      "correct": 1,
+      "whyCorrect": "Client vừa boot chưa được gán IP nào. TCP/IP yêu cầu source IP để gửi packet. RFC 2131 quy định 0.0.0.0 dùng khi client chưa có địa chỉ — đây là cách hợp lệ duy nhất để gửi UDP khi không có IP.",
+      "whyOthersWrong": {
+        "0": "0.0.0.0 không liên quan bảo mật — packet vẫn broadcast toàn LAN, mọi người đều thấy. MAC address còn cố định hơn.",
+        "2": "Địa chỉ broadcast là 255.255.255.255. 0.0.0.0 là 'unspecified address' khác hoàn toàn.",
+        "3": "Phân biệt Discover không phải do src IP — server nhìn vào DHCP message type trong option 53 của payload."
+      }
+    },
+    {
+      "q": "Client nhận được DHCPOFFER rồi — tại sao bước tiếp theo (Request) vẫn phải broadcast thay vì unicast thẳng tới server?",
+      "options": [
+        "Vì client chưa biết IP của server",
+        "Để thông báo cho các DHCP server khác trong LAN biết server nào được chọn",
+        "Unicast tốn bandwidth hơn broadcast",
+        "Đây là lỗi thiết kế của giao thức DHCP"
+      ],
+      "correct": 1,
+      "whyCorrect": "Trong LAN có thể có nhiều DHCP server, tất cả đều gửi Offer. Khi client broadcast Request (kèm server identifier), các server không được chọn biết để giải phóng IP đã dự trữ. Đây là cơ chế chống lãng phí tài nguyên.",
+      "whyOthersWrong": {
+        "0": "Client biết IP server từ DHCPOFFER — field 'server identifier'. Lý do broadcast không phải vì không biết IP.",
+        "2": "Ngược lại — broadcast tốn tài nguyên hơn unicast vì tất cả host đều phải xử lý. Broadcast ở đây là có mục đích cụ thể.",
+        "3": "Đây là thiết kế có chủ đích, không phải lỗi. RFC 2131 giải thích rõ lý do."
+      }
+    },
+    {
+      "q": "Lease time 24 giờ. Client sẽ bắt đầu renew lần đầu vào thời điểm nào?",
+      "options": [
+        "Sau 24 giờ (khi hết hạn)",
+        "Sau 21 giờ (T2 = 87.5%)",
+        "Sau 12 giờ (T1 = 50%)",
+        "Sau 1 giờ (T1 = 1/24)"
+      ],
+      "correct": 2,
+      "whyCorrect": "T1 = 50% lease time = 12 giờ. Đây là lần renew đầu tiên — client unicast tới DHCP server gốc. Mục đích là gia hạn sớm để còn nhiều thời gian xử lý nếu server không phản hồi.",
+      "whyOthersWrong": {
+        "0": "Khi hết hạn (100%) là quá muộn — client đã mất IP. T1 và T2 là để đảm bảo không bao giờ rơi vào trường hợp này.",
+        "1": "T2 = 87.5% = 21 giờ là mốc rebind — chỉ xảy ra nếu T1 thất bại. Đây là bước cuối trước khi mất IP.",
+        "3": "Không có mốc T=1/24 trong DHCP. Công thức là T1=50%, T2=87.5% của total lease time."
+      }
+    },
+    {
+      "q": "VM ở subnet 10.0.1.0/24. DHCP server ở subnet 10.0.0.0/24. DHCPDISCOVER của VM không tới được server. Giải pháp đúng là?",
+      "options": [
+        "Đặt DHCP server ở cùng subnet 10.0.1.0/24",
+        "Cấu hình DHCP relay agent trên router giữa 2 subnet",
+        "Dùng static IP thay DHCP",
+        "Tăng TTL của DHCPDISCOVER lên 255"
+      ],
+      "correct": 1,
+      "whyCorrect": "Đây chính xác là use case của DHCP relay. Relay agent trên router nhận broadcast từ 10.0.1.x, convert thành unicast packet gửi tới 10.0.0.x (DHCP server). Server trả lời unicast về relay, relay forward lại client.",
+      "whyOthersWrong": {
+        "0": "Về kỹ thuật cũng được, nhưng không scale — enterprise có hàng chục subnet, không thể đặt DHCP server ở mọi subnet. Relay sinh ra để giải quyết vấn đề này.",
+        "2": "Static IP giải quyết được nhưng mất hoàn toàn lợi ích tự động hoá của DHCP, không scale.",
+        "3": "TTL không liên quan — vấn đề là broadcast bị router chặn theo thiết kế, không phải TTL hết."
+      }
+    },
+    {
+      "q": "Wireshark capture cho thấy DHCPDISCOVER → DHCPOFFER → DHCPREQUEST nhưng KHÔNG có DHCPACK. Nguyên nhân có thể là?",
+      "options": [
+        "Client từ chối IP server đề xuất",
+        "DHCP server bận xử lý request khác",
+        "IP client muốn Request bị conflict (đã có máy khác dùng), server gửi NACK",
+        "Network bị mất gói ở L1"
+      ],
+      "correct": 2,
+      "whyCorrect": "Khi server nhận Request nhưng IP đó đã bị conflict hoặc không còn hợp lệ, server gửi DHCPNAK (negative acknowledgment) thay vì ACK. Client nhận NACK phải bắt đầu DORA lại. Wireshark capture sẽ thấy NACK packet.",
+      "whyOthersWrong": {
+        "0": "DHCP không có cơ chế client từ chối offer — client chỉ chọn server bằng Request. Nếu muốn IP khác, client có thể không respond Offer rồi chờ timeout.",
+        "1": "DHCP server xử lý sequential và rất nhanh — không có khái niệm 'bận'. Nếu bận thật thì delay, không phải mất Ack.",
+        "3": "L1 mất gói thì ngay cả DISCOVER cũng không đi được, không thể capture đến bước Request."
+      }
+    },
+    {
+      "q": "Lệnh nào đúng để xem DHCP lease client đang giữ trên Linux?",
+      "options": [
+        "cat /etc/resolv.conf",
+        "ip route show",
+        "cat /var/lib/dhcp/dhclient.leases",
+        "sudo netstat -an | grep 67"
+      ],
+      "correct": 2,
+      "whyCorrect": "<code>dhclient</code> lưu lease info (IP, gateway, DNS, expire time, server ID) vào <code>/var/lib/dhcp/dhclient.leases</code>. File này cho biết IP từ đâu, khi nào hết hạn, server nào cấp.",
+      "whyOthersWrong": {
+        "0": "<code>/etc/resolv.conf</code> chỉ chứa DNS nameserver. Đúng là DHCP có thể set DNS vào file này, nhưng không phải lease info.",
+        "1": "<code>ip route</code> cho thấy gateway đang dùng, không cho biết IP từ DHCP hay static, hay khi nào hết hạn.",
+        "3": "<code>netstat -an | grep 67</code> cho thấy socket đang open trên port 67, không phải lease info."
+      }
+    },
+    {
+      "q": "Server production dùng DHCP hay Static IP? Tại sao?",
+      "options": [
+        "DHCP — tự động, không cần config tay",
+        "Static IP — IP cố định để DNS, firewall rule, monitoring không bị lỗi",
+        "Tùy loại server, không có quy tắc chung",
+        "DHCP nhưng với lease time rất dài (năm)"
+      ],
+      "correct": 1,
+      "whyCorrect": "Server production cần static IP vì: DNS A record trỏ vào IP đó, firewall/security group rule dựa trên IP, monitoring alert, SSH known_hosts — tất cả sẽ fail nếu IP thay đổi. DHCP mạnh cho workstation/container, không phải server dài hạn.",
+      "whyOthersWrong": {
+        "0": "DHCP tiện nhưng IP có thể thay đổi. Khi đó DNS sẽ sai, firewall sẽ block, monitoring mất tín hiệu — downtime ngay lập tức.",
+        "2": "Thực tế có quy tắc rõ ràng: infrastructure (server, router, switch, printer) → static; user device, VM dev → DHCP.",
+        "3": "Lease time dài không giải quyết được vấn đề — IP vẫn có thể đổi khi renew. DHCP reservation (bind MAC↔IP) là lựa chọn tốt hơn, nhưng phức tạp hơn static."
+      }
+    }
+  ],
+  "flashcards": [
+    {
+      "front": "DORA là gì? 4 bước?",
+      "back": "Discover → Offer → Request → Ack. Quy trình client tự động lấy IP từ DHCP server.",
+      "why": "DORA là từ khoá debug quan trọng nhất khi máy không lấy được IP. Biết 4 bước = biết kiểm tra Wireshark xem bị kẹt ở đâu."
+    },
+    {
+      "front": "Tại sao DHCPDISCOVER dùng src=0.0.0.0?",
+      "back": "Client chưa có IP nào. 0.0.0.0 là 'unspecified address' theo RFC 2131 — cách hợp lệ để gửi UDP khi chưa có địa chỉ.",
+      "why": "Hiểu điều này giải thích toàn bộ lý do DHCP phải dùng broadcast — không thể unicast khi không có source IP."
+    },
+    {
+      "front": "DHCP dùng port nào? Client và Server khác nhau thế nào?",
+      "back": "Port 67: DHCP Server lắng nghe (nhận Discover + Request). Port 68: DHCP Client lắng nghe (nhận Offer + Ack).",
+      "why": "Cần biết khi debug bằng tcpdump/Wireshark. Filter 'udp port 67 or 68' để bắt toàn bộ DORA."
+    },
+    {
+      "front": "Tại sao DHCPREQUEST vẫn broadcast dù client đã biết IP server?",
+      "back": "Để thông báo cho các DHCP server khác trong LAN biết server nào được chọn, các server còn lại giải phóng IP đã dự trữ.",
+      "why": "Môi trường có nhiều DHCP server → Request broadcast là cơ chế phối hợp tránh lãng phí pool. Bỏ bước này = các server khác giữ IP dự trữ mãi."
+    },
+    {
+      "front": "T1 và T2 trong lease renewal là bao nhiêu? Ý nghĩa?",
+      "back": "T1=50% lease time: unicast renew tới server gốc. T2=87.5% lease time: broadcast rebind tới bất kỳ server nào.",
+      "why": "Hiểu T1/T2 = debug được 'mạng tự mất sau vài giờ'. Thường là DHCP server chết, client không renew được ở T1, đến T2 rebind cũng fail, đến 100% mất IP."
+    },
+    {
+      "front": "DHCP Relay Agent là gì? Tại sao cần?",
+      "back": "Relay agent (thường là router) chuyển DHCP broadcast thành unicast để vượt qua router tới DHCP server ở subnet khác.",
+      "why": "Enterprise có 1 DHCP server trung tâm cho nhiều subnet. Không có relay, mỗi subnet phải có server riêng — không scale. Cisco: 'ip helper-address', Linux: isc-dhcp-relay."
+    },
+    {
+      "front": "DHCPNAK là gì? Xảy ra khi nào?",
+      "back": "Negative Acknowledgment — server từ chối Request. Xảy ra khi IP đã conflict, client ở subnet sai, hoặc lease không còn hợp lệ.",
+      "why": "Debug quan trọng: thấy Discover→Offer→Request nhưng không có Ack → tìm NACK packet trong Wireshark. Client phải Discover lại từ đầu."
+    },
+    {
+      "front": "Khi nào dùng Static IP, khi nào dùng DHCP?",
+      "back": "Static: server, database, router, gateway, printer — bất cứ thứ gì cần IP cố định lâu dài. DHCP: workstation, VM dev, container, user device.",
+      "why": "Sai lựa chọn này gây ra downtime thực sự. Server dùng DHCP: IP đổi → DNS sai → mọi client fail. Workstation dùng static: xung đột IP, admin nightmare."
+    },
+    {
+      "front": "Lệnh nào force renew DHCP trên Linux?",
+      "back": "sudo dhclient -v eth0 (renew). Hoặc: sudo dhclient -r eth0 (release) rồi sudo dhclient eth0 (DORA lại).",
+      "why": "Cần khi debug DHCP hoặc khi muốn đổi IP mà không reboot. '-v' verbose cho thấy từng bước DORA trong terminal."
+    },
+    {
+      "front": "Wireshark filter để capture DORA?",
+      "back": "udp.port == 67 || udp.port == 68",
+      "why": "Lệnh này bắt toàn bộ DHCP traffic. Xem được 4 message DORA, check src/dst IP, payload option. Thiếu bước nào = debug tại đó."
+    },
+    {
+      "front": "DHCP lease file lưu ở đâu trên Linux?",
+      "back": "Client: /var/lib/dhcp/dhclient.leases. Server: /var/lib/dhcp/dhcpd.leases.",
+      "why": "File lease chứa IP, expire time, server ID, DNS, gateway. Đọc file này để biết IP đang dùng từ đâu, khi nào hết hạn."
+    },
+    {
+      "front": "Giải thích 'ip addr show eth0' sau DORA thành công trông thế nào?",
+      "back": "inet 192.168.1.50/24 brd 192.168.1.255 scope global dynamic eth0 — từ khoá 'dynamic' nghĩa là từ DHCP.",
+      "why": "Từ khoá 'dynamic' phân biệt IP từ DHCP vs static. Đây là cách nhanh nhất verify DORA đã thành công."
+    }
+  ],
+  "tryAtHome": [
+    {
+      "why": "Xem toàn bộ 4 bước DORA trong thực tế — verify từng packet src/dst IP và payload",
+      "cmd": "# Terminal 1: capture DHCP traffic\nsudo tcpdump -i eth0 -n -vv 'udp port 67 or udp port 68'\n\n# Terminal 2: force client renew\nsudo dhclient -v -r eth0 && sudo dhclient -v eth0"
+    },
+    {
+      "why": "Đọc lease file để xem IP từ đâu, khi nào hết hạn, server nào cấp — thông tin quan trọng cho debug",
+      "cmd": "cat /var/lib/dhcp/dhclient.leases\n\n# Xem IP và flag dynamic\nip addr show | grep -A2 'dynamic'\n\n# Xem DNS đã được DHCP set\ncat /etc/resolv.conf"
+    },
+    {
+      "why": "Simulate DHCP fail: tắt DHCP server rồi renew — xem Wireshark kẹt ở Discover, không có Offer",
+      "cmd": "# Trên máy DHCP server\nsudo systemctl stop isc-dhcp-server\n\n# Trên client — xem log verbose, sẽ thấy timeout sau Discover\nsudo dhclient -v eth0\n\n# Bật lại\nsudo systemctl start isc-dhcp-server"
+    },
+    {
+      "why": "So sánh trực tiếp DHCP vs Static — thấy được sự khác biệt trong ip addr output",
+      "cmd": "# Xem IP hiện tại (dynamic từ DHCP)\nip addr show eth0 | grep inet\n\n# Set static IP thủ công\nsudo ip addr flush eth0\nsudo ip addr add 192.168.1.200/24 dev eth0\nsudo ip route add default via 192.168.1.1\n\n# Xem lại — không có flag 'dynamic' nữa\nip addr show eth0 | grep inet\n\n# Khôi phục DHCP\nsudo ip addr flush eth0\nsudo dhclient eth0"
+    },
+    {
+      "why": "Xem DHCP server đang cấp IP cho những máy nào — thực hành đọc lease database của server",
+      "cmd": "# Trên DHCP server\ncat /var/lib/dhcp/dhcpd.leases | grep -A6 'lease'\n\n# Format dễ đọc hơn\ndhcp-lease-list 2>/dev/null || cat /var/lib/dhcp/dhcpd.leases | grep -E 'lease|binding|hardware|client-hostname'"
+    }
+  ]
+}
+</script>
+
+<!-- PLAYGROUND JS (DHCP-specific) -->
+<script type="module">
+  import { LabTemplate } from '../_shared/lab-template.js';
+  await LabTemplate.init({ labId: 'net-06-dhcp', title: 'DHCP — DORA flow' });
+
+  // ===== DORA Step Simulator =====
+  const DORA_STEPS = [
+    {
+      id: 'discover',
+      name: 'DHCPDISCOVER',
+      badgeClass: 'badge-discover',
+      arrowId: 'arrow-discover',
+      title: '1/4 — DHCPDISCOVER',
+      why: 'Client chưa có IP → phải broadcast. src=0.0.0.0 vì chưa có địa chỉ nào. Toàn bộ LAN nhận packet này nhưng chỉ DHCP server mới phản hồi.',
+      activeNode: 'client',
+      fields: [
+        { label: 'Source IP', val: '0.0.0.0', cls: 'orange' },
+        { label: 'Dest IP', val: '255.255.255.255 (broadcast)', cls: 'orange' },
+        { label: 'Source Port', val: '68 (DHCP client)', cls: '' },
+        { label: 'Dest Port', val: '67 (DHCP server)', cls: '' },
+        { label: 'BOOTP Op', val: '1 = BOOTREQUEST', cls: '' },
+        { label: 'Client MAC', val: 'AA:BB:CC:11:22:33', cls: '' },
+        { label: 'Client IP', val: '0.0.0.0 (chưa có)', cls: 'orange' },
+        { label: 'Transaction ID', val: '0x3D1D (xid)', cls: '' }
+      ]
+    },
+    {
+      id: 'offer',
+      name: 'DHCPOFFER',
+      badgeClass: 'badge-offer',
+      arrowId: 'arrow-offer',
+      title: '2/4 — DHCPOFFER',
+      why: 'Server vẫn broadcast vì client chưa có IP để unicast tới. Server đề xuất IP từ pool, kèm lease time, gateway, DNS. Client nhận và ghi nhớ để dùng ở bước Request.',
+      activeNode: 'server',
+      fields: [
+        { label: 'Source IP', val: '192.168.1.1 (server)', cls: 'highlight' },
+        { label: 'Dest IP', val: '255.255.255.255 (broadcast)', cls: 'orange' },
+        { label: 'Source Port', val: '67 (DHCP server)', cls: '' },
+        { label: 'Dest Port', val: '68 (DHCP client)', cls: '' },
+        { label: 'BOOTP Op', val: '2 = BOOTREPLY', cls: '' },
+        { label: 'Your IP (yiaddr)', val: '192.168.1.50 (đề xuất)', cls: 'green' },
+        { label: 'Lease Time', val: '86400s (24 giờ)', cls: '' },
+        { label: 'Option: Gateway', val: '192.168.1.1', cls: '' },
+        { label: 'Option: DNS', val: '8.8.8.8, 8.8.4.4', cls: '' },
+        { label: 'Option: Subnet', val: '255.255.255.0 (/24)', cls: '' }
+      ]
+    },
+    {
+      id: 'request',
+      name: 'DHCPREQUEST',
+      badgeClass: 'badge-request',
+      arrowId: 'arrow-request',
+      title: '3/4 — DHCPREQUEST',
+      why: 'Client broadcast để các DHCP server khác biết mình chọn server nào. Các server không được chọn sẽ giải phóng IP đã dự trữ. IP vẫn chưa chính thức — cần ACK mới xong.',
+      activeNode: 'client',
+      fields: [
+        { label: 'Source IP', val: '0.0.0.0 (vẫn chưa có)', cls: 'orange' },
+        { label: 'Dest IP', val: '255.255.255.255 (broadcast)', cls: 'orange' },
+        { label: 'Source Port', val: '68 (DHCP client)', cls: '' },
+        { label: 'Dest Port', val: '67 (DHCP server)', cls: '' },
+        { label: 'Requested IP', val: '192.168.1.50', cls: 'green' },
+        { label: 'Server ID', val: '192.168.1.1 (chọn server này)', cls: 'highlight' },
+        { label: 'Client MAC', val: 'AA:BB:CC:11:22:33', cls: '' },
+        { label: 'Transaction ID', val: '0x3D1D (same xid)', cls: '' }
+      ]
+    },
+    {
+      id: 'ack',
+      name: 'DHCPACK',
+      badgeClass: 'badge-ack',
+      arrowId: 'arrow-ack',
+      title: '4/4 — DHCPACK ✓',
+      why: 'Server xác nhận chính thức và ghi lease vào database. Client nhận ACK → mới thực sự cấu hình IP, gateway, DNS vào interface. DORA hoàn tất!',
+      activeNode: 'server',
+      fields: [
+        { label: 'Source IP', val: '192.168.1.1 (server)', cls: 'highlight' },
+        { label: 'Dest IP', val: '255.255.255.255 (broadcast)', cls: 'orange' },
+        { label: 'Your IP (yiaddr)', val: '192.168.1.50 ✓ CHÍNH THỨC', cls: 'green' },
+        { label: 'Lease Time', val: '86400s (24 giờ)', cls: '' },
+        { label: 'T1 Renew', val: '43200s (12h — 50%)', cls: '' },
+        { label: 'T2 Rebind', val: '75600s (21h — 87.5%)', cls: '' },
+        { label: 'Gateway', val: '192.168.1.1', cls: '' },
+        { label: 'DNS', val: '8.8.8.8, 8.8.4.4', cls: '' }
+      ]
+    }
+  ];
+
+  let currentStep = -1; // -1 = idle
+
+  const btnNext = document.getElementById('btn-next-dora');
+  const btnReset = document.getElementById('btn-reset-dora');
+  const pane = document.getElementById('dhcp-pane');
+  const clientIpDisplay = document.getElementById('client-ip-display');
+  const leaseTimer = document.getElementById('lease-timer');
+
+  function updateStepDots() {
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById(`sd-${i}`);
+      dot.className = 'step-dot';
+      if (i < currentStep) dot.classList.add('done');
+      else if (i === currentStep) dot.classList.add('active');
+    }
+    const label = document.getElementById('step-label');
+    if (currentStep === -1) label.textContent = 'Bấm để bắt đầu';
+    else if (currentStep < 4) label.textContent = `Bước ${currentStep + 1}/4`;
+    else label.textContent = 'DORA hoàn tất ✓';
+  }
+
+  function updateChips() {
+    for (let i = 0; i < 4; i++) {
+      const chip = document.getElementById(`chip-${i}`);
+      chip.className = 'dora-step-chip';
+      if (i < currentStep) chip.classList.add('done');
+      else if (i === currentStep) chip.classList.add('active');
+    }
+  }
+
+  function updateArrows() {
+    DORA_STEPS.forEach((step, i) => {
+      const arrow = document.getElementById(step.arrowId);
+      if (i <= currentStep) arrow.classList.add('visible');
+      else arrow.classList.remove('visible');
+    });
+  }
+
+  function updateNodes() {
+    document.getElementById('node-client').classList.remove('active-node');
+    document.getElementById('node-server').classList.remove('active-node');
+    if (currentStep >= 0 && currentStep < 4) {
+      const step = DORA_STEPS[currentStep];
+      document.getElementById(`node-${step.activeNode}`).classList.add('active-node');
+    }
+  }
+
+  function updateClientIp() {
+    if (currentStep >= 3) {
+      clientIpDisplay.textContent = 'IP: 192.168.1.50';
+      clientIpDisplay.classList.add('ip-assigned');
+    } else {
+      clientIpDisplay.textContent = 'IP: ???';
+      clientIpDisplay.classList.remove('ip-assigned');
+    }
+  }
+
+  function renderPane() {
+    if (currentStep === -1) {
+      pane.innerHTML = `
+        <div class="dhcp-pane-head">
+          <h4>Bấm "Bước tiếp" để xem packet detail</h4>
+          <span class="dora-badge badge-idle">IDLE</span>
+        </div>
+        <p class="text-dim" style="font-size:13px">Mỗi bước DORA là 1 UDP packet với trường BOOTP cụ thể. Click để xem src/dst IP, port, và các option DHCP.</p>
+      `;
+      return;
+    }
+    if (currentStep >= 4) {
+      pane.innerHTML = `
+        <div class="dhcp-pane-head">
+          <h4>DORA hoàn tất!</h4>
+          <span class="dora-badge badge-ack">DONE</span>
+        </div>
+        <div class="why-block"><strong>Kết quả:</strong> Client <code>AA:BB:CC:11:22:33</code> đã được gán IP <code>192.168.1.50/24</code>, gateway <code>192.168.1.1</code>, DNS <code>8.8.8.8</code>. Lease 24 giờ. T1 renew sau 12h, T2 rebind sau 21h.</div>
+      `;
+      return;
+    }
+    const step = DORA_STEPS[currentStep];
+    const fieldsHtml = step.fields.map(f =>
+      `<div class="pane-field">
+        <div class="pf-label">${f.label}</div>
+        <div class="pf-val ${f.cls}">${f.val}</div>
+      </div>`
+    ).join('');
+
+    pane.innerHTML = `
+      <div class="dhcp-pane-head">
+        <h4>${step.title}</h4>
+        <span class="dora-badge ${step.badgeClass}">${step.name}</span>
+      </div>
+      <div class="pane-fields">${fieldsHtml}</div>
+      <div class="why-block"><strong>Why:</strong> ${step.why}</div>
+    `;
+  }
+
+  function render() {
+    updateStepDots();
+    updateChips();
+    updateArrows();
+    updateNodes();
+    updateClientIp();
+    renderPane();
+    leaseTimer.classList.toggle('visible', currentStep >= 3);
+    btnNext.disabled = currentStep >= 4;
+    btnNext.textContent = currentStep >= 3 ? 'Xong ✓' : '▶ Bước tiếp';
+  }
+
+  btnNext.addEventListener('click', () => {
+    if (currentStep < 4) { currentStep++; render(); }
+  });
+
+  btnReset.addEventListener('click', () => {
+    currentStep = -1; render();
+  });
+
+  render();
+</script>
+</body>
+</html>

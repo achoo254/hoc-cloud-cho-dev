@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Learning Labs — Cloud/DevOps</title>
+<link rel="stylesheet" href="_shared/lab-template.css">
+<style>
+  .hero-big { text-align: left; padding: 50px 28px; }
+  .hero-big h1 { font-size: 36px; margin: 0 0 10px; letter-spacing: -0.02em; }
+  .hero-big p { color: var(--text-dim); font-size: 16px; max-width: 720px; }
+  .phase-group { margin-bottom: 32px; }
+  .phase-title {
+    font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px;
+  }
+  .phase-title .count { color: var(--accent); }
+  .due-banner {
+    background: var(--why-dim); border: 1px solid var(--why-border);
+    border-radius: 8px; padding: 16px 20px; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .due-banner .big { font-size: 24px; font-weight: 700; color: var(--why); }
+  .lab-card .progress-bar {
+    height: 4px; background: var(--bg-input); border-radius: 2px; margin-top: 10px; overflow: hidden;
+  }
+  .lab-card .progress-bar .fill {
+    height: 100%; background: var(--green); transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<main class="lab-container">
+
+  <section class="lab-section hero-big">
+    <h1>Learning Labs</h1>
+    <p>Mỗi lab = 1 buổi học tự chứa. WHY-first, có playground + quiz + flashcard SM-2. Production: <a href="https://hoc-cloud.inetdev.io.vn" style="color: var(--accent)">hoc-cloud.inetdev.io.vn</a>. Local dev:</p>
+    <div class="code-block mt-16" style="max-width: 500px">npm install &amp;&amp; npm start<button class="copy-btn" onclick="navigator.clipboard.writeText('npm install && npm start'); this.textContent='✓ copied';">copy</button></div>
+  </section>
+
+  <div id="due-banner-mount"></div>
+
+  <div id="phases-mount"></div>
+
+</main>
+
+<script type="module">
+import { LabTemplate } from './_shared/lab-template.js';
+
+const CATALOG = [
+  {
+    phase: 'Phase 01 — Networking',
+    labs: [
+      { id: 'net-01-tcp-ip', title: 'TCP/IP 4 Layer — Hành trình của 1 cú ping', href: '01-networking/01-tcp-ip-packet-journey.html', cards: 14, status: 'ready' },
+      { id: 'net-02-subnet', title: 'IPv4 Subnet & CIDR', href: '01-networking/02-subnet-cidr.html', cards: 14, status: 'ready' },
+      { id: 'net-03-tcp-udp', title: 'TCP vs UDP — Handshake & Port', href: '01-networking/03-tcp-udp.html', cards: 12, status: 'ready' },
+      { id: 'net-04-icmp', title: 'ICMP — Ping & Traceroute', href: '01-networking/04-icmp-ping.html', cards: 10, status: 'ready' },
+      { id: 'net-05-arp', title: 'ARP — IP → MAC resolution', href: '01-networking/05-arp.html', cards: 11, status: 'ready' },
+      { id: 'net-06-dhcp', title: 'DHCP — DORA flow', href: '01-networking/06-dhcp.html', cards: 12, status: 'ready' },
+      { id: 'net-07-http', title: 'HTTP & HTTPS — Request/Response', href: '01-networking/07-http.html', cards: 13, status: 'ready' },
+      { id: 'net-08-dns', title: 'DNS — Recursive resolution', href: '01-networking/08-dns.html', cards: 14, status: 'ready' },
+    ],
+  },
+  {
+    phase: 'Phase 02 — Linux',
+    labs: [
+      { id: 'linux-vim', title: 'Vim basics', href: '#', cards: 0, status: 'todo' },
+      { id: 'linux-cli', title: 'Command line essentials', href: '#', cards: 0, status: 'todo' },
+    ],
+  },
+  {
+    phase: 'Phase 03 — Docker',
+    labs: [
+      { id: 'docker-101', title: 'Container vs VM', href: '#', cards: 0, status: 'todo' },
+    ],
+  },
+];
+
+// Render phase grid
+const root = document.getElementById('phases-mount');
+let totalDueAcrossLabs = 0;
+
+CATALOG.forEach(group => {
+  const div = document.createElement('div');
+  div.className = 'phase-group';
+  const readyCount = group.labs.filter(l => l.status === 'ready').length;
+  div.innerHTML = `<h3 class="phase-title">${group.phase} · <span class="count">${readyCount}</span>/${group.labs.length} lab</h3>`;
+  const grid = document.createElement('div');
+  grid.className = 'dashboard-grid';
+
+  group.labs.forEach(lab => {
+    const a = document.createElement('a');
+    a.className = 'lab-card';
+    a.href = lab.status === 'todo' ? '#' : lab.href;
+    if (lab.status === 'todo') { a.style.opacity = '0.5'; a.style.pointerEvents = 'none'; }
+
+    const srs = lab.cards > 0 ? LabTemplate.getDueCount(lab.id, lab.cards) : { due: 0, new: lab.cards };
+    const quiz = LabTemplate.getQuizScore(lab.id);
+    totalDueAcrossLabs += srs.due;
+
+    let statusBadge = '';
+    if (lab.status === 'ready') {
+      if (srs.new === lab.cards && !quiz) statusBadge = '<span class="lab-status status-new">NEW</span>';
+      else if (srs.new > 0 || srs.due > 0 || !quiz) statusBadge = '<span class="lab-status status-wip">IN PROGRESS</span>';
+      else statusBadge = '<span class="lab-status status-done">DONE</span>';
+    } else if (lab.status === 'legacy') {
+      statusBadge = '<span class="lab-status" style="background:var(--bg-input);color:var(--text-dim)">LEGACY</span>';
+    } else {
+      statusBadge = '<span class="lab-status" style="background:var(--bg-input);color:var(--text-muted)">TODO</span>';
+    }
+
+    const progress = lab.cards > 0
+      ? Math.round(((lab.cards - srs.new - srs.due) / lab.cards) * 100)
+      : 0;
+
+    a.innerHTML = `
+      <div>${statusBadge}</div>
+      <div class="lab-title">${lab.title}</div>
+      <div class="lab-meta">
+        ${lab.cards > 0 ? `<span>${srs.new} mới · ${srs.due} cần ôn</span>` : ''}
+        ${quiz ? ` · <span>quiz ${quiz.correct}/${quiz.total}</span>` : ''}
+        ${lab.note ? `<div class="mt-8">${lab.note}</div>` : ''}
+      </div>
+      ${lab.cards > 0 ? `<div class="progress-bar"><div class="fill" style="width:${progress}%"></div></div>` : ''}
+    `;
+    grid.appendChild(a);
+  });
+  div.appendChild(grid);
+  root.appendChild(div);
+});
+
+// Due banner
+const banner = document.getElementById('due-banner-mount');
+if (totalDueAcrossLabs > 0) {
+  banner.innerHTML = `
+    <div class="due-banner">
+      <span class="big">${totalDueAcrossLabs}</span>
+      <div>
+        <strong>Bạn có thẻ cần ôn hôm nay.</strong>
+        <div class="text-dim" style="font-size:13px">Vào từng lab rồi kéo xuống mục Flashcards.</div>
+      </div>
+    </div>`;
+}
+</script>
+</body>
+</html>

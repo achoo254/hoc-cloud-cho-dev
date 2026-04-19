@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICMP — Ping & Traceroute</title>
+<link rel="stylesheet" href="../_shared/lab-template.css">
+<style>
+  /* ===== Traceroute Simulator ===== */
+  .tr-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  @media (max-width: 820px) { .tr-layout { grid-template-columns: 1fr; } }
+
+  /* Network path diagram */
+  .tr-path {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .tr-path-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .tr-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    border-radius: 6px;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .tr-node.active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 12px var(--accent-glow);
+  }
+  .tr-node.discovered {
+    border-color: var(--green);
+    background: var(--green-dim);
+  }
+  .tr-node.client-node { border-color: var(--why-border); background: var(--why-dim); }
+  .tr-node-icon { font-size: 18px; flex-shrink: 0; }
+  .tr-node-name { flex: 1; }
+  .tr-node-name .n { font-weight: 600; font-size: 13px; }
+  .tr-node-name .ip { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* Connector lines between nodes */
+  .tr-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+
+  /* Packet animation */
+  .tr-packet {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    animation: packet-appear 0.3s ease-out;
+  }
+  .tr-packet.dying {
+    background: rgba(255,75,75,0.15);
+    color: #ff4b4b;
+    border-color: #ff4b4b;
+  }
+  .tr-packet.icmp-back {
+    background: var(--why-dim);
+    color: var(--why);
+    border-color: var(--why-border);
+  }
+  @keyframes packet-appear {
+    from { opacity: 0; transform: translateY(-50%) scale(0.8); }
+    to   { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+
+  /* Right panel: info + hop table */
+  .tr-right { display: flex; flex-direction: column; gap: 12px; }
+
+  .tr-info-box {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    min-height: 120px;
+  }
+  .tr-info-box h4 { margin: 0 0 8px; font-size: 15px; }
+  .tr-info-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin: 10px 0 4px; }
+
+  .tr-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0 4px;
+    align-items: center;
+  }
+
+  .tr-hop-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .tr-hop-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tr-hop-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 12px;
+    vertical-align: middle;
+  }
+  .tr-hop-table tr.hop-new td { color: var(--green); }
+  .tr-hop-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .tr-hop-badge.time-exceeded {
+    background: var(--why-dim);
+    color: var(--why);
+  }
+
+  /* ICMP message type reference table */
+  .icmp-types-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .icmp-type-card {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .icmp-type-card:hover, .icmp-type-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .icmp-type-card .type-code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .icmp-type-card .type-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .icmp-type-card .type-use {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .icmp-detail-box {
+    margin-top: 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: none;
+  }
+  .icmp-detail-box.visible { display: block; }
+  .icmp-detail-box h4 { margin: 0 0 8px; }
+
+  /* Status bubble in animation */
+  .tr-status-text {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-style: italic;
+    min-height: 20px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="lab-topbar">
+  <a href="../index.html">← Dashboard</a>
+  <span class="text-mono text-dim">net-04 · ICMP / Ping / Traceroute</span>
+</nav>
+
+<main class="lab-container">
+
+  <!-- HERO -->
+  <section class="lab-section lab-hero">
+    <h1>ICMP — Ping & Traceroute</h1>
+    <p class="text-dim">Câu hỏi thực tế: <em>"Tại sao <code>ping</code> thành công nhưng web vẫn không vào được?"</em> — và cách <code>traceroute</code> dùng <strong>TTL trick</strong> để lộ toàn bộ đường đi.</p>
+    <div class="lab-hero-why">Không phải học thuộc loại message ICMP. Mục đích: hiểu được <code>ping</code> và <code>traceroute</code> thực sự đo cái gì, khi nào kết quả của chúng có nghĩa gì — để debug network đúng hướng.</div>
+  </section>
+
+  <!-- TL;DR -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">TL;DR</span> ICMP trong 1 bảng</h2>
+    <p class="lab-section-subtitle">Ping KHÔNG phải là "kiểm tra mạng có dùng được không". Cột <em>Why</em> quan trọng nhất.</p>
+    <div id="mount-tldr"></div>
+  </section>
+
+  <!-- CORE -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Core</span> ICMP là gì và tại sao cần?</h2>
+    <p class="lab-section-subtitle">IP là best-effort: không có retry, không có ACK, không có báo lỗi. ICMP lấp đầy phần "báo lỗi".</p>
+
+    <div class="osi-encap-diagram" style="font-family:var(--mono); font-size:12px; padding:14px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; display:flex; flex-direction:column; gap:4px;">
+      <div style="padding:6px 8px; background:var(--bg-card); border-radius:3px; display:flex; gap:8px; align-items:center;">
+        <span style="min-width:80px; color:var(--text-dim); font-size:11px;">L3 Header:</span>
+        <span style="padding:3px 8px; border-radius:2px; background:var(--accent-dim); color:var(--accent); font-size:11px;">IP hdr (proto=1)</span>
+        <span style="padding:3px 8px; border-radius:2px; background:var(--green-dim); color:var(--green); font-size:11px; flex:1; text-align:center;">ICMP message (type + code + checksum + data)</span>
+      </div>
+      <div style="padding:6px 8px; background:var(--bg-card); border-radius:3px; display:flex; gap:8px; align-items:center;">
+        <span style="min-width:80px; color:var(--text-dim); font-size:11px;">Không có:</span>
+        <span style="padding:3px 8px; border-radius:2px; background:var(--bg-input); color:var(--text-dim); font-size:11px; border:1px solid var(--border);">Port (L4)</span>
+        <span style="padding:3px 8px; border-radius:2px; background:var(--bg-input); color:var(--text-dim); font-size:11px; border:1px solid var(--border);">TCP/UDP header</span>
+        <span style="padding:3px 8px; border-radius:2px; background:var(--bg-input); color:var(--text-dim); font-size:11px; border:1px solid var(--border);">Reliability</span>
+      </div>
+      <div style="padding:6px 8px; background:var(--bg-card); border-radius:3px; display:flex; gap:8px; align-items:center;">
+        <span style="min-width:80px; color:var(--text-dim); font-size:11px;">Quan hệ:</span>
+        <span style="color:var(--text-dim); font-size:11px;">ICMP nằm trong IP payload, nhưng thực chất là "companion protocol" của IP ở L3 — không phải L4</span>
+      </div>
+    </div>
+
+    <div class="why-block mt-16"><strong>Why ICMP tồn tại:</strong> IP không có cơ chế tự báo lỗi. Khi router phát hiện TTL hết, packet quá lớn, hoặc host không tìm thấy — nó cần 1 cách gửi thông báo về cho sender. ICMP là "ngôn ngữ báo lỗi" của layer 3. Ping chỉ là 1 trong rất nhiều loại message ICMP.</div>
+  </section>
+
+  <!-- PLAYGROUND -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Playground</span> Traceroute Simulator</h2>
+    <p class="lab-section-subtitle">Nhấn <kbd>Gửi gói tiếp theo</kbd> để xem từng TTL tăng dần — mỗi hop "chết" ở đúng router và gửi ICMP Time Exceeded về. Tích lũy danh sách hop dưới.</p>
+
+    <div class="tr-controls">
+      <button class="btn" id="tr-reset">⟲ Reset</button>
+      <button class="btn btn-primary" id="tr-next">Gửi gói tiếp theo ▶</button>
+      <span class="tr-status-text" id="tr-status">Nhấn "Gửi gói tiếp theo" để bắt đầu.</span>
+    </div>
+
+    <div class="tr-layout">
+      <!-- Left: path diagram -->
+      <div>
+        <div class="tr-path-title">Đường đi mạng</div>
+        <div class="tr-path" id="tr-path"></div>
+      </div>
+
+      <!-- Right: info + hop table -->
+      <div class="tr-right">
+        <div class="tr-info-box" id="tr-info">
+          <h4>Chưa bắt đầu</h4>
+          <p class="text-dim" style="font-size:13px">Nhấn nút để gửi packet đầu tiên với TTL=1.</p>
+        </div>
+
+        <div>
+          <div class="tr-info-label">Bảng hop (tích luỹ)</div>
+          <table class="tr-hop-table">
+            <thead>
+              <tr>
+                <th>Hop</th>
+                <th>IP</th>
+                <th>RTT</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody id="tr-hop-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ICMP type reference -->
+    <div style="margin-top: 32px; border-top: 1px solid var(--border); padding-top: 20px;">
+      <h3 style="margin:0 0 6px; font-size:15px;">Bảng tra cứu ICMP Message Types</h3>
+      <p class="text-dim" style="font-size:13px; margin:0 0 12px;">Nhấn vào từng loại để xem ví dụ thực tế.</p>
+      <div class="icmp-types-grid" id="icmp-types-grid"></div>
+      <div class="icmp-detail-box" id="icmp-detail"></div>
+    </div>
+  </section>
+
+  <!-- WALKTHROUGH -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Walkthrough</span> Từng bước chi tiết</h2>
+    <p class="lab-section-subtitle">Mỗi bước có lệnh thực tế + giải thích tại sao bước đó quan trọng.</p>
+    <div id="mount-walkthrough"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Quiz</span> Kiểm tra active recall</h2>
+    <p class="lab-section-subtitle">Làm trước — không nhìn lại TL;DR. Sai không sao, đáp án có giải thích Why.</p>
+    <div id="mount-quiz"></div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Flashcards</span> Ôn tập spaced repetition</h2>
+    <p class="lab-section-subtitle">Rate theo SM-2: Again / Hard / Good / Easy. Thẻ sẽ quay lại đúng ngày nên ôn.</p>
+    <div id="mount-flashcards"></div>
+  </section>
+
+  <!-- TRY AT HOME -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Try at home</span> Gõ ngay trên terminal</h2>
+    <div id="mount-tryAtHome"></div>
+  </section>
+
+</main>
+
+<!-- DATA ISLAND -->
+<script type="application/json" id="lab-data">
+{
+  "title": "ICMP — Ping & Traceroute",
+  "tldr": [
+    {
+      "what": "ICMP Echo Request / Reply (Type 8/0)",
+      "why": "Đây là những gì <code>ping</code> thực sự gửi. Không phải 'kiểm tra mạng dùng được không' — chỉ kiểm tra L3 reachability. Web dùng TCP port 80/443; firewall có thể block port nhưng vẫn cho ICMP qua → ping OK nhưng web chết."
+    },
+    {
+      "what": "ICMP Time Exceeded (Type 11)",
+      "why": "Router nhận packet có TTL=0 phải gửi ICMP Time Exceeded về sender kèm IP của chính nó. Đây là cơ sở của traceroute: gửi TTL=1,2,3... để 'nhử' từng router tự khai IP."
+    },
+    {
+      "what": "ICMP Destination Unreachable (Type 3)",
+      "why": "Khi router không tìm được đường (host unreachable), hoặc port đóng (port unreachable) → gửi loại này. Giúp phân biệt 'routing fail' vs 'app fail' khi debug."
+    },
+    {
+      "what": "TTL (Time To Live) trick của traceroute",
+      "why": "TTL không phải thời gian — là số hop. Mỗi router giảm 1. Traceroute tăng TTL từ 1 lên: hop 1 nhận TTL=1, drop packet, báo lại IP của nó. Hop 2 nhận TTL=2, rồi tương tự. Ta thu được bản đồ đường đi."
+    },
+    {
+      "what": "Ping thành công ≠ dịch vụ hoạt động",
+      "why": "Ping chỉ test ICMP echo tại L3. Nếu server disable ICMP → ping fail nhưng web OK. Ngược lại, firewall chặn TCP:80 → ping OK nhưng web dead. Đừng dùng ping để kết luận 'server down'."
+    },
+    {
+      "what": "RTT (Round Trip Time) đo gì?",
+      "why": "RTT = thời gian từ lúc gửi ICMP Echo Request tới khi nhận Echo Reply. Đo latency giữa 2 điểm ở L3. RTT tăng đột biến ở hop nào → vấn đề tập trung ở đó (tắc nghẽn/đường dài)."
+    }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "what": "Ping gửi ICMP Echo Request — không phải TCP",
+      "why": "Nhiều người nhầm ping là 'test kết nối TCP'. Thực ra ping chỉ hoạt động ở L3 (IP), không cần port, không cần process listen. Kết quả ping OK chỉ nghĩa là IP reachable — không nói gì về dịch vụ.",
+      "code": "# Ping cơ bản — gửi 4 ICMP Echo Request\nping -c 4 8.8.8.8\n\n# Xem TTL của reply — TTL giảm theo số hop\n# Nếu reply TTL=117 thì từ nguồn TTL=128, qua 11 hop\nping -c 1 -v 8.8.8.8"
+    },
+    {
+      "step": 2,
+      "what": "Wireshark — xem ICMP Echo Request/Reply",
+      "why": "Thấy tận mắt packet ICMP trong Wireshark giúp hiểu rằng KHÔNG có port, không có handshake. Chỉ có IP header + ICMP header với Type=8 (request) và Type=0 (reply). Đây là bằng chứng vật lý cho khái niệm.",
+      "code": "# Capture ICMP trên Wireshark (Linux)\nsudo tcpdump -i any -n icmp\n\n# Trong terminal khác:\nping -c 3 8.8.8.8\n\n# Output tcpdump sẽ thấy dạng:\n# IP 192.168.x.x > 8.8.8.8: ICMP echo request\n# IP 8.8.8.8 > 192.168.x.x: ICMP echo reply"
+    },
+    {
+      "step": 3,
+      "what": "Traceroute — TTL trick hoạt động như thế nào",
+      "why": "Hiểu TTL trick là hiểu cách traceroute 'hack' cơ chế routing để lộ đường đi. Mỗi router phải báo lại khi drop packet TTL=0 — đây là nghĩa vụ theo RFC 792. Không cần cài software gì thêm, chỉ dùng tính năng có sẵn của IP stack.",
+      "code": "# Traceroute chuẩn (dùng UDP trên Linux)\ntraceroute 8.8.8.8\n\n# Traceroute dùng ICMP (giống Windows tracert)\ntraceroute -I 8.8.8.8\n\n# Windows:\ntracert 8.8.8.8"
+    },
+    {
+      "step": 4,
+      "what": "Đọc output traceroute — dấu * nghĩa là gì?",
+      "why": "Dấu * xuất hiện khi router không trả ICMP Time Exceeded — có thể firewall block ICMP hoặc router cấu hình không gửi. KHÔNG có nghĩa là mạng đứt tại đó. Nếu các hop tiếp theo phản hồi bình thường → đường vẫn thông, router đó chỉ 'im lặng'.",
+      "code": "# Ví dụ output:\n# 1  192.168.1.1      1.2 ms   — router nhà\n# 2  10.0.0.1         5.1 ms   — router ISP\n# 3  * * *            — router không trả ICMP\n# 4  72.14.198.108   18.3 ms   — Google backbone\n# 5  8.8.8.8         19.1 ms   — đích đến\n\n# Dấu * = router không gửi Time Exceeded\n# Không có nghĩa đường đứt — xem hop tiếp theo"
+    },
+    {
+      "step": 5,
+      "what": "Phân biệt ICMP Destination Unreachable subtypes",
+      "why": "Code trong ICMP Destination Unreachable cho biết lý do cụ thể: code 0 = net unreachable (routing fail), code 1 = host unreachable, code 3 = port unreachable (UDP traceroute dùng điều này — khi đến đích, port UDP đóng → gửi port unreachable → traceroute biết đã đến nơi).",
+      "code": "# UDP traceroute exploit Port Unreachable:\n# Gửi UDP tới port cao (33434+), mỗi router trả Time Exceeded\n# Khi tới đích: host trả Port Unreachable (vì port đó không có ai listen)\n# → traceroute biết đã đến đích!\n\n# ICMP traceroute (-I) thay vào đó dùng Echo Request\n# Khi đích trả Echo Reply → kết thúc"
+    },
+    {
+      "step": 6,
+      "what": "Ping thực tế — RTT và packet loss",
+      "why": "RTT tăng đột biến → latency vấn đề. Packet loss > 0% → mạng không ổn định. Ping với -i (interval) và -s (packet size) giúp test băng thông và phát hiện MTU issue. Đây là công cụ debug L3 nhanh nhất.",
+      "code": "# Ping liên tục, xem min/avg/max RTT\nping 8.8.8.8\n# Ctrl+C để dừng, xem tóm tắt\n\n# Test với packet lớn hơn (phát hiện MTU issue)\nping -s 1400 8.8.8.8\n\n# Nếu ping với size lớn fail nhưng size nhỏ OK\n# → có thể MTU mismatch trên đường đi"
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Ping thành công tới server 8.8.8.8 nhưng curl báo 'connection refused port 80'. Nguyên nhân là gì?",
+      "options": [
+        "ICMP bị block ở firewall",
+        "Ping OK nghĩa là L3 thông — nhưng TCP port 80 không có ai listen hoặc bị firewall chặn (L4)",
+        "DNS resolution bị fail",
+        "TTL packet quá thấp"
+      ],
+      "correct": 1,
+      "whyCorrect": "Ping dùng ICMP ở L3 — không cần port, không cần process listen. Ping OK chỉ nghĩa là IP reachable. 'Connection refused' = TCP SYN tới nơi nhưng không có process listen port 80. Hai thứ hoàn toàn độc lập.",
+      "whyOthersWrong": {
+        "0": "Nếu ICMP bị block thì ping sẽ FAIL, không phải thành công.",
+        "2": "DNS fail thì ping sẽ báo 'cannot resolve hostname'. Ở đây ping tới IP trực tiếp và thành công.",
+        "3": "TTL quá thấp thì ping fail với 'TTL exceeded', không phải curl fail với 'connection refused'."
+      }
+    },
+    {
+      "q": "Traceroute hoạt động bằng cách nào để biết IP của từng router trên đường đi?",
+      "options": [
+        "Traceroute hỏi routing table của từng router",
+        "Gửi packet với TTL tăng dần (1,2,3...) — mỗi router drop packet khi TTL=0 và gửi ICMP Time Exceeded kèm IP của chính nó",
+        "Dùng DNS reverse lookup cho mỗi hop",
+        "Gửi TCP SYN tới từng IP trong dải subnet"
+      ],
+      "correct": 1,
+      "whyCorrect": "Đây là TTL trick: TTL=1 → chết tại hop 1, hop 1 gửi ICMP Time Exceeded với source IP của nó. TTL=2 → chết tại hop 2, nhận được IP hop 2. Cứ thế cho đến đích. Mỗi router buộc phải gửi Time Exceeded theo RFC 792.",
+      "whyOthersWrong": {
+        "0": "Traceroute không có quyền truy cập routing table của router từ xa.",
+        "2": "DNS reverse lookup là optional, chỉ để hiển thị tên — không phải cơ chế phát hiện hop.",
+        "3": "Scan subnet là port scanning — không liên quan traceroute."
+      }
+    },
+    {
+      "q": "Trong output traceroute bạn thấy 'hop 5: * * *' rồi 'hop 6: 72.14.x.x (18ms)'. Điều này có nghĩa gì?",
+      "options": [
+        "Mạng bị đứt tại hop 5, hop 6 từ đường khác",
+        "Hop 5 bị timeout hoàn toàn, kết nối đã bị drop",
+        "Router tại hop 5 không gửi ICMP Time Exceeded (firewall/config) nhưng vẫn forward packet — hop 6 chứng minh đường vẫn thông",
+        "TTL tính sai, hop 5 không tồn tại"
+      ],
+      "correct": 2,
+      "whyCorrect": "Dấu * nghĩa là router tại hop đó không trả ICMP Time Exceeded — có thể bị firewall block ICMP hoặc router cấu hình rate-limit. NHƯNG nó vẫn forward packet (vì hop 6 và tiếp theo phản hồi bình thường). Đường vẫn thông.",
+      "whyOthersWrong": {
+        "0": "Không có 'đường khác' trong traceroute — đây là 1 path tuyến tính. Hop 6 phản hồi chứng tỏ packet đi qua hop 5.",
+        "1": "Nếu timeout thật thì hop 6 và các hop sau cũng * hoặc timeout.",
+        "3": "TTL được tính đúng — hop 5 chỉ im lặng, không gửi reply."
+      }
+    },
+    {
+      "q": "ICMP nằm ở layer nào trong OSI model?",
+      "options": [
+        "L4 Transport — vì nó dùng để test kết nối",
+        "L3 Network — ICMP được đóng gói trong IP packet (protocol number 1)",
+        "L2 Data Link — vì router xử lý ICMP",
+        "L7 Application — vì ping là ứng dụng"
+      ],
+      "correct": 1,
+      "whyCorrect": "ICMP là protocol của L3: nằm trong IP payload với IP protocol number = 1. Router (thiết bị L3) xử lý ICMP. Không có port (L4), không có MAC (L2). Ping chỉ là ứng dụng sử dụng ICMP — không phải ICMP là L7.",
+      "whyOthersWrong": {
+        "0": "L4 là TCP/UDP có port. ICMP không có port — bằng chứng ICMP không phải L4.",
+        "2": "L2 dùng MAC address và chỉ trong LAN. Router xử lý L3, không phải L2.",
+        "3": "Ping là ứng dụng gọi ICMP, nhưng bản thân ICMP là protocol L3 — không phải L7."
+      }
+    },
+    {
+      "q": "Tại sao UDP traceroute kết thúc khi nhận được 'ICMP Port Unreachable' từ đích?",
+      "options": [
+        "Vì port unreachable nghĩa là server đang bận",
+        "Vì UDP traceroute gửi tới port cao (33434+) mà host đích không có service nào listen — host trả Port Unreachable, traceroute hiểu đã đến nơi",
+        "Vì port 33434 là port đặc biệt của traceroute protocol",
+        "Vì ICMP Port Unreachable có TTL=0"
+      ],
+      "correct": 1,
+      "whyCorrect": "UDP traceroute dùng thiết kế thông minh: gửi UDP tới port rất cao (33434+) để đảm bảo không có service nào listen. Khi packet đến đích, host trả ICMP Type 3 Code 3 (Port Unreachable). Traceroute nhận được điều này = đã đến đích. Các hop trung gian thì trả Time Exceeded.",
+      "whyOthersWrong": {
+        "0": "'Bận' không phải khái niệm ICMP. Server bận trả lỗi TCP, không phải ICMP.",
+        "2": "Không có port đặc biệt. Port 33434 chỉ là số cao ngẫu nhiên khó có service nào dùng.",
+        "3": "ICMP Port Unreachable không có khái niệm TTL=0 — TTL là của IP packet gốc."
+      }
+    },
+    {
+      "q": "Giá trị TTL trong ping reply là 117. Điều này cho bạn biết gì?",
+      "options": [
+        "Packet đã đi qua 117 router",
+        "Server cấu hình TTL ban đầu là 117",
+        "Nếu server default TTL=128, packet đã đi qua 128-117=11 hop",
+        "TTL không có thông tin gì về số hop"
+      ],
+      "correct": 2,
+      "whyCorrect": "Các hệ điều hành có default TTL cố định: Linux=64, Windows=128, Cisco=255. Khi nhận reply TTL=117, nếu biết server dùng Windows (TTL gốc=128), tính được 128-117=11 hop. Đây là cách ước lượng khoảng cách mà không cần traceroute.",
+      "whyOthersWrong": {
+        "0": "Nếu đi qua 117 router thì TTL reply sẽ là (TTL_gốc - 117) có thể rất thấp hoặc 0.",
+        "1": "TTL 117 là giá trị đã bị giảm bởi các hop trên đường đi, không phải giá trị gốc.",
+        "3": "TTL mang thông tin rất có giá trị — giúp ước lượng số hop từ sender."
+      }
+    }
+  ],
+  "flashcards": [
+    {
+      "front": "Ping thực sự kiểm tra cái gì?",
+      "back": "ICMP Echo Request/Reply — chỉ kiểm tra L3 IP reachability. Không kiểm tra port, service, hoặc ứng dụng.",
+      "why": "Sai lầm phổ biến nhất: 'ping OK = server OK'. Sai. Web server có thể chết trong khi ping vẫn trả lời vì chúng là 2 cơ chế khác nhau."
+    },
+    {
+      "front": "TTL trong IP packet là gì? Giá trị mặc định?",
+      "back": "Time To Live = số hop tối đa packet được phép đi qua. Mỗi router giảm 1. TTL=0 → drop + gửi ICMP Time Exceeded. Default: Linux=64, Windows=128, Cisco=255.",
+      "why": "TTL ngăn packet loop vô tận khi routing table bị lỗi. Traceroute tận dụng cơ chế này để 'nhử' từng router tự khai IP."
+    },
+    {
+      "front": "ICMP Time Exceeded được gửi khi nào?",
+      "back": "Khi router nhận packet có TTL=1, giảm xuống 0, phải drop và gửi ICMP Type 11 (Time Exceeded) kèm IP source của router đó về sender.",
+      "why": "Đây là nền tảng của traceroute. Router PHẢI làm điều này theo RFC 792 — không có quyền im lặng (trừ khi bị cấu hình/firewall block)."
+    },
+    {
+      "front": "Traceroute TTL trick hoạt động thế nào?",
+      "back": "Gửi packet TTL=1: chết tại hop 1, nhận IP hop 1. TTL=2: chết tại hop 2, nhận IP hop 2. Cứ tăng TTL cho đến khi tới đích.",
+      "why": "Không cần quyền đặc biệt hoặc cài phần mềm trên router trung gian. Tận dụng RFC chuẩn — mọi router đều phải tuân thủ."
+    },
+    {
+      "front": "Dấu * trong traceroute nghĩa là gì?",
+      "back": "Router tại hop đó không gửi ICMP Time Exceeded về (bị firewall block hoặc rate-limit). KHÔNG phải mạng đứt tại đó — nếu các hop tiếp theo phản hồi thì đường vẫn thông.",
+      "why": "Nhiều router production cố ý disable ICMP để giảm load và ẩn topology. Đừng kết luận sai khi thấy *."
+    },
+    {
+      "front": "ICMP Destination Unreachable Type 3 — các code quan trọng?",
+      "back": "Code 0: Network unreachable. Code 1: Host unreachable. Code 3: Port unreachable (UDP traceroute dùng để biết đã đến đích). Code 4: Fragmentation needed (MTU discovery).",
+      "why": "Code phân biệt nguyên nhân: routing fail vs host fail vs app fail. Debug đúng tầng sẽ tiết kiệm thời gian."
+    },
+    {
+      "front": "UDP traceroute kết thúc khi nào và bằng cách nào?",
+      "back": "Gửi UDP tới port 33434+ (không ai listen). Hop trung gian trả Time Exceeded. Khi tới đích, host trả Port Unreachable (port không có service) → traceroute biết đã đến nơi.",
+      "why": "Thiết kế thông minh: tận dụng 2 loại ICMP khác nhau để phân biệt 'đang trên đường đi' vs 'đã đến đích'."
+    },
+    {
+      "front": "ICMP Echo Request là Type mấy? Reply là Type mấy?",
+      "back": "Echo Request: Type 8. Echo Reply: Type 0. (Nhớ: 8 gửi đi, 0 là im lặng/reply).",
+      "why": "Biết type number giúp đọc Wireshark/tcpdump. Filter 'icmp.type == 8' là filter ping request."
+    },
+    {
+      "front": "Ping với TTL reply=54 — server dùng OS nào và đã qua bao nhiêu hop?",
+      "back": "Linux default TTL=64. TTL reply=54 → 64-54=10 hop. Nếu TTL reply=118 → Windows (128), qua 10 hop.",
+      "why": "Tính ngược TTL giúp ước lượng khoảng cách nhanh, không cần traceroute đầy đủ. Cũng giúp fingerprint OS của target."
+    },
+    {
+      "front": "Tại sao ping OK không đảm bảo web app chạy được?",
+      "back": "Ping dùng ICMP (L3), web dùng TCP port 80/443 (L4+). Firewall có thể: cho ICMP qua + block TCP. Hoặc ngược lại. Hai protocol hoàn toàn độc lập.",
+      "why": "Debug theo thứ tự: ping kiểm tra L3. Nếu OK → test port (nc/telnet). Nếu port OK → test app (curl). Mỗi bước thu hẹp phạm vi lỗi."
+    }
+  ],
+  "tryAtHome": [
+    {
+      "why": "Thấy tận mắt ICMP Echo Request/Reply — xác nhận ping không dùng port, không có TCP handshake",
+      "cmd": "# Terminal 1: capture ICMP\nsudo tcpdump -i any -n -v icmp\n\n# Terminal 2: gửi ping\nping -c 3 8.8.8.8\n\n# Quan sát: Type 8 (request) và Type 0 (reply)"
+    },
+    {
+      "why": "Xem toàn bộ đường đi từng hop — hiểu traceroute TTL trick trong thực tế",
+      "cmd": "# Linux (UDP mode)\ntraceroute -n 8.8.8.8\n\n# Linux (ICMP mode - giống Windows)\ntraceroute -I -n 8.8.8.8\n\n# Windows\ntracert 8.8.8.8"
+    },
+    {
+      "why": "Chứng minh ping OK ≠ service OK — firewall có thể allow ICMP nhưng block TCP",
+      "cmd": "# Ping thành công:\nping -c 3 8.8.8.8\n\n# Kiểm tra TCP port (cần telnet hoặc nc)\nnc -vz 8.8.8.8 80   # Google HTTP\nnc -vz 8.8.8.8 22   # Google SSH (thường blocked)\n\n# So sánh kết quả: port nào open vs closed"
+    },
+    {
+      "why": "Capture ICMP Time Exceeded từ traceroute — thấy mỗi router gửi ICMP khi TTL chết",
+      "cmd": "# Terminal 1: capture tất cả ICMP\nsudo tcpdump -i any -n icmp\n\n# Terminal 2: chạy traceroute\ntraceroute -n -m 5 8.8.8.8\n\n# Quan sát: ICMP time-exceeded từ từng router trung gian"
+    },
+    {
+      "why": "Test MTU path discovery — phát hiện lỗi MTU mismatch bằng ping packet size",
+      "cmd": "# Ping với packet size khác nhau\nping -c 3 -s 1400 8.8.8.8   # 1400 bytes\nping -c 3 -s 1450 8.8.8.8   # 1450 bytes\nping -c 3 -s 1472 8.8.8.8   # Max Ethernet (1472 + 28 hdr = 1500)\n\n# Nếu size lớn fail: 'Frag needed' = MTU issue trên đường đi"
+    }
+  ]
+}
+</script>
+
+<!-- PLAYGROUND JS (ICMP-specific) -->
+<script type="module">
+  import { LabTemplate } from '../_shared/lab-template.js';
+  await LabTemplate.init({ labId: 'net-04-icmp', title: 'ICMP / Ping / Traceroute' });
+
+  // ===== Traceroute Simulator =====
+
+  // Network topology: client → hop1 (ISP gateway) → hop2 (ISP core) → hop3 (peering) → hop4 (Google edge) → destination
+  const NODES = [
+    { id: 'client',  icon: '🖥️', name: 'Máy của bạn',     ip: '192.168.1.10',    type: 'client' },
+    { id: 'hop1',    icon: '🔀', name: 'Router nhà/ISP',   ip: '192.168.1.1',     type: 'router' },
+    { id: 'hop2',    icon: '🌐', name: 'ISP Core Router',  ip: '103.7.40.1',      type: 'router' },
+    { id: 'hop3',    icon: '🔗', name: 'Peering Point',    ip: '72.14.198.108',   type: 'router' },
+    { id: 'hop4',    icon: '⚡', name: 'Google Edge',      ip: '142.250.66.46',   type: 'router' },
+    { id: 'dest',    icon: '🎯', name: 'Đích: 8.8.8.8',   ip: '8.8.8.8',         type: 'dest' },
+  ];
+
+  // Simulated RTT for each hop
+  const HOP_RTT = [null, '1.2ms', '8.4ms', '15.7ms', '18.3ms', '19.1ms'];
+
+  let currentTTL = 0;     // 0 = not started, 1..5 = TTL of current probe
+  let discoveredHops = []; // accumulates hop info as we discover them
+  let animTimer = null;
+
+  const pathEl = document.getElementById('tr-path');
+  const infoEl = document.getElementById('tr-info');
+  const tbodyEl = document.getElementById('tr-hop-tbody');
+  const statusEl = document.getElementById('tr-status');
+  const btnNext = document.getElementById('tr-next');
+  const btnReset = document.getElementById('tr-reset');
+
+  // Build path diagram
+  function buildPath() {
+    pathEl.innerHTML = '';
+    NODES.forEach((node, idx) => {
+      const div = document.createElement('div');
+      div.className = 'tr-node';
+      if (node.type === 'client') div.classList.add('client-node');
+      div.id = `tr-node-${node.id}`;
+      div.innerHTML = `
+        <span class="tr-node-icon">${node.icon}</span>
+        <div class="tr-node-name">
+          <div class="n">${node.name}</div>
+          <div class="ip">${node.ip}</div>
+        </div>
+      `;
+      pathEl.appendChild(div);
+
+      // Add connector between nodes (not after last)
+      if (idx < NODES.length - 1) {
+        const conn = document.createElement('div');
+        conn.className = 'tr-connector';
+        conn.id = `tr-conn-${idx}`;
+        conn.textContent = '↓';
+        pathEl.appendChild(conn);
+      }
+    });
+  }
+
+  // Reset all node highlights
+  function resetNodeHighlights() {
+    NODES.forEach(n => {
+      const el = document.getElementById(`tr-node-${n.id}`);
+      if (el) {
+        el.classList.remove('active');
+        if (!discoveredHops.some(h => h.nodeId === n.id)) {
+          el.classList.remove('discovered');
+        }
+        // Remove any packet badges
+        const badge = el.querySelector('.tr-packet');
+        if (badge) badge.remove();
+      }
+    });
+  }
+
+  // Show packet animation at a node
+  function showPacketAt(nodeId, label, cls) {
+    const el = document.getElementById(`tr-node-${nodeId}`);
+    if (!el) return;
+    el.classList.add('active');
+    const badge = document.createElement('span');
+    badge.className = `tr-packet ${cls || ''}`;
+    badge.textContent = label;
+    el.appendChild(badge);
+  }
+
+  // Render hop table
+  function renderHopTable() {
+    tbodyEl.innerHTML = '';
+    if (discoveredHops.length === 0) {
+      tbodyEl.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim); text-align:center; padding:14px;">Chưa có hop nào được khám phá</td></tr>';
+      return;
+    }
+    discoveredHops.forEach((hop, idx) => {
+      const tr = document.createElement('tr');
+      tr.className = idx === discoveredHops.length - 1 ? 'hop-new' : '';
+      tr.innerHTML = `
+        <td>${hop.ttl}</td>
+        <td>${hop.ip}</td>
+        <td>${hop.rtt}</td>
+        <td><span class="tr-hop-badge ${hop.type === 'time-exceeded' ? 'time-exceeded' : ''}">${hop.type === 'time-exceeded' ? 'Time Exceeded' : 'Echo Reply'}</span></td>
+      `;
+      tbodyEl.appendChild(tr);
+    });
+  }
+
+  // Step-by-step simulation
+  function doNextStep() {
+    if (currentTTL >= 5) {
+      // Reached destination
+      btnNext.disabled = true;
+      btnNext.textContent = 'Hoàn thành ✓';
+      statusEl.textContent = 'Traceroute hoàn thành! 8.8.8.8 đã trả lời Echo Reply trực tiếp.';
+      return;
+    }
+
+    currentTTL++;
+    resetNodeHighlights();
+
+    const dieAtIdx = currentTTL; // 1-indexed: TTL=1 dies at hop1 (index 1), TTL=2 at hop2, etc.
+    const dieNode = NODES[dieAtIdx];
+    const dieNodeEl = document.getElementById(`tr-node-${dieNode.id}`);
+
+    // Update node highlights: show packet moving
+    // Highlight nodes TTL has already passed through
+    for (let i = 1; i < dieAtIdx; i++) {
+      const el = document.getElementById(`tr-node-${NODES[i].id}`);
+      if (el) el.classList.add('discovered');
+    }
+
+    // Highlight dying node
+    showPacketAt(dieNode.id, `TTL=${currentTTL} → dies here`, 'dying');
+
+    // Determine if this is final hop (TTL=5 = destination)
+    const isFinal = (currentTTL === 5);
+
+    if (isFinal) {
+      // Destination replies with Echo Reply
+      setTimeout(() => {
+        resetNodeHighlights();
+        for (let i = 1; i <= 4; i++) {
+          const el = document.getElementById(`tr-node-${NODES[i].id}`);
+          if (el) el.classList.add('discovered');
+        }
+        showPacketAt(dieNode.id, 'Echo Reply ✓', 'icmp-back');
+        if (dieNodeEl) dieNodeEl.classList.add('discovered');
+
+        discoveredHops.push({
+          ttl: currentTTL,
+          nodeId: dieNode.id,
+          ip: dieNode.ip,
+          rtt: HOP_RTT[currentTTL],
+          type: 'echo-reply'
+        });
+        renderHopTable();
+
+        infoEl.innerHTML = `
+          <h4>TTL=${currentTTL} → 🎯 Đích đến phản hồi!</h4>
+          <div class="tr-info-label">Cơ chế</div>
+          <div style="font-size:13px; color:var(--text-dim)">
+            Packet với TTL=${currentTTL} đã vượt qua ${currentTTL-1} hop trung gian và đến được đích <strong>${dieNode.ip}</strong>.<br>
+            Đích trả <strong>ICMP Echo Reply (Type 0)</strong> thay vì Time Exceeded.<br>
+            Traceroute nhận Echo Reply = biết đã đến nơi → dừng lại.
+          </div>
+          <div class="why-block mt-16"><strong>Why:</strong> ICMP traceroute nhận biết đích bằng Echo Reply. UDP traceroute thay vào đó nhận biết bằng ICMP Port Unreachable (vì gửi tới port không có service).</div>
+        `;
+        statusEl.textContent = `Hop ${currentTTL}: ${dieNode.ip} (${dieNode.name}) — Echo Reply! Traceroute xong.`;
+        btnNext.disabled = true;
+        btnNext.textContent = 'Hoàn thành ✓';
+      }, 600);
+    } else {
+      // Intermediate router sends Time Exceeded
+      setTimeout(() => {
+        resetNodeHighlights();
+        for (let i = 1; i < dieAtIdx; i++) {
+          const el = document.getElementById(`tr-node-${NODES[i].id}`);
+          if (el) el.classList.add('discovered');
+        }
+        showPacketAt(dieNode.id, `ICMP Time Exceeded ↩`, 'icmp-back');
+        if (dieNodeEl) dieNodeEl.classList.add('discovered');
+
+        discoveredHops.push({
+          ttl: currentTTL,
+          nodeId: dieNode.id,
+          ip: dieNode.ip,
+          rtt: HOP_RTT[currentTTL],
+          type: 'time-exceeded'
+        });
+        renderHopTable();
+
+        infoEl.innerHTML = `
+          <h4>TTL=${currentTTL} → Chết tại ${dieNode.name}</h4>
+          <div class="tr-info-label">Điều xảy ra</div>
+          <div style="font-size:13px; color:var(--text-dim)">
+            Packet xuất phát với TTL=<strong>${currentTTL}</strong>.<br>
+            Đến router <strong>${dieNode.name} (${dieNode.ip})</strong>, TTL giảm còn 0 → router <em>phải</em> drop packet.<br>
+            Router gửi <strong>ICMP Time Exceeded (Type 11)</strong> về máy bạn, kèm IP nguồn của nó: <code>${dieNode.ip}</code>.<br>
+            RTT đo được: <strong>${HOP_RTT[currentTTL]}</strong>
+          </div>
+          <div class="why-block mt-16"><strong>Why TTL trick:</strong> Router không chủ động "thông báo vị trí". Nó chỉ làm nghĩa vụ theo RFC 792: báo Time Exceeded khi drop TTL=0. Traceroute lợi dụng điều này để thu thập IP từng hop mà không cần quyền đặc biệt.</div>
+        `;
+        statusEl.textContent = `Hop ${currentTTL}: ${dieNode.ip} (${dieNode.name}) — TTL hết, nhận ICMP Time Exceeded`;
+      }, 600);
+    }
+  }
+
+  function resetSimulator() {
+    currentTTL = 0;
+    discoveredHops = [];
+    buildPath();
+    renderHopTable();
+    infoEl.innerHTML = `
+      <h4>Chưa bắt đầu</h4>
+      <p class="text-dim" style="font-size:13px">Nhấn nút để gửi packet đầu tiên với TTL=1. Xem cách từng hop "tự khai" IP của mình.</p>
+    `;
+    statusEl.textContent = 'Nhấn "Gửi gói tiếp theo" để bắt đầu.';
+    btnNext.disabled = false;
+    btnNext.textContent = 'Gửi gói tiếp theo ▶';
+  }
+
+  btnNext.addEventListener('click', doNextStep);
+  btnReset.addEventListener('click', resetSimulator);
+
+  // Initial render
+  resetSimulator();
+
+  // ===== ICMP Message Type Reference =====
+  const ICMP_TYPES = [
+    {
+      code: 'Type 0',
+      name: 'Echo Reply',
+      use: 'Trả lời ping',
+      detail: {
+        trigger: 'Host nhận được ICMP Echo Request',
+        example: 'ping 8.8.8.8 → 8.8.8.8 trả Echo Reply',
+        practical: 'RTT đo được = thời gian từ request đến khi nhận reply này.',
+        wireshark: 'Filter: icmp.type == 0'
+      }
+    },
+    {
+      code: 'Type 3',
+      name: 'Destination Unreachable',
+      use: 'Không tới được đích',
+      detail: {
+        trigger: 'Router không tìm được route, host không tồn tại, port đóng',
+        example: 'Kết nối TCP port không listen → kernel gửi ICMP Type 3 Code 3 (Port Unreachable)',
+        practical: 'Code 0=net, 1=host, 3=port, 4=fragmentation needed. Phân biệt nguyên nhân lỗi.',
+        wireshark: 'Filter: icmp.type == 3'
+      }
+    },
+    {
+      code: 'Type 8',
+      name: 'Echo Request',
+      use: 'Lệnh ping gửi đi',
+      detail: {
+        trigger: 'Khi bạn chạy lệnh ping',
+        example: 'ping 8.8.8.8 → máy bạn gửi ICMP Type 8',
+        practical: 'Không có port, không có handshake. Chỉ test L3 IP reachability.',
+        wireshark: 'Filter: icmp.type == 8'
+      }
+    },
+    {
+      code: 'Type 11',
+      name: 'Time Exceeded',
+      use: 'TTL hết hạn',
+      detail: {
+        trigger: 'Router nhận packet có TTL=1, giảm xuống 0, phải drop',
+        example: 'traceroute -n 8.8.8.8: mỗi router trả Type 11 khi TTL chết tại nó',
+        practical: 'Nền tảng của traceroute. Router PHẢI gửi (RFC 792) kèm IP của nó.',
+        wireshark: 'Filter: icmp.type == 11'
+      }
+    },
+    {
+      code: 'Type 12',
+      name: 'Parameter Problem',
+      use: 'IP header lỗi',
+      detail: {
+        trigger: 'IP header chứa giá trị không hợp lệ mà router không xử lý được',
+        example: 'Packet với options IP bị lỗi, hoặc header checksum sai',
+        practical: 'Hiếm gặp trong debug hàng ngày. Thường gặp khi test với packet crafting (scapy).',
+        wireshark: 'Filter: icmp.type == 12'
+      }
+    },
+    {
+      code: 'Type 5',
+      name: 'Redirect',
+      use: 'Chuyển hướng route tốt hơn',
+      detail: {
+        trigger: 'Router biết có đường ngắn hơn cho host gửi packet đó',
+        example: 'Host gửi packet qua gateway A, nhưng gateway A biết gateway B gần hơn → gửi Redirect về host',
+        practical: 'Thường bị disable vì lý do bảo mật (ICMP redirect attack). Thấy trong môi trường cũ.',
+        wireshark: 'Filter: icmp.type == 5'
+      }
+    }
+  ];
+
+  const typesGrid = document.getElementById('icmp-types-grid');
+  const detailBox = document.getElementById('icmp-detail');
+  let selectedType = null;
+
+  ICMP_TYPES.forEach((t, idx) => {
+    const card = document.createElement('div');
+    card.className = 'icmp-type-card';
+    card.innerHTML = `
+      <div class="type-code">${t.code}</div>
+      <div class="type-name">${t.name}</div>
+      <div class="type-use">${t.use}</div>
+    `;
+    card.addEventListener('click', () => {
+      // Deselect all
+      typesGrid.querySelectorAll('.icmp-type-card').forEach(c => c.classList.remove('selected'));
+      if (selectedType === idx) {
+        selectedType = null;
+        detailBox.classList.remove('visible');
+        return;
+      }
+      card.classList.add('selected');
+      selectedType = idx;
+      const d = t.detail;
+      detailBox.classList.add('visible');
+      detailBox.innerHTML = `
+        <h4>${t.code} — ${t.name}</h4>
+        <div class="tr-info-label">Khi nào xảy ra</div>
+        <div style="font-size:13px; margin-bottom:10px">${d.trigger}</div>
+        <div class="tr-info-label">Ví dụ thực tế</div>
+        <div class="code-block" style="font-size:12px; padding:8px 12px; margin-bottom:10px">${d.example}</div>
+        <div class="tr-info-label">Dùng để làm gì</div>
+        <div style="font-size:13px; margin-bottom:10px">${d.practical}</div>
+        <div class="tr-info-label">Wireshark filter</div>
+        <div class="code-block" style="font-size:12px; padding:8px 12px">${d.wireshark}<button class="copy-btn" onclick="navigator.clipboard.writeText('${d.wireshark}'); this.textContent='✓'">copy</button></div>
+      `;
+    });
+    typesGrid.appendChild(card);
+  });
+</script>
+</body>
+</html>

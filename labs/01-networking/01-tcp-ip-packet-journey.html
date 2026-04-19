@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCP/IP 4 Layer — Hành trình của 1 cú ping</title>
+<link rel="stylesheet" href="../_shared/lab-template.css">
+<style>
+  .tcp-lab { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 820px) { .tcp-lab { grid-template-columns: 1fr; } }
+  .tcp-stack { display: flex; flex-direction: column; gap: 4px; }
+  .tcp-stack-title { font-family: var(--mono); font-size: 12px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.08em; }
+  .layer-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border: 1px solid var(--border);
+    background: var(--bg-input); border-radius: 6px;
+    transition: all 0.25s; cursor: pointer;
+  }
+  .layer-row:hover { border-color: var(--accent); }
+  .layer-row.active {
+    border-color: var(--accent); background: var(--accent-dim);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
+  }
+  .layer-row.passed { opacity: 0.55; }
+  .layer-num {
+    width: 90px; padding: 4px 8px; border-radius: 4px;
+    background: var(--bg-card); color: var(--text-dim);
+    font-family: var(--mono); font-weight: 700; font-size: 11px;
+    text-align: center; flex-shrink: 0;
+  }
+  .layer-row.active .layer-num { background: var(--accent); color: var(--bg-deep); }
+  .layer-name { flex: 1; }
+  .layer-name .ln { font-weight: 600; font-size: 14px; }
+  .layer-name .lp { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .layer-pdu {
+    font-family: var(--mono); font-size: 11px; color: var(--accent);
+    background: var(--accent-dim); padding: 2px 8px; border-radius: 3px;
+  }
+
+  .tcp-controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; align-items: center; }
+  .tcp-controls input {
+    flex: 1; min-width: 200px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px;
+    font-family: var(--mono); font-size: 14px;
+  }
+  .tcp-controls input:focus { outline: none; border-color: var(--accent); }
+
+  .tcp-info {
+    margin-top: 16px; background: var(--bg-input);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px;
+  }
+  .tcp-info-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .tcp-info-head h4 { margin: 0; font-size: 16px; }
+  .tcp-info-head .pill { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 3px; background: var(--accent-dim); color: var(--accent); }
+  .tcp-info .label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 10px; margin-bottom: 4px; }
+  .tcp-info .packet-view {
+    font-family: var(--mono); font-size: 12px;
+    background: #05090f; padding: 10px; border-radius: 4px;
+    display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+  }
+  .packet-view .seg {
+    padding: 4px 8px; border-radius: 3px;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-dim);
+  }
+  .packet-view .seg.new { border-color: var(--accent); color: var(--accent); animation: pulse 1s ease-out; }
+  .packet-view .seg.payload { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+  @keyframes pulse { 0% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+  .tcp-encap-diagram {
+    display: flex; flex-direction: column; gap: 4px;
+    font-family: var(--mono); font-size: 12px;
+    padding: 14px; background: var(--bg-input);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .encap-row {
+    display: flex; gap: 2px; align-items: center;
+    padding: 6px 8px; background: var(--bg-card); border-radius: 3px;
+  }
+  .encap-row .bit { padding: 3px 8px; border-radius: 2px; font-size: 11px; }
+  .encap-row .h { background: var(--accent-dim); color: var(--accent); }
+  .encap-row .p { background: var(--green-dim); color: var(--green); flex: 1; text-align: center; }
+  .encap-row .t { background: rgba(255,159,67,0.12); color: var(--orange); }
+  .encap-label { color: var(--text-dim); font-size: 11px; margin-right: 8px; min-width: 110px; }
+
+  .mapping-table {
+    display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 1px;
+    background: var(--border); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden; margin-top: 12px;
+    font-size: 13px;
+  }
+  .mapping-table > div { background: var(--bg-card); padding: 10px 12px; }
+  .mapping-table .th { background: var(--bg-input); font-weight: 600; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .mapping-table .tcpip { color: var(--accent); font-family: var(--mono); font-weight: 600; }
+  .mapping-table .osi { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<nav class="lab-topbar">
+  <a href="../index.html">← Dashboard</a>
+  <span class="text-mono text-dim">net-01 · TCP/IP 4 layer</span>
+</nav>
+
+<main class="lab-container">
+
+  <!-- HERO -->
+  <section class="lab-section lab-hero">
+    <h1>TCP/IP 4 Layer — Hành trình của 1 cú <code>ping</code></h1>
+    <p class="text-dim">Bạn gõ <code>ping example.com</code> và thấy reply. <em>Điều gì đã xảy ra bên dưới?</em></p>
+    <div class="lab-hero-why">
+      Bạn là dev, chưa từng đụng devops. Mục tiêu bài này: hiểu được <strong>4 tầng mạng thực tế</strong> mà mọi hệ thống đang dùng (TCP/IP), không phải lý thuyết OSI 7 tầng hàn lâm. Sau bài này bạn sẽ trả lời được câu hỏi kinh điển khi deploy lên VPS: <em>"Tại sao ping được nhưng curl không được?"</em>
+    </div>
+  </section>
+
+  <!-- TL;DR -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">TL;DR</span> TCP/IP 4 layer (cái mà thế giới thật đang dùng)</h2>
+    <p class="lab-section-subtitle">OSI 7 tầng là mô hình <em>lý thuyết</em> để các kỹ sư nói chuyện với nhau. Implementation thực tế của Internet là <strong>TCP/IP 4 tầng</strong>. Bài này xoáy vào 4 tầng đó.</p>
+    <div id="mount-tldr"></div>
+  </section>
+
+  <!-- MAPPING -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Đối chiếu</span> TCP/IP 4 ↔ OSI 7</h2>
+    <p class="lab-section-subtitle">Nhìn bảng này 1 lần, sau đó quên OSI đi, làm việc với 4 tầng bên trái.</p>
+    <div class="mapping-table">
+      <div class="th">TCP/IP (thực tế)</div>
+      <div class="th">Gộp từ OSI</div>
+      <div class="th">Ví dụ bạn đã gặp</div>
+
+      <div class="tcpip">Application</div>
+      <div class="osi">L5 + L6 + L7</div>
+      <div>HTTP, DNS, SSH, TLS — những thứ dev code hằng ngày</div>
+
+      <div class="tcpip">Transport</div>
+      <div class="osi">L4</div>
+      <div>TCP (port 443, 22), UDP (port 53 cho DNS)</div>
+
+      <div class="tcpip">Internet</div>
+      <div class="osi">L3</div>
+      <div>IP address (<code>192.168.1.1</code>), ping (ICMP), routing</div>
+
+      <div class="tcpip">Link</div>
+      <div class="osi">L1 + L2</div>
+      <div>WiFi / cáp mạng / MAC address / switch</div>
+    </div>
+    <div class="why-block mt-16"><strong>Why TCP/IP thắng OSI:</strong> Protocol TCP/IP được triển khai và chạy thật (ARPANET 1970s → Internet ngày nay). OSI ra sau, quá chi tiết, chưa kịp phổ biến thì TCP/IP đã thống trị. Giờ nói "lỗi ở layer 4" là dùng <em>ngôn ngữ</em> OSI, nhưng code/tool đều chạy trên TCP/IP.</div>
+  </section>
+
+  <!-- CORE -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Core</span> Khi bạn gõ <code>ping example.com</code>, chuyện gì xảy ra?</h2>
+    <p class="lab-section-subtitle">Ping là lệnh tối giản nhất: không cần port, không cần TLS, không cần HTTP. Chỉ là "máy ơi, còn sống không?" → "còn". Hiểu được ping là hiểu 3/4 tầng của mạng.</p>
+
+    <div class="tcp-encap-diagram">
+      <div class="encap-row"><span class="encap-label">Application:</span><span class="bit p">(ping không có HTTP/TLS — nội dung của tầng app chính là ICMP message)</span></div>
+      <div class="encap-row"><span class="encap-label">Transport:</span><span class="bit p" style="background:rgba(255,159,67,0.12);color:var(--orange)">(ping KHÔNG dùng TCP/UDP — nó dùng ICMP, chạy thẳng trên tầng Internet)</span></div>
+      <div class="encap-row"><span class="encap-label">Internet:</span><span class="bit h">IP header</span><span class="bit h">ICMP header</span><span class="bit p">"echo request"</span></div>
+      <div class="encap-row"><span class="encap-label">Link:</span><span class="bit h">Eth header</span><span class="bit h">IP header</span><span class="bit h">ICMP header</span><span class="bit p">"echo request"</span><span class="bit t">FCS</span></div>
+      <div class="encap-row"><span class="encap-label">(trên dây):</span><span class="bit p" style="text-align:left">101001110010… (bits chạy qua cáp/WiFi)</span></div>
+    </div>
+
+    <div class="why-block mt-16"><strong>Điểm đặc biệt của ping:</strong> ICMP nằm ngay ở tầng Internet, không qua Transport. Vì thế ping có thể thành công nhưng <code>curl http://</code> vẫn fail — curl cần <em>thêm</em> tầng Transport (TCP) và Application (HTTP). <strong>Ping thông = Internet layer OK. Muốn biết ứng dụng có sống không, ping KHÔNG đủ.</strong></div>
+  </section>
+
+  <!-- PLAYGROUND -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Playground</span> Mô phỏng cú <code>ping</code> đi từ máy bạn tới server</h2>
+    <p class="lab-section-subtitle">Nhập domain (hoặc dùng mặc định), nhấn <kbd>Next</kbd> để xem packet đi qua từng tầng.</p>
+
+    <div class="tcp-controls">
+      <input id="host-input" value="example.com" placeholder="domain hoặc IP...">
+      <button class="btn" id="btn-reset">⟲ Reset</button>
+      <button class="btn" id="btn-prev">◀ Prev</button>
+      <button class="btn btn-primary" id="btn-next">Next ▶</button>
+    </div>
+
+    <div class="tcp-lab">
+      <div>
+        <div class="tcp-stack-title">🖥️ Máy bạn — gói tin đi xuống</div>
+        <div class="tcp-stack" id="stack-client"></div>
+      </div>
+      <div>
+        <div class="tcp-stack-title">🛰️ Server example.com — gói tin bóc lên</div>
+        <div class="tcp-stack" id="stack-server"></div>
+      </div>
+    </div>
+
+    <div class="tcp-info" id="tcp-info">
+      <div class="tcp-info-head">
+        <h4>Bấm <kbd>Next</kbd> để bắt đầu</h4>
+      </div>
+      <p class="text-dim">Gói tin đi qua 8 bước: 4 tầng xuống ở máy bạn + 4 tầng lên ở server.</p>
+    </div>
+  </section>
+
+  <!-- WALKTHROUGH -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Walkthrough</span> 4 tầng + DNS, từng bước một</h2>
+    <p class="lab-section-subtitle">Mỗi bước kèm lệnh thực tế để bạn gõ và kiểm chứng.</p>
+    <div id="mount-walkthrough"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Quiz</span> Kiểm tra active recall</h2>
+    <p class="lab-section-subtitle">Làm trước — không nhìn lại TL;DR. Sai không sao, đáp án có giải thích Why.</p>
+    <div id="mount-quiz"></div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Flashcards</span> Ôn tập spaced repetition</h2>
+    <p class="lab-section-subtitle">Rate theo SM-2: Again / Hard / Good / Easy. Thẻ sẽ quay lại đúng ngày nên ôn.</p>
+    <div id="mount-flashcards"></div>
+  </section>
+
+  <!-- TRY AT HOME -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Try at home</span> Gõ ngay trên máy bạn (Mac/Linux/WSL/Windows)</h2>
+    <div id="mount-tryAtHome"></div>
+  </section>
+
+</main>
+
+<!-- DATA ISLAND -->
+<script type="application/json" id="lab-data">
+{
+  "title": "TCP/IP 4 Layer — Hành trình của 1 cú ping",
+  "tldr": [
+    { "layer": "L4", "name": "Application", "pdu": "Message", "device": "Process (nginx, curl, ping...)", "protocol": "HTTP, DNS, SSH, TLS, ICMP-user", "why": "Chỗ dev viết code. Lỗi ở đây là 400/500/Bad Request — KHÔNG phải lỗi mạng." },
+    { "layer": "L3", "name": "Transport", "pdu": "Segment / Datagram", "device": "Kernel OS", "protocol": "TCP, UDP", "why": "Gắn PORT để phân biệt nhiều service trên cùng 1 máy. TCP = đáng tin (web, ssh). UDP = nhanh (DNS, video call)." },
+    { "layer": "L2", "name": "Internet", "pdu": "Packet", "device": "Router", "protocol": "IP, ICMP", "why": "Định tuyến packet xuyên nhiều mạng bằng địa chỉ IP. Đây là tầng làm nên 'Inter-net' (liên mạng)." },
+    { "layer": "L1", "name": "Link", "pdu": "Frame / Bits", "device": "NIC, switch, cáp, WiFi", "protocol": "Ethernet, WiFi 802.11, ARP", "why": "Đẩy bit từ máy này sang máy bên cạnh (cùng LAN). Cáp đứt / WiFi mất sóng = 3 tầng trên vô nghĩa." }
+  ],
+  "walkthrough": [
+    {
+      "step": 0, "what": "Bước 0: DNS — đổi tên miền thành địa chỉ IP",
+      "why": "Máy tính KHÔNG hiểu <code>example.com</code>. Mọi kết nối đều cần IP (ví dụ <code>93.184.216.34</code>). Trước khi ping được, OS phải hỏi DNS server: 'example.com là IP gì?'. Khi internet chập chờn bạn hay gặp lỗi <strong>'could not resolve host'</strong> — đó là DNS chết, chưa đến lượt ping chạy.",
+      "code": "# Hỏi DNS thủ công\ndig example.com +short\n\n# Hoặc cách cũ hơn\nnslookup example.com"
+    },
+    {
+      "step": 1, "what": "Tầng 4 Application: lệnh ping tạo ICMP echo request",
+      "why": "Lệnh <code>ping</code> là 1 chương trình ở tầng Application. Nó không tự gửi được gì — nó nói với kernel: 'tôi muốn gửi ICMP echo tới IP X'. ICMP là protocol đặc biệt: nằm trong tầng Internet chứ không phải Transport (nên ping không có 'port').",
+      "code": "# Ping 4 gói rồi dừng (Linux/Mac)\nping -c 4 example.com\n\n# Windows\nping -n 4 example.com"
+    },
+    {
+      "step": 2, "what": "Tầng 2 Internet: OS đóng gói IP header",
+      "why": "Kernel gắn IP header với: <code>Source IP</code> = máy bạn (ví dụ 192.168.1.10), <code>Destination IP</code> = 93.184.216.34, <code>TTL = 64</code>. TTL giảm 1 mỗi router — cơ chế chống loop vô tận, và cũng là thứ <code>traceroute</code> lợi dụng để nhìn thấy từng router trên đường đi.",
+      "code": "# Xem IP của máy bạn\nip addr show   # Linux\nifconfig       # Mac\nipconfig       # Windows\n\n# Xem bảng routing — máy sẽ gửi gói đi đâu?\nip route       # Linux\nnetstat -rn    # Mac\nroute print    # Windows"
+    },
+    {
+      "step": 3, "what": "Tầng 1 Link: đóng thành Ethernet frame + hỏi MAC qua ARP",
+      "why": "IP là địa chỉ logic. Để gửi bit trên cáp/WiFi phải có địa chỉ <strong>vật lý</strong> (MAC). Máy bạn dùng giao thức <code>ARP</code> broadcast hỏi 'Ai có IP 192.168.1.1 (gateway)?' — gateway trả lời kèm MAC. Lưu ý: MAC đích là MAC của <strong>gateway</strong> (vì server ở xa), không phải MAC của server. Đây là chỗ dev hay nhầm.",
+      "code": "# Xem ARP cache (IP ↔ MAC đã biết trong LAN)\nip neigh show     # Linux\narp -a            # Mac/Windows\n\n# Xem MAC của máy bạn\nip link show\nifconfig | grep ether"
+    },
+    {
+      "step": 4, "what": "Đi qua Internet: router chuyển tiếp theo IP",
+      "why": "Router nhận frame → bóc lấy IP packet → đọc Destination IP → tra bảng routing → đóng frame mới với MAC của hop tiếp theo → gửi đi. TTL giảm 1. Lặp lại qua N router tới khi gói tới mạng của server. Đây là bản chất của 'Internet' = liên mạng.",
+      "code": "# Xem đường đi thật, từng hop\ntraceroute example.com     # Linux/Mac\ntracert example.com        # Windows\n\n# Nếu traceroute dừng nửa chừng = router trên đường block ICMP/UDP\nsudo traceroute -T -p 443 example.com"
+    },
+    {
+      "step": 5, "what": "Server bóc ngược: Link → Internet → nhận ICMP → reply",
+      "why": "Server example.com nhận frame → check MAC (đúng của mình) → bóc IP header → check Dest IP (đúng của mình) → thấy protocol là ICMP → kernel tự trả lời bằng ICMP echo <em>reply</em> (không cần app nào tham gia). Đây là lý do ping hoạt động ngay cả khi server không chạy web/ssh — chỉ cần kernel sống.",
+      "code": "# Trên server, xem packet đến bằng tcpdump\nsudo tcpdump -i any -n 'icmp'\n# Bạn sẽ thấy 2 dòng mỗi lần ping:\n# IP <client> > <server>: ICMP echo request\n# IP <server> > <client>: ICMP echo reply"
+    },
+    {
+      "step": 6, "what": "Reply về: ping in ra '64 bytes from ... time=12.3 ms'",
+      "why": "Số <code>time=</code> là round-trip time (RTT) — tổng thời gian đi + về. <code>ttl=</code> là TTL còn lại khi tới máy bạn → đoán được số hop (ví dụ ttl=54 và server dùng TTL mặc định 64 → đã qua 10 router). Bạn vừa đo được <strong>độ trễ vật lý</strong> của internet.",
+      "code": "# Ping dài hạn để thấy jitter / packet loss\nping example.com\n\n# Ping với size lớn để test MTU\nping -s 1472 example.com"
+    },
+    {
+      "step": 7, "what": "🆚 Tại sao curl có thể fail dù ping thành công?",
+      "why": "<strong>Đây là insight chính.</strong> Ping chỉ test tầng Internet. Curl/browser cần <em>thêm</em>:<br>• <strong>Transport (TCP)</strong>: bắt tay 3 bước tới port 80/443. Firewall chặn port → <code>connection timeout</code>. Máy sống nhưng không có nginx → <code>connection refused</code>.<br>• <strong>Application (HTTP)</strong>: server phải trả HTTP hợp lệ. Nginx trả 500 → ping OK, curl báo 500.<br>Khi deploy VPS mà 'ping được, curl không được', biết ngay vấn đề ở <strong>Transport hoặc Application</strong>, không phải mạng.",
+      "code": "# Test Transport layer riêng (không cần HTTP)\nnc -vz example.com 443    # Linux/Mac\nTest-NetConnection example.com -Port 443   # Windows PowerShell\n\n# Test cả Application\ncurl -v https://example.com"
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Khi bạn gõ <code>ping example.com</code>, tầng nào trong TCP/IP 4 KHÔNG được sử dụng?",
+      "options": ["Link", "Internet", "Transport", "Application"],
+      "correct": 2,
+      "whyCorrect": "ICMP (protocol của ping) nằm ngay ở tầng Internet, không qua Transport (TCP/UDP). Đó là lý do ping không có khái niệm 'port'.",
+      "whyOthersWrong": {
+        "0": "Link luôn được dùng — không có nó bit không lên được cáp/WiFi.",
+        "1": "Internet là tầng chính của ping — IP header và ICMP đều ở đây.",
+        "3": "Lệnh ping chính là process ở tầng Application gọi xuống kernel."
+      }
+    },
+    {
+      "q": "Bạn deploy app lên VPS. Từ máy bạn: ping &lt;ip_vps&gt; OK, nhưng <code>curl http://&lt;ip_vps&gt;</code> báo 'connection refused'. Vấn đề ở tầng nào?",
+      "options": ["Link — cáp mạng VPS lỏng", "Internet — routing sai", "Transport — không có process listen port 80", "Application — trả về 500"],
+      "correct": 2,
+      "whyCorrect": "Ping OK = Link + Internet OK, VPS sống. 'Connection refused' = TCP SYN tới nơi nhưng kernel VPS trả RST vì không có process listen port 80. Có thể nginx chưa chạy / chạy nhầm port.",
+      "whyOthersWrong": {
+        "0": "Link hỏng thì ping cũng fail.",
+        "1": "Routing sai thì ping cũng fail.",
+        "3": "Muốn nhận 500 phải kết nối TCP thành công trước → không ra 'refused'."
+      }
+    },
+    {
+      "q": "TCP/IP 4 layer vs OSI 7 layer khác nhau ở đâu?",
+      "options": [
+        "TCP/IP là lý thuyết, OSI được triển khai thực tế",
+        "TCP/IP gộp L5/L6/L7 của OSI thành Application, và L1+L2 thành Link",
+        "Chúng hoàn toàn giống nhau, chỉ khác tên",
+        "Cả hai đều có 4 tầng"
+      ],
+      "correct": 1,
+      "whyCorrect": "TCP/IP 4 tầng = Application (gộp L5+L6+L7 OSI) + Transport (L4) + Internet (L3) + Link (L1+L2). Đây là mô hình thực tế đang chạy. OSI là mô hình tham chiếu lý thuyết.",
+      "whyOthersWrong": {
+        "0": "Ngược lại — TCP/IP thực tế, OSI lý thuyết.",
+        "2": "Số tầng khác nhau.",
+        "3": "OSI có 7 tầng."
+      }
+    },
+    {
+      "q": "Máy bạn gửi frame ra internet. MAC địa chỉ đích trong Ethernet frame là gì?",
+      "options": ["MAC của server đích", "MAC của gateway (router mạng LAN)", "Broadcast FF:FF:FF:FF:FF:FF", "MAC của máy bạn"],
+      "correct": 1,
+      "whyCorrect": "Frame chỉ đi trong 1 mạng LAN. Ra ngoài phải nhờ gateway. ARP chỉ hỏi được MAC trong LAN, nên frame đầu tiên có MAC đích = MAC gateway. Gateway bóc frame, đóng frame mới với MAC hop tiếp theo.",
+      "whyOthersWrong": {
+        "0": "Máy bạn không biết MAC server ở mạng khác — ARP không chạy xuyên router.",
+        "2": "Broadcast chỉ dùng cho ARP/DHCP discovery.",
+        "3": "Đó là MAC source, không phải destination."
+      }
+    },
+    {
+      "q": "<code>curl example.com</code> báo 'could not resolve host'. Vấn đề ở tầng nào?",
+      "options": ["Link — cáp lỏng", "Internet — IP routing hỏng", "Application — DNS không trả về IP", "Transport — TCP bắt tay fail"],
+      "correct": 2,
+      "whyCorrect": "DNS là protocol ở tầng Application. 'Could not resolve host' = curl không lấy được IP → chưa tới Internet/Transport. Thường do DNS server không phản hồi hoặc /etc/resolv.conf sai.",
+      "whyOthersWrong": {
+        "0": "Link hỏng thì error khác, thường 'network unreachable'.",
+        "1": "Chưa tới Internet — chưa có IP để route.",
+        "3": "Chưa đến TCP — chưa có IP đích để bắt tay."
+      }
+    },
+    {
+      "q": "Vì sao TCP/IP tách Transport (port) ra khỏi Internet (IP)?",
+      "options": [
+        "Để bảo mật hơn",
+        "Vì 1 máy có 1 IP nhưng chạy nhiều service — port phân biệt nginx:80, ssh:22, mysql:3306",
+        "Vì router cần cả IP và port để routing",
+        "Vì IPv4 không đủ port"
+      ],
+      "correct": 1,
+      "whyCorrect": "Lý do tồn tại của Transport chính là đa service trên 1 host. IP đưa gói tới đúng máy, port đưa gói tới đúng process.",
+      "whyOthersWrong": {
+        "0": "Port không làm tăng bảo mật — kẻ xấu quét port rất dễ.",
+        "2": "Router thường chỉ đọc IP (trừ NAT nâng cao).",
+        "3": "IP và port là 2 khái niệm khác nhau."
+      }
+    },
+    {
+      "q": "Bạn ping 1 IP, thấy reply có <code>ttl=54</code>. Điều này nói lên gì?",
+      "options": [
+        "Packet còn sống 54 giây nữa",
+        "Packet đã đi qua khoảng 10 router (nếu OS đích đặt TTL mặc định 64)",
+        "Kết nối còn giữ được 54 lần nữa",
+        "Không có ý nghĩa gì"
+      ],
+      "correct": 1,
+      "whyCorrect": "TTL giảm 1 mỗi router. Nhiều OS đặt TTL ban đầu = 64 (Linux/Mac) hoặc 128 (Windows). ttl=54 ở client, đoán server dùng 64 → đã qua 10 hop. Cách đoán kiểu OS + độ xa mà không cần traceroute.",
+      "whyOthersWrong": {
+        "0": "TTL đơn vị là 'số hop', không phải giây (dù tên là Time To Live).",
+        "2": "TTL tính trên từng gói, không phải cả 'kết nối'.",
+        "3": "Có ý nghĩa — chính là số hop đã đi."
+      }
+    },
+    {
+      "q": "Rút cáp mạng / tắt WiFi. Error nào xuất hiện SỚM NHẤT khi gõ curl?",
+      "options": [
+        "Connection timeout",
+        "Could not resolve host (DNS fail)",
+        "TLS handshake failed",
+        "Network is unreachable — báo ngay lập tức"
+      ],
+      "correct": 3,
+      "whyCorrect": "Link layer fail là kernel nhận ra ngay (interface state down). Curl hỏi kernel 'gửi đi' và kernel trả 'không có đường đi' — không phải chờ gì. Các lỗi kia đều cần timeout hoặc phản hồi từ bên ngoài.",
+      "whyOthersWrong": {
+        "0": "Timeout cần chờ vài giây tới vài chục giây.",
+        "1": "DNS fail cũng cần chờ timeout.",
+        "2": "TLS ở tầng Application, xa lắm mới tới."
+      }
+    }
+  ],
+  "flashcards": [
+    { "front": "TCP/IP có mấy tầng? Kể tên từ thấp lên cao.", "back": "4 tầng: Link → Internet → Transport → Application.", "why": "Đây là mô hình THỰC TẾ của internet. Nhớ 4 tầng này là đủ làm việc; OSI 7 chỉ để tham chiếu lý thuyết." },
+    { "front": "Tầng Link làm gì?", "back": "Đẩy bit/frame giữa 2 thiết bị CÙNG LAN. Dùng MAC address. Tương ứng OSI L1 + L2.", "why": "Link fail = mọi thứ trên vô nghĩa. Luôn debug Link trước (đèn NIC, ip link, WiFi)." },
+    { "front": "Tầng Internet làm gì?", "back": "Định tuyến packet XUYÊN nhiều mạng bằng IP address. Protocol: IP, ICMP (ping). Tương ứng OSI L3.", "why": "Tầng tạo ra 'Inter-net' (liên mạng). Không có nó mỗi LAN là 1 ốc đảo." },
+    { "front": "Tầng Transport làm gì?", "back": "Chia data thành segment (TCP) / datagram (UDP), gắn PORT để phân biệt service. Tương ứng OSI L4.", "why": "1 máy nhiều service → port là cách duy nhất phân biệt nginx:80 vs ssh:22 vs mysql:3306." },
+    { "front": "Tầng Application gồm những gì?", "back": "HTTP, DNS, SSH, TLS, FTP, SMTP... Tất cả protocol dev code hằng ngày. Tương ứng OSI L5+L6+L7.", "why": "Dev làm việc 90% ở tầng này. Lỗi 400/500 là Application, KHÔNG phải lỗi mạng." },
+    { "front": "Ping dùng protocol gì? Ở tầng nào?", "back": "ICMP (Internet Control Message Protocol) — ở tầng INTERNET, không qua Transport.", "why": "Vì thế ping không có port. Firewall có thể cho ping qua nhưng chặn TCP — dẫn tới 'ping được, curl không được'." },
+    { "front": "Ping được + curl báo 'connection refused' = ?", "back": "Link + Internet OK. Vấn đề ở Transport: máy đích sống nhưng không có process listen port đó.", "why": "Hay gặp khi deploy VPS: quên start nginx, hoặc nginx nghe port khác. Không phải lỗi mạng." },
+    { "front": "Ping được + curl báo 'connection timeout' = ?", "back": "Link + Internet OK, nhưng TCP SYN không tới được process. Thường do firewall chặn port.", "why": "Phân biệt refused vs timeout là kỹ năng debug cốt lõi: refused = máy sống, timeout = firewall hoặc mạng chặn." },
+    { "front": "DNS nằm ở tầng nào?", "back": "Application. DNS là protocol ở tầng Application, chạy trên UDP port 53.", "why": "Lỗi 'could not resolve host' = DNS fail = chưa tới lượt Internet/Transport. Debug bằng dig/nslookup." },
+    { "front": "Khi frame ra khỏi LAN, MAC đích là gì?", "back": "MAC của GATEWAY, KHÔNG phải MAC của server đích.", "why": "ARP chỉ hỏi được trong LAN. Ra ngoài, gateway bóc frame rồi đóng lại với MAC mới cho hop tiếp theo." },
+    { "front": "TTL trong IP header để làm gì?", "back": "Giới hạn số hop packet đi qua. Mỗi router giảm 1, tới 0 thì drop → tránh loop vô tận.", "why": "Traceroute khai thác TTL: gửi TTL=1,2,3... để 'dụ' từng router báo lỗi Time Exceeded → biết đường đi." },
+    { "front": "Encapsulation là gì?", "back": "Mỗi tầng bọc header của mình vào gói tin của tầng trên. Xuống = thêm header. Lên = bóc header.", "why": "Tách tầng để đổi 1 tầng không ảnh hưởng tầng khác. Đổi WiFi → cáp không cần sửa HTTP." },
+    { "front": "Vì sao TCP/IP 'thắng' OSI trong thực tế?", "back": "TCP/IP có implementation chạy thật (ARPANET → Internet). OSI ra sau, quá chi tiết, chưa kịp phổ biến.", "why": "Hôm nay: code và tool đều chạy trên TCP/IP. OSI còn dùng làm 'ngôn ngữ chung' khi nói 'lỗi ở layer mấy'." },
+    { "front": "Gateway / default route là gì?", "back": "Router mặc định mà máy bạn gửi mọi packet có IP đích NGOÀI LAN. Xem bằng <code>ip route</code>.", "why": "Gateway chết = mất hết internet dù WiFi vẫn 'connected'. Thủ phạm số 1 khi 'máy tôi không vào mạng được'." }
+  ],
+  "tryAtHome": [
+    { "why": "Lệnh cơ bản nhất — xem máy đích có sống + đo độ trễ", "cmd": "ping -c 4 example.com" },
+    { "why": "Đổi tên miền thành IP — cơ sở cho mọi kết nối", "cmd": "dig example.com +short\n# hoặc\nnslookup example.com" },
+    { "why": "Xem IP + MAC của chính máy bạn — biết mình là ai trong mạng", "cmd": "ip addr show       # Linux\nifconfig           # Mac\nipconfig /all      # Windows" },
+    { "why": "Xem gateway mặc định — 'cửa ra' internet của máy bạn", "cmd": "ip route           # Linux\nnetstat -rn        # Mac\nroute print        # Windows" },
+    { "why": "Xem đường đi thật của packet qua từng router", "cmd": "traceroute example.com     # Linux/Mac\ntracert example.com        # Windows" },
+    { "why": "Phân biệt 'connection refused' vs 'timeout' bằng thực nghiệm — debug cốt lõi", "cmd": "# Refused: máy sống, port không ai nghe\nnc -vz 127.0.0.1 65000\n\n# Timeout: IP không tồn tại\nnc -vz -w 3 203.0.113.254 80" },
+    { "why": "Xem packet đến/đi bằng tcpdump — công cụ debug mạng level devops", "cmd": "sudo tcpdump -i any -n 'icmp' -c 10" }
+  ]
+}
+</script>
+
+<!-- PLAYGROUND JS (TCP/IP-specific) -->
+<script type="module">
+  import { LabTemplate } from '../_shared/lab-template.js';
+  await LabTemplate.init({ labId: 'net-01-tcp-ip', title: 'TCP/IP 4 Layer' });
+
+  // 4 tầng từ trên xuống (client gửi: App → Transport → Internet → Link)
+  const LAYERS = [
+    { n: 'Application', pdu: 'Message',
+      header: 'ping: build ICMP echo request (type=8, id=1234, seq=1)',
+      why: 'Process ping ở tầng Application gọi xuống kernel. Với ping, nội dung tầng này CHÍNH LÀ ICMP message (không có HTTP/TLS nào cả).' },
+    { n: 'Transport', pdu: '(skip)',
+      header: '(ping không dùng TCP/UDP — ICMP chạy thẳng qua Internet layer)',
+      why: 'Điểm đặc biệt của ping. Nếu là curl, tầng này sẽ thêm TCP header với port 443 và làm 3-way handshake.' },
+    { n: 'Internet', pdu: 'Packet',
+      header: 'IP: src=192.168.1.10  dst=93.184.216.34  TTL=64  proto=ICMP',
+      why: 'Kernel gắn IP header. TTL=64 giảm 1 mỗi router. Routing table không có đường đi tới dst → error "no route to host".' },
+    { n: 'Link', pdu: 'Frame',
+      header: 'Ethernet: src=AA:BB:CC:..  dst=<MAC gateway>  type=IPv4  [... FCS]',
+      why: 'Máy bạn dùng ARP để hỏi MAC của gateway (vì đích ở ngoài LAN). MAC đích KHÔNG phải MAC của server. Sau đó frame đi ra dây cáp/WiFi.' },
+  ];
+
+  const clientStack = document.getElementById('stack-client');
+  const serverStack = document.getElementById('stack-server');
+  const info = document.getElementById('tcp-info');
+  // step: -1 chưa bắt đầu, 0..3 client xuống 4 tầng, 4..7 server lên 4 tầng
+  let step = -1;
+
+  function renderStacks() {
+    clientStack.innerHTML = '';
+    serverStack.innerHTML = '';
+
+    LAYERS.forEach((L, i) => {
+      const r = document.createElement('div');
+      r.className = 'layer-row';
+      if (step >= 0 && step <= 3 && i === step) r.classList.add('active');
+      else if (step >= 0 && step <= 3 && step > i) r.classList.add('passed');
+      else if (step >= 4) r.classList.add('passed');
+      r.innerHTML = `
+        <div class="layer-num">L${4-i} · ${L.n}</div>
+        <div class="layer-name"><div class="ln">${L.n}</div><div class="lp">${L.pdu}</div></div>
+        <div class="layer-pdu">${L.pdu}</div>
+      `;
+      clientStack.appendChild(r);
+    });
+
+    // Server: thứ tự ngược (đi lên từ Link)
+    [...LAYERS].reverse().forEach((L, idx) => {
+      const layerIdx = 3 - idx;
+      const r = document.createElement('div');
+      r.className = 'layer-row';
+      if (step >= 4 && (step - 4) === idx) r.classList.add('active');
+      else if (step >= 4 && (step - 4) > idx) r.classList.add('passed');
+      r.innerHTML = `
+        <div class="layer-num">L${4-layerIdx} · ${L.n}</div>
+        <div class="layer-name"><div class="ln">${L.n}</div><div class="lp">${L.pdu}</div></div>
+        <div class="layer-pdu">${L.pdu}</div>
+      `;
+      serverStack.appendChild(r);
+    });
+  }
+
+  function packetView(layerIdx, side) {
+    const segs = [];
+    if (side === 'send') {
+      // Client đi xuống: tại step i đã gắn header của layer 0..i (trừ Transport - index 1)
+      for (let k = 0; k <= layerIdx; k++) {
+        if (k === 1) continue; // skip Transport for ping
+        const L = LAYERS[k];
+        if (k === 0) segs.push({ type: 'payload', text: 'ICMP echo request' });
+        else segs.unshift({ type: k === layerIdx ? 'new' : 'h', text: `[${L.n} hdr]` });
+      }
+    } else {
+      // Server bóc từ Link lên: đang ở layer layerIdx
+      for (let k = layerIdx; k >= 0; k--) {
+        if (k === 1) continue;
+        const L = LAYERS[k];
+        if (k === 0) segs.unshift({ type: 'payload', text: 'ICMP echo request' });
+        else segs.push({ type: 'h', text: `[${L.n} hdr]` });
+      }
+    }
+    return segs;
+  }
+
+  function renderInfo() {
+    if (step === -1) {
+      info.innerHTML = `
+        <div class="tcp-info-head"><h4>Bấm <kbd>Next</kbd> để bắt đầu</h4></div>
+        <p class="text-dim">8 bước: 4 tầng xuống ở máy bạn + 4 tầng lên ở server.</p>
+        <p class="text-dim" style="margin-top:8px">Lưu ý: ping KHÔNG dùng tầng Transport — nó nhảy thẳng từ Application (process ping) xuống Internet (ICMP).</p>`;
+      return;
+    }
+    let L, side, layerIdx, title, subtitle;
+    if (step <= 3) {
+      layerIdx = step;
+      L = LAYERS[layerIdx];
+      side = 'send';
+      title = `🖥️ Máy bạn — đóng gói tại ${L.n}`;
+      subtitle = `Bước ${step + 1}/8 · đang bọc ${L.pdu}`;
+    } else {
+      const s = step - 4;
+      layerIdx = 3 - s;
+      L = LAYERS[layerIdx];
+      side = 'recv';
+      title = `🛰️ Server — bóc tại ${L.n}`;
+      subtitle = `Bước ${step + 1}/8 · đang bóc ${L.pdu}`;
+    }
+    const segs = packetView(layerIdx, side);
+    info.innerHTML = `
+      <div class="tcp-info-head">
+        <h4>${title}</h4>
+        <span class="pill">${L.n}</span>
+      </div>
+      <div class="text-dim" style="font-size:13px">${subtitle}</div>
+      <div class="label">Header ${side === 'send' ? 'thêm vào' : 'đang bóc'}:</div>
+      <div class="code-block" style="padding:10px 14px">${L.header}</div>
+      <div class="label">Gói tin hiện tại:</div>
+      <div class="packet-view">${segs.map(s => `<span class="seg ${s.type}">${s.text}</span>`).join('')}</div>
+      <div class="why-block mt-16"><strong>Why:</strong> ${L.why}</div>
+    `;
+  }
+
+  function update() { renderStacks(); renderInfo(); }
+
+  document.getElementById('btn-next').addEventListener('click', () => {
+    if (step < 7) { step++; update(); }
+  });
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    if (step > -1) { step--; update(); }
+  });
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    step = -1; update();
+  });
+
+  update();
+</script>
+</body>
+</html>

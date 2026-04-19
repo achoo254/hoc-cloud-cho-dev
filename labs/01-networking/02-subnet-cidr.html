@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPv4 Subnet & CIDR — Chia mạng bằng tay</title>
+<link rel="stylesheet" href="../_shared/lab-template.css">
+<style>
+/* ===== Calculator playground styles (lab-specific) ===== */
+.subnet-widget { display: flex; flex-direction: column; gap: 18px; }
+
+.input-row {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  gap: 24px; align-items: center;
+}
+@media (max-width: 740px) { .input-row { grid-template-columns: 1fr; } .separator { display: none !important; } }
+
+.field label {
+  display: block; font-family: var(--mono); font-size: 11px;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+.ip-input-group {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px;
+}
+.ip-input-group:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.ip-input-group input {
+  width: 52px; text-align: center; border: none; background: transparent;
+  color: var(--text); font-family: var(--mono); font-size: 18px; font-weight: 500;
+  outline: none; padding: 4px 0;
+}
+.ip-input-group .dot { color: var(--text-muted); font-weight: 700; font-size: 20px; user-select: none; }
+
+.separator { text-align: center; color: var(--text-muted); font-family: var(--mono); font-size: 24px; }
+
+.cidr-section { text-align: center; }
+.cidr-value {
+  font-family: var(--mono); font-size: 40px; font-weight: 600;
+  color: var(--accent); letter-spacing: -0.02em; line-height: 1;
+}
+.cidr-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 4px; }
+
+.slider-wrap { margin: 14px 0 8px; }
+.cidr-slider {
+  width: 100%; -webkit-appearance: none; appearance: none;
+  height: 4px; background: var(--border); border-radius: 2px; outline: none;
+}
+.cidr-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; background: var(--accent); border-radius: 50%;
+  cursor: pointer; box-shadow: 0 0 0 4px var(--accent-dim);
+}
+.cidr-slider::-moz-range-thumb {
+  width: 18px; height: 18px; background: var(--accent); border-radius: 50%;
+  border: none; cursor: pointer; box-shadow: 0 0 0 4px var(--accent-dim);
+}
+.slider-ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+
+.quick-select { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+.quick-btn {
+  padding: 5px 12px; font-family: var(--mono); font-size: 12px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 4px; cursor: pointer;
+  transition: all 0.15s;
+}
+.quick-btn:hover { color: var(--accent); border-color: var(--accent); }
+.quick-btn.active { background: var(--accent); color: var(--bg-deep); border-color: var(--accent); font-weight: 600; }
+
+/* Results grid */
+.results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.result-item {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 14px; cursor: pointer; position: relative;
+  transition: all 0.15s;
+}
+.result-item:hover { border-color: var(--accent); }
+.result-item.copied::after {
+  content: "✓ copied"; position: absolute; top: 50%; right: 14px;
+  transform: translateY(-50%); font-family: var(--mono); font-size: 11px;
+  color: var(--green); background: var(--green-dim);
+  padding: 3px 8px; border-radius: 3px;
+}
+.result-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.result-value { font-family: var(--mono); font-size: 15px; color: var(--text); font-weight: 500; }
+.result-item.highlight .result-value { color: var(--accent); }
+.result-item.orange .result-value { color: var(--orange); }
+.result-item.green .result-value { color: var(--green); }
+.result-item.purple .result-value { color: var(--purple); }
+.result-item.full-width { grid-column: 1 / -1; }
+
+/* Binary display */
+.binary-display { display: flex; flex-direction: column; gap: 8px; overflow-x: auto; }
+.binary-row { display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: 13px; }
+.binary-label { width: 70px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; flex-shrink: 0; }
+.binary-bits { display: flex; gap: 0; }
+.bit {
+  display: inline-block; width: 14px; text-align: center;
+  padding: 4px 0; font-weight: 500; font-size: 12px;
+}
+.bit.network { color: var(--accent); background: var(--accent-dim); }
+.bit.host { color: var(--orange); background: var(--why-dim); }
+.bit.sep { color: var(--text-muted); background: transparent; width: 8px; }
+
+.subnet-visual {
+  display: flex; height: 32px; border-radius: 6px;
+  overflow: hidden; margin-top: 8px; border: 1px solid var(--border);
+}
+.subnet-visual .net-part {
+  background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(0,229,255,0.1));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-family: var(--mono); letter-spacing: 0.1em;
+  color: var(--accent); border-right: 2px solid var(--accent); min-width: 40px;
+}
+.subnet-visual .host-part {
+  background: linear-gradient(135deg, rgba(255,159,67,0.15), rgba(255,159,67,0.05));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-family: var(--mono); letter-spacing: 0.1em;
+  color: var(--orange); flex: 1; min-width: 40px;
+}
+
+.ref-table-wrap { overflow-x: auto; }
+.ref-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+.ref-table th {
+  text-align: left; padding: 8px 12px; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-dim); border-bottom: 1px solid var(--border);
+  font-weight: 500;
+}
+.ref-table td { padding: 7px 12px; color: var(--text-dim); border-bottom: 1px solid rgba(30,45,61,0.4); }
+.ref-table tr:hover td { color: var(--text); background: rgba(0,229,255,0.03); }
+.ref-table tr.current td { color: var(--accent); background: var(--accent-dim); font-weight: 500; }
+
+.class-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 5px; letter-spacing: 0.08em; }
+.class-A { background: var(--green-dim); color: var(--green); }
+.class-B { background: var(--accent-dim); color: var(--accent); }
+.class-C { background: var(--why-dim); color: var(--orange); }
+.class-D { background: rgba(167,139,250,0.15); color: var(--purple); }
+.class-E { background: var(--red-dim); color: var(--red); }
+.private-badge {
+  display: inline-block; font-size: 10px; font-weight: 500;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--red-dim); color: var(--red);
+  letter-spacing: 0.1em; margin-left: 8px;
+}
+.error-msg { color: var(--red); font-size: 13px; margin-top: 8px; display: none; }
+.error-msg.show { display: block; }
+
+/* Legend */
+.binary-legend {
+  display: flex; gap: 16px; font-family: var(--mono); font-size: 11px;
+  margin-bottom: 12px; color: var(--text-dim);
+}
+.binary-legend .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.binary-legend .sw-net { background: var(--accent-dim); border: 1px solid var(--accent); }
+.binary-legend .sw-host { background: var(--why-dim); border: 1px solid var(--orange); }
+</style>
+</head>
+<body>
+
+<nav class="lab-topbar">
+  <a href="../index.html">← Dashboard</a>
+  <span class="text-mono text-dim">net-02 · Subnet & CIDR</span>
+</nav>
+
+<main class="lab-container">
+
+  <!-- HERO -->
+  <section class="lab-section lab-hero">
+    <h1>IPv4 Subnet & CIDR</h1>
+    <p class="text-dim">Chia /24 thành 4 subnet /26 bằng tay, hiểu bit nào là network, bit nào là host, và vì sao broadcast khác với network.</p>
+    <div class="lab-hero-why">Subnet không phải kiến thức "thi trắc nghiệm". Sai subnet = 2 máy cùng LAN không ping được nhau, hoặc route loop. Dev hiểu subnet = tự config Docker network, k8s CIDR, VPC AWS không bị đụng IP.</div>
+  </section>
+
+  <!-- TL;DR -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">TL;DR</span> Các khái niệm cốt lõi</h2>
+    <p class="lab-section-subtitle">Nhìn lại bảng này khi quên. Cột <em>Why</em> là phần cần nhớ nhất.</p>
+    <div id="mount-tldr"></div>
+  </section>
+
+  <!-- CORE -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Core</span> Bit Network vs Bit Host</h2>
+    <p class="lab-section-subtitle">CIDR /24 = 24 bit đầu là <span class="text-mono" style="color:var(--accent)">network</span>, 8 bit cuối là <span class="text-mono" style="color:var(--orange)">host</span>. Subnet mask là cái "mặt nạ" AND với IP để trích ra network address.</p>
+
+    <div class="code-block" style="padding: 16px; font-size: 13px;">
+IP      : 192.168.1.100  =  <span style="color:var(--accent)">11000000.10101000.00000001</span>.<span style="color:var(--orange)">01100100</span>
+Mask/24 : 255.255.255.0  =  <span style="color:var(--accent)">11111111.11111111.11111111</span>.<span style="color:var(--orange)">00000000</span>
+Network : AND            =  <span style="color:var(--accent)">11000000.10101000.00000001</span>.<span style="color:var(--orange)">00000000</span>  →  192.168.1.0
+<span class="cmt"># Broadcast = Network OR (NOT Mask): toàn bit 1 ở phần host</span>
+Broad.  : 192.168.1.255  =  <span style="color:var(--accent)">11000000.10101000.00000001</span>.<span style="color:var(--orange)">11111111</span></div>
+
+    <div class="why-block mt-16"><strong>Why cần tách network/host:</strong> Router chỉ quan tâm <em>network part</em> để forward. 2 máy cùng network = gửi frame trực tiếp (ARP + Ethernet). Khác network = phải qua gateway. Sai CIDR → máy "tưởng" chung mạng nhưng thực ra khác → gửi ARP rơi vào hư vô.</div>
+    <div class="why-block"><strong>Why broadcast = toàn bit host bằng 1:</strong> Quy ước. Packet gửi tới broadcast address sẽ đến <em>mọi host</em> trong subnet đó (ARP, DHCP Discover). Đó là lý do <strong>usable hosts = 2^host − 2</strong> (trừ network + broadcast).</div>
+  </section>
+
+  <!-- PLAYGROUND -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Playground</span> Subnet Calculator</h2>
+    <p class="lab-section-subtitle">Kéo slider CIDR — xem bit network/host đổi real-time. Click ô kết quả để copy. Paste <code>192.168.1.100/24</code> được luôn.</p>
+
+    <div class="subnet-widget">
+      <!-- Input -->
+      <div class="input-row">
+        <div class="field">
+          <label>Địa chỉ IP</label>
+          <div class="ip-input-group">
+            <input type="text" id="oct1" maxlength="3" value="192" inputmode="numeric">
+            <span class="dot">.</span>
+            <input type="text" id="oct2" maxlength="3" value="168" inputmode="numeric">
+            <span class="dot">.</span>
+            <input type="text" id="oct3" maxlength="3" value="1" inputmode="numeric">
+            <span class="dot">.</span>
+            <input type="text" id="oct4" maxlength="3" value="100" inputmode="numeric">
+          </div>
+        </div>
+        <div class="separator">/</div>
+        <div class="field cidr-section">
+          <div class="cidr-value" id="cidrDisplay">/24</div>
+          <div class="cidr-label">Prefix length</div>
+          <div class="slider-wrap">
+            <input type="range" class="cidr-slider" id="cidrSlider" min="0" max="32" value="24">
+            <div class="slider-ticks"><span>/0</span><span>/8</span><span>/16</span><span>/24</span><span>/32</span></div>
+          </div>
+          <div class="quick-select" id="quickSelect">
+            <button class="quick-btn" data-cidr="8">/8</button>
+            <button class="quick-btn" data-cidr="16">/16</button>
+            <button class="quick-btn" data-cidr="20">/20</button>
+            <button class="quick-btn active" data-cidr="24">/24</button>
+            <button class="quick-btn" data-cidr="26">/26</button>
+            <button class="quick-btn" data-cidr="28">/28</button>
+            <button class="quick-btn" data-cidr="30">/30</button>
+          </div>
+        </div>
+      </div>
+      <div class="error-msg" id="errorMsg">⚠ Giá trị octet phải từ 0 – 255</div>
+
+      <!-- Results -->
+      <div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px">Kết quả</div>
+        <div class="results-grid" id="results"></div>
+      </div>
+
+      <!-- Binary -->
+      <div>
+        <div class="binary-legend">
+          <span><span class="swatch sw-net"></span>Bit Network</span>
+          <span><span class="swatch sw-host"></span>Bit Host</span>
+        </div>
+        <div class="binary-display" id="binaryDisplay"></div>
+        <div class="subnet-visual" id="subnetVisual"></div>
+      </div>
+
+      <!-- Ref table -->
+      <div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px">Bảng tham chiếu CIDR</div>
+        <div class="ref-table-wrap"><table class="ref-table" id="refTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WALKTHROUGH -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Walkthrough</span> Chia /24 thành 4 subnet /26 bằng tay</h2>
+    <p class="lab-section-subtitle">Bài toán: công ty có mạng 192.168.10.0/24, cần chia cho 4 phòng ban riêng biệt. Mỗi subnet ~60 host.</p>
+    <div id="mount-walkthrough"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Quiz</span> Active recall — không nhìn lại bảng</h2>
+    <div id="mount-quiz"></div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Flashcards</span> Ôn spaced repetition</h2>
+    <div id="mount-flashcards"></div>
+  </section>
+
+  <!-- TRY AT HOME -->
+  <section class="lab-section">
+    <h2 class="lab-section-title"><span class="tag">Try at home</span> Thực hành trên VM</h2>
+    <div id="mount-tryAtHome"></div>
+  </section>
+
+</main>
+
+<!-- DATA ISLAND -->
+<script type="application/json" id="lab-data">
+{
+  "title": "IPv4 Subnet & CIDR",
+  "tldr": [
+    { "term": "Network address", "value": "Bit host toàn 0", "why": "Định danh cả subnet. Router dùng để match routing table. Không gán cho host." },
+    { "term": "Broadcast address", "value": "Bit host toàn 1", "why": "Gửi đến mọi host trong subnet cùng lúc (ARP, DHCP Discover). Không gán cho host." },
+    { "term": "Subnet mask", "value": "Chuỗi bit 1 phần network, 0 phần host", "why": "Router/host AND mask với IP để trích network part. Xác định 2 IP có cùng subnet không." },
+    { "term": "Wildcard mask", "value": "Đảo bit của subnet mask", "why": "Cisco ACL/OSPF dùng — ngược với subnet mask. 255.255.255.0 ↔ 0.0.0.255." },
+    { "term": "CIDR /n", "value": "n bit network ở đầu", "why": "Thay vì 'subnet class' cứng nhắc, CIDR linh hoạt chia bất kỳ đâu — đó là cách modern internet routing hoạt động." },
+    { "term": "Usable hosts", "value": "2^(32−n) − 2", "why": "Trừ 2 vì network + broadcast không gán được. Exception: /31 (point-to-point link) và /32 (1 IP host)." },
+    { "term": "Private ranges", "value": "10/8, 172.16/12, 192.168/16", "why": "RFC 1918 — chỉ dùng nội bộ, không route được trên internet. Cần NAT để ra ngoài." },
+    { "term": "VLSM", "value": "Variable Length Subnet Masking", "why": "Chia /24 thành subnet không đều (vd: 1 subnet /26 + 2 subnet /27). Tiết kiệm IP khi nhu cầu phòng ban khác nhau." }
+  ],
+  "walkthrough": [
+    {
+      "step": 1, "what": "Xác định số bit cần thêm",
+      "why": "/24 có 8 bit host. Muốn 4 subnet → cần 2 bit từ phần host chuyển sang network (2^2 = 4). Kết quả: /26.",
+      "code": "# Quy tắc: cần N subnet → lấy ceil(log2(N)) bit từ host\n# 4 subnet → 2 bit → /24 + 2 = /26"
+    },
+    {
+      "step": 2, "what": "Tính kích thước mỗi subnet /26",
+      "why": "/26 có 32−26 = 6 bit host → 2^6 = 64 địa chỉ/subnet → 62 usable host. Đủ cho ~60 host/phòng ban.",
+      "code": "# Block size = 256 / số subnet = 256 / 4 = 64\n# Hoặc: 2^(32 - CIDR) = 2^6 = 64"
+    },
+    {
+      "step": 3, "what": "Liệt kê 4 subnet",
+      "why": "Network bắt đầu từ bội số 64 (block size): 0, 64, 128, 192. Quy tắc này giúp nhẩm nhanh không cần giấy bút.",
+      "code": "Subnet 1: 192.168.10.0/26    (hosts .1 → .62,   broadcast .63)\nSubnet 2: 192.168.10.64/26   (hosts .65 → .126, broadcast .127)\nSubnet 3: 192.168.10.128/26  (hosts .129 → .190, broadcast .191)\nSubnet 4: 192.168.10.192/26  (hosts .193 → .254, broadcast .255)"
+    },
+    {
+      "step": 4, "what": "Kiểm chứng bằng nhị phân",
+      "why": "2 bit thứ 25-26 là 'subnet ID'. 00/01/10/11 chính là 4 subnet. Khi bạn phân vân /27 vs /28, nhìn bit này là thấy ngay.",
+      "code": "              bit 25-26↓\nS1: 192.168.10. 00 000000 = .0\nS2: 192.168.10. 01 000000 = .64\nS3: 192.168.10. 10 000000 = .128\nS4: 192.168.10. 11 000000 = .192"
+    },
+    {
+      "step": 5, "what": "Subnet mask cho /26",
+      "why": "26 bit 1 + 6 bit 0 = 11111111.11111111.11111111.11000000 = 255.255.255.192. Số 192 đến từ 128+64 = 2 bit đầu của octet cuối.",
+      "code": "255.255.255.192\n# Quy tắc nhớ: octet cuối của mask cho các CIDR trong octet cuối:\n#   /25=128, /26=192, /27=224, /28=240, /29=248, /30=252"
+    },
+    {
+      "step": 6, "what": "Gán subnet cho phòng ban + gateway",
+      "why": "Quy ước: gateway thường là .1 của subnet. Đặt fix để dev/admin nhớ được. DHCP pool bắt đầu từ .2.",
+      "code": "Sales    : 192.168.10.0/26   GW 192.168.10.1\nEng      : 192.168.10.64/26  GW 192.168.10.65\nHR       : 192.168.10.128/26 GW 192.168.10.129\nGuest    : 192.168.10.192/26 GW 192.168.10.193"
+    },
+    {
+      "step": 7, "what": "Verify bằng tool",
+      "why": "Tính tay xong phải cross-check. Sai 1 bit = cả subnet hỏng.",
+      "code": "# Dán vào ô input playground trên: 192.168.10.100/26\n# → sẽ thấy Network: 192.168.10.64, Broadcast: 192.168.10.127\n# Đúng: .100 thuộc subnet 2 (64-127)"
+    }
+  ],
+  "quiz": [
+    {
+      "q": "192.168.1.130/25 thuộc subnet nào?",
+      "options": ["192.168.1.0/25", "192.168.1.128/25", "192.168.1.64/25", "192.168.1.192/25"],
+      "correct": 1,
+      "whyCorrect": "/25 → block size 128. Subnet bắt đầu tại 0 và 128. .130 > 128 ⇒ subnet <strong>192.168.1.128/25</strong> (gồm .128 → .255).",
+      "whyOthersWrong": {
+        "0": "Subnet 192.168.1.0/25 chỉ chứa .0 → .127, không chứa .130.",
+        "2": "/25 block size là 128, không phải 64. /26 mới có block 64.",
+        "3": "192.168.1.192 không phải boundary của /25 (bội của 128: chỉ 0 và 128)."
+      }
+    },
+    {
+      "q": "/27 có bao nhiêu usable hosts?",
+      "options": ["32", "30", "14", "62"],
+      "correct": 1,
+      "whyCorrect": "32 − 27 = 5 bit host → 2^5 = 32 addresses. Trừ network + broadcast = <strong>30</strong> usable.",
+      "whyOthersWrong": {
+        "0": "32 là total addresses, chưa trừ network + broadcast.",
+        "2": "14 là usable của /28 (16 − 2).",
+        "3": "62 là usable của /26 (64 − 2)."
+      }
+    },
+    {
+      "q": "Subnet mask nào tương đương /29?",
+      "options": ["255.255.255.224", "255.255.255.248", "255.255.255.240", "255.255.255.252"],
+      "correct": 1,
+      "whyCorrect": "/29 = 29 bit 1 = 11111111.11111111.11111111.11111<strong>000</strong>. Octet cuối 11111000 = 128+64+32+16+8 = <strong>248</strong>.",
+      "whyOthersWrong": {
+        "0": "224 là /27 (11100000).",
+        "2": "240 là /28 (11110000).",
+        "3": "252 là /30 (11111100)."
+      }
+    },
+    {
+      "q": "Hai máy 10.0.0.5/28 và 10.0.0.17/28 có cùng subnet không?",
+      "options": ["Có", "Không"],
+      "correct": 1,
+      "whyCorrect": "/28 block size = 16. .5 thuộc 10.0.0.0/28 (0-15), còn .17 thuộc 10.0.0.16/28 (16-31). Khác subnet → phải đi qua router.",
+      "whyOthersWrong": {
+        "0": "Nếu là /24 thì cùng. Nhưng /28 thì block 16 làm 2 IP này rơi vào 2 subnet khác nhau. Nhớ: ranh giới subnet là bội của block size."
+      }
+    },
+    {
+      "q": "Vì sao /31 lại chỉ có 2 địa chỉ nhưng vẫn dùng được?",
+      "options": ["Vì /31 không cần network/broadcast, chỉ cần 2 endpoint cho point-to-point link", "/31 không dùng được trong thực tế", "Vì /31 cho phép nhiều hơn 2 host", "Vì router tự tạo thêm địa chỉ"],
+      "correct": 0,
+      "whyCorrect": "RFC 3021 định nghĩa /31 cho link point-to-point (router-to-router). Không cần network/broadcast → 2 địa chỉ đủ 2 đầu link. Tiết kiệm IP công cộng.",
+      "whyOthersWrong": {
+        "1": "Dùng được và rất phổ biến trong ISP/MPLS.",
+        "2": "/31 chỉ có 2 bit 0 cuối → đúng 2 IP, không nhiều hơn.",
+        "3": "Router không 'tạo' địa chỉ — đây là convention."
+      }
+    },
+    {
+      "q": "IP 172.20.0.1 có phải private không?",
+      "options": ["Có", "Không — vì không thuộc 192.168/16", "Không — vì 172.20 khác 172.16", "Không xác định được"],
+      "correct": 0,
+      "whyCorrect": "RFC 1918 private range của 172 là <strong>172.16.0.0/12</strong> = 172.16.0.0 → 172.31.255.255. 172.20 nằm trong đó.",
+      "whyOthersWrong": {
+        "1": "Private có 3 range: 10/8, 172.16/12, 192.168/16. Không chỉ 192.168.",
+        "2": "Private range 172 là cả block /12 từ 172.16 đến 172.31, không chỉ 172.16.",
+        "3": "Xác định được — kiểm tra membership của range /12."
+      }
+    },
+    {
+      "q": "Bạn cần 1 subnet chứa ít nhất 100 host. CIDR nhỏ nhất phù hợp?",
+      "options": ["/24", "/25", "/26", "/23"],
+      "correct": 1,
+      "whyCorrect": "/25 = 126 usable (128 − 2), đủ 100. /26 chỉ có 62 < 100. /24 dư thừa.",
+      "whyOthersWrong": {
+        "0": "/24 có 254 usable → dư, không tiết kiệm IP (câu hỏi là 'nhỏ nhất phù hợp').",
+        "2": "/26 chỉ 62 usable → không đủ 100.",
+        "3": "/23 có 510 usable → quá dư."
+      }
+    },
+    {
+      "q": "Trong Docker bridge mặc định 172.17.0.0/16, tối đa bao nhiêu container IP?",
+      "options": ["255", "65534", "254", "65536"],
+      "correct": 1,
+      "whyCorrect": "/16 = 2^16 = 65536 địa chỉ, trừ network + broadcast = <strong>65534</strong> usable. (Thực tế Docker còn giữ .1 cho bridge gateway.)",
+      "whyOthersWrong": {
+        "0": "255 là usable của /24, không phải /16.",
+        "2": "254 là usable của /24 (256 − 2).",
+        "3": "65536 là total addresses, chưa trừ network/broadcast."
+      }
+    }
+  ],
+  "flashcards": [
+    { "front": "CIDR /n nghĩa là gì?", "back": "n bit đầu của IP là network, 32−n bit sau là host.", "why": "CIDR thay cho class A/B/C cũ cứng nhắc — cho phép chia mạng linh hoạt bất kỳ đâu. Đây là cách internet modern routing." },
+    { "front": "Công thức số usable hosts?", "back": "2^(32−n) − 2. Trừ 2 vì network address (host toàn 0) + broadcast (host toàn 1) không gán được cho host thật.", "why": "Nhớ công thức giúp nhẩm nhanh khi quy hoạch IP. /24 → 254, /26 → 62, /28 → 14, /30 → 2." },
+    { "front": "Subnet mask của /26 là gì?", "back": "255.255.255.192 — vì octet cuối 11000000 = 192.", "why": "Mask octet cuối mẹo nhớ: /25=128, /26=192, /27=224, /28=240, /29=248, /30=252. Mỗi CIDR thêm 1, giá trị cộng lần lượt 64, 32, 16, 8, 4." },
+    { "front": "Block size là gì?", "back": "Kích thước 1 subnet = 2^(32−n). Subnet boundary luôn là bội số của block size.", "why": "Block size giúp tìm network address nhanh: /26 block = 64, .100 ∈ subnet .64 (bội gần nhất ≤ 100)." },
+    { "front": "Địa chỉ network và broadcast là gì?", "back": "Network = bit host toàn 0 (định danh subnet). Broadcast = bit host toàn 1 (gửi tới mọi host trong subnet).", "why": "Gán IP này cho host = conflict. Broadcast dùng cho ARP/DHCP — đó là cách host tìm nhau khi chưa biết MAC." },
+    { "front": "Wildcard mask là gì? Khi nào dùng?", "back": "Đảo bit subnet mask. 255.255.255.0 ↔ 0.0.0.255. Dùng trong Cisco ACL, OSPF.", "why": "Các thiết bị Cisco thiết kế để match 'bit nào được phép khác' → thuận với wildcard hơn subnet mask." },
+    { "front": "VLSM là gì và tại sao cần?", "back": "Variable Length Subnet Masking — chia 1 block thành nhiều subnet kích thước khác nhau (vd /24 → 1 ×/25 + 2 ×/26).", "why": "Phòng ban nhu cầu khác nhau: sales 100 host (/25), IT 50 host (/26), guest 20 host (/27). Chia đều sẽ phí IP." },
+    { "front": "3 dải IP private theo RFC 1918?", "back": "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16.", "why": "Private = không route trên internet, cần NAT để ra ngoài. Kubernetes/Docker/VPC AWS thường dùng các dải này." },
+    { "front": "Vì sao /31 dùng được dù chỉ 2 IP?", "back": "RFC 3021 — cho link point-to-point giữa 2 router. Không cần network/broadcast.", "why": "Tiết kiệm IP public cho ISP. 1 link router-to-router trước phải /30 (4 IP, 2 usable) giờ chỉ /31 (2 IP, cả 2 dùng được)." },
+    { "front": "Cách nhẩm nhanh: 192.168.5.130 thuộc subnet nào với /26?", "back": "/26 block size 64. 130 ÷ 64 = 2 dư 2 → network = 128 (2×64). Subnet: 192.168.5.128/26.", "why": "Không cần giấy: mỗi CIDR có block size riêng, chia lấy phần nguyên với block size = ra boundary." },
+    { "front": "Subnet mask vs Wildcard mask?", "back": "Mask: chuỗi bit 1 (network) + 0 (host). Wildcard: ngược lại. /24 = mask 255.255.255.0 / wildcard 0.0.0.255.", "why": "Cùng là mô tả ranh giới network/host — chỉ khác cách biểu diễn. Linux/Juniper dùng mask; Cisco ACL/OSPF dùng wildcard." },
+    { "front": "Vì sao 2 máy cùng IP prefix nhưng khác CIDR không chắc cùng subnet?", "back": "Vì CIDR quyết định ranh giới. 10.0.0.5 và 10.0.0.17 cùng /24 thì chung, nhưng /28 thì khác (block 16 cắt giữa .15 và .16).", "why": "Khi config sai CIDR 2 máy, chúng 'tưởng' khác subnet → gửi qua gateway thay vì ARP trực tiếp → không tới được nhau dù cùng LAN vật lý." },
+    { "front": "Số địa chỉ trong /16 vs /24?", "back": "/16 = 65536 (usable 65534). /24 = 256 (usable 254).", "why": "Mỗi giảm 1 CIDR → gấp đôi địa chỉ. /25 gấp đôi /26. Dùng để ước lượng nhanh khi quy hoạch VPC/subnet cloud." },
+    { "front": "Default gateway thường là IP nào trong subnet?", "back": "Convention: .1 đầu tiên (vd 192.168.1.1). Nhưng là quy ước, không bắt buộc — có thể là .254.", "why": "Dev/admin nhớ được. Nhiều router/firewall mặc định về .1. Khi troubleshoot 'không ra được internet' luôn check gateway trước." }
+  ],
+  "tryAtHome": [
+    { "why": "Xem IP + subnet mask hiện tại trên máy Linux — biết mình đang ở subnet nào", "cmd": "ip -br addr show" },
+    { "why": "Xem routing table — thấy subnet nào đi qua gateway nào", "cmd": "ip route" },
+    { "why": "Test 2 IP có cùng subnet không bằng công cụ ipcalc (cần cài: apt install ipcalc)", "cmd": "ipcalc 192.168.1.100/26\nipcalc 192.168.1.200/26\n# So sánh Network của 2 dòng — khác = khác subnet" },
+    { "why": "Tạo Docker network custom với CIDR riêng — tránh đụng VPN/office", "cmd": "docker network create --subnet 10.99.0.0/24 mylab\ndocker network inspect mylab | grep Subnet" },
+    { "why": "Kiểm chứng broadcast: ping broadcast → thấy nhiều host reply (nếu OS cho phép)", "cmd": "# /24 broadcast\nping -b 192.168.1.255" },
+    { "why": "Xem bit binary IP bằng Python — hiểu mask AND hoạt động ra sao", "cmd": "python3 -c \"import ipaddress; n=ipaddress.ip_network('192.168.10.100/26', strict=False); print(n.network_address, n.broadcast_address, n.num_addresses)\"" }
+  ]
+}
+</script>
+
+<!-- CALCULATOR JS (lab-specific) -->
+<script type="module">
+import { LabTemplate } from '../_shared/lab-template.js';
+await LabTemplate.init({ labId: 'net-02-subnet', title: 'IPv4 Subnet & CIDR' });
+
+const $ = id => document.getElementById(id);
+const octInputs = ['oct1','oct2','oct3','oct4'].map(id => $(id));
+const cidrSlider = $('cidrSlider');
+const cidrDisplay = $('cidrDisplay');
+const quickBtns = document.querySelectorAll('.quick-btn');
+
+octInputs.forEach((inp, i) => {
+  inp.addEventListener('input', () => {
+    let v = inp.value.replace(/\D/g, '');
+    if (v.length > 3) v = v.slice(0, 3);
+    if (parseInt(v) > 255) v = '255';
+    inp.value = v;
+    if (v.length === 3 && i < 3) octInputs[i + 1].focus();
+    calculate();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === '.' && i < 3) { e.preventDefault(); octInputs[i + 1].focus(); }
+    if (e.key === 'Backspace' && inp.value === '' && i > 0) octInputs[i - 1].focus();
+  });
+  inp.addEventListener('focus', () => inp.select());
+});
+
+cidrSlider.addEventListener('input', () => { updateCIDR(+cidrSlider.value); calculate(); });
+quickBtns.forEach(b => b.addEventListener('click', () => { updateCIDR(+b.dataset.cidr); calculate(); }));
+
+function updateCIDR(val) {
+  cidrSlider.value = val;
+  cidrDisplay.textContent = '/' + val;
+  quickBtns.forEach(b => b.classList.toggle('active', +b.dataset.cidr === val));
+}
+
+const getIP = () => octInputs.map(i => Math.min(255, Math.max(0, parseInt(i.value) || 0)));
+const ipToInt = o => ((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0;
+const intToIP = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+const maskFromCIDR = c => c === 0 ? 0 : (~0 << (32 - c)) >>> 0;
+const toBin32 = n => n.toString(2).padStart(32, '0');
+const fmt = n => n.toLocaleString('en-US');
+const getClass = first => first < 128 ? 'A' : first < 192 ? 'B' : first < 224 ? 'C' : first < 240 ? 'D' : 'E';
+const isPrivate = ([a, b]) => a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+
+function calculate() {
+  const octets = getIP();
+  const cidr = +cidrSlider.value;
+  const valid = octets.every(o => o >= 0 && o <= 255);
+  $('errorMsg').classList.toggle('show', !valid);
+  if (!valid) return;
+
+  const ipInt = ipToInt(octets);
+  const mask = maskFromCIDR(cidr);
+  const wildcard = (~mask) >>> 0;
+  const network = (ipInt & mask) >>> 0;
+  const broadcast = (network | wildcard) >>> 0;
+  const total = Math.pow(2, 32 - cidr);
+  const usable = cidr >= 31 ? (cidr === 32 ? 1 : 2) : total - 2;
+  const firstHost = cidr >= 31 ? network : (network + 1) >>> 0;
+  const lastHost = cidr >= 31 ? broadcast : (broadcast - 1) >>> 0;
+  const cls = getClass(octets[0]);
+  const priv = isPrivate(octets);
+
+  const classHTML = `<span class="class-badge class-${cls}">Class ${cls}</span>${priv ? '<span class="private-badge">PRIVATE</span>' : ''}`;
+
+  const items = [
+    { label: 'Network', value: intToIP(network) + ' /' + cidr, cls: 'highlight' },
+    { label: 'Broadcast', value: intToIP(broadcast), cls: 'orange' },
+    { label: 'Subnet Mask', value: intToIP(mask), cls: '' },
+    { label: 'Wildcard Mask', value: intToIP(wildcard), cls: '' },
+    { label: 'First Host', value: intToIP(firstHost), cls: 'green' },
+    { label: 'Last Host', value: intToIP(lastHost), cls: 'green' },
+    { label: 'Usable Hosts', value: fmt(usable), cls: 'purple' },
+    { label: 'Total Addresses', value: fmt(total), cls: '' },
+    { label: 'Class & Type', value: classHTML, cls: 'full-width', raw: true },
+  ];
+
+  $('results').innerHTML = items.map(it => `
+    <div class="result-item ${it.cls}" ${it.raw ? '' : `data-copy="${it.value}"`}>
+      <div class="result-label">${it.label}</div>
+      <div class="result-value">${it.value}</div>
+    </div>
+  `).join('');
+
+  $('results').querySelectorAll('[data-copy]').forEach(el => {
+    el.addEventListener('click', () => {
+      navigator.clipboard.writeText(el.dataset.copy);
+      el.classList.add('copied');
+      setTimeout(() => el.classList.remove('copied'), 1200);
+    });
+  });
+
+  renderBinary(ipInt, mask, network, cidr);
+  const netPct = Math.max(8, (cidr / 32) * 100);
+  $('subnetVisual').innerHTML = `
+    <div class="net-part" style="width:${netPct}%">NET ${cidr}b</div>
+    <div class="host-part">HOST ${32 - cidr}b</div>`;
+  renderRefTable(cidr);
+}
+
+function renderBinary(ipInt, mask, network, cidr) {
+  const mk = (label, bits) => {
+    let s = `<div class="binary-row"><span class="binary-label">${label}</span><div class="binary-bits">`;
+    for (let i = 0; i < 32; i++) {
+      if (i > 0 && i % 8 === 0) s += `<span class="bit sep">.</span>`;
+      s += `<span class="bit ${i < cidr ? 'network' : 'host'}">${bits[i]}</span>`;
+    }
+    return s + '</div></div>';
+  };
+  $('binaryDisplay').innerHTML = mk('IP', toBin32(ipInt)) + mk('Mask', toBin32(mask)) + mk('Network', toBin32(network));
+}
+
+function renderRefTable(current) {
+  const common = [8, 12, 16, 20, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+  let html = '<tr><th>CIDR</th><th>Subnet Mask</th><th>Block Size</th><th>Usable</th></tr>';
+  common.forEach(c => {
+    const m = maskFromCIDR(c);
+    const total = Math.pow(2, 32 - c);
+    const usable = c >= 31 ? (c === 32 ? 1 : 2) : total - 2;
+    html += `<tr class="${c === current ? 'current' : ''}"><td>/${c}</td><td>${intToIP(m)}</td><td>${fmt(total)}</td><td>${fmt(usable)}</td></tr>`;
+  });
+  $('refTable').innerHTML = html;
+}
+
+// Paste "192.168.1.100/24" → auto-fill
+document.addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+  const m = text.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/);
+  if (m) {
+    e.preventDefault();
+    [1, 2, 3, 4].forEach((k, i) => { octInputs[i].value = m[k]; });
+    if (m[5]) updateCIDR(Math.min(32, parseInt(m[5])));
+    calculate();
+  }
+});
+
+calculate();
+</script>
+</body>
+</html>
