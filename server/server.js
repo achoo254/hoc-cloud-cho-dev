@@ -26,22 +26,21 @@ for (const file of [`.env.${envMode}`, '.env']) {
 
 // Run DB migrations on boot.
 await import('./db/migrate.js');
-// Warm up Shiki (non-blocking).
-import('./content/markdown-renderer.js').then((m) => m.ready());
 
 const { cspMiddleware } = await import('./lib/csp-middleware.js');
-const { sessionMiddleware } = await import('./auth/session-middleware.js');
-const { oauthRoutes } = await import('./auth/github-oauth.js');
-const { adminRoutes } = await import('./admin/routes.js');
-const { theoryRoutes } = await import('./public/theory-routes.js');
 const { default: db } = await import('./db/sqlite-client.js');
 const { broadcastReload, sseStream, addClient } = await import('./lib/sse-reload.js');
+const { syncLabsToDb } = await import('./scripts/sync-labs-to-db.js');
+const { searchRoutes } = await import('./api/search-routes.js');
+const { progressRoutes } = await import('./api/progress-routes.js');
+
+// Sync labs → DB on boot (idempotent).
+try { syncLabsToDb(); } catch (err) { console.error('[sync-labs] boot failed:', err.message); }
 
 const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cspMiddleware);
-app.use('*', sessionMiddleware);
 
 // Health check.
 app.get('/healthz', (c) => {
@@ -58,7 +57,7 @@ app.get('/healthz', (c) => {
   });
 });
 
-// Unified SSE endpoint for section-update + (dev) reload.
+// Unified SSE endpoint for dev reload.
 app.get('/sse/reload', (c) => sseStream(c));
 
 // Back-compat: old labs pages subscribe to /__livereload for dev reload.
@@ -84,50 +83,28 @@ if (DEV) {
   const labsDir = resolve(projectRoot, 'labs');
   const serverDir = resolve(projectRoot, 'server');
   let t;
-  const debounced = () => {
+  const debounced = (isLab) => {
     clearTimeout(t);
-    t = setTimeout(() => broadcastReload(), 120);
+    t = setTimeout(() => {
+      if (isLab) { try { syncLabsToDb(); } catch (err) { console.warn('[sync-labs] watch failed:', err.message); } }
+      broadcastReload();
+    }, 200);
   };
   for (const dir of [labsDir, serverDir]) {
     if (existsSync(dir)) {
+      const isLabsDir = dir === labsDir;
       watch(dir, { recursive: true }, (_evt, file) => {
         if (!file) return;
-        if (/\.(html|css|js|json|svg|png|jpg|webp|sql)$/i.test(file)) debounced();
+        if (/\.(html|css|js|json|svg|png|jpg|webp|sql)$/i.test(file)) debounced(isLabsDir);
       });
     }
   }
   console.log('[hoc-cloud-labs] dev live-reload watching labs/ + server/');
 }
 
-// Mount routers (before static catchall).
-app.route('/', oauthRoutes);
-app.route('/', adminRoutes);
-app.route('/', theoryRoutes);
-
-// Legacy /labs/:phase/:file.html → /theory/:topic/:section (after migration).
-const LAB_PHASE_TO_TOPIC = {
-  '01-networking': 'networking',
-  '02-linux': 'linux',
-  '03-docker': 'docker',
-  '04-python-sysadmin': 'python-sysadmin',
-  '05-ansible': 'ansible',
-  '06-monitoring': 'monitoring',
-  '07-logging': 'logging',
-  '08-cicd': 'cicd',
-};
-// Real URL pattern: site rewrites / → /labs/, so lab pages are served at
-// /NN-phase/NN-slug.html. Redirect only when the HTML file is gone from disk
-// (i.e. after `migrate-labs-to-md --archive`), otherwise fall through to static.
-app.get('/:phase{[0-9]+-[^/]+}/:file{.+\\.html}', async (c, next) => {
-  const phase = c.req.param('phase');
-  const file = c.req.param('file');
-  const topic = LAB_PHASE_TO_TOPIC[phase];
-  if (!topic) return next();
-  const diskPath = resolve(projectRoot, 'labs', phase, file);
-  if (existsSync(diskPath)) return next();
-  const slug = file.replace(/\.html$/, '').replace(/^\d+-/, '');
-  return c.redirect(`/theory/${topic}/${slug}`, 301);
-});
+// API routes (mount before static catchall).
+app.route('/', searchRoutes);
+app.route('/', progressRoutes);
 
 // Static files (labs assets + shared).
 app.use(
