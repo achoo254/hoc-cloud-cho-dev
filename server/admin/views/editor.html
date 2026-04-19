@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{CSRF}}">
+  <title>Editor — hoc-cloud admin</title>
+  <link rel="stylesheet" href="/_shared/lab-template.css">
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    .editor-header {
+      display:flex; align-items:center; gap:12px; padding:10px 16px;
+      border-bottom:1px solid var(--border,#333); background:var(--bg-elev,#1a1a1a);
+    }
+    .editor-header input, .editor-header select {
+      background:transparent; border:1px solid var(--border,#333); color:inherit;
+      padding:6px 10px; border-radius:4px; font-size:13px;
+    }
+    .editor-header input[name=title] { flex:1; font-weight:600; }
+    .btn { padding:6px 12px; background:var(--accent,#4a9eff); color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block; }
+    .btn.ghost { background:transparent; color:var(--text,#ccc); border:1px solid var(--border,#333); }
+    .btn.danger { background:#c44; }
+    .status { color: var(--text-dim,#888); font-size:12px; font-family: var(--mono); }
+    .status.dirty { color: #ffb86b; }
+    .status.saved { color: #7fd18a; }
+    main.split { display:grid; grid-template-columns: 1fr 1fr; flex:1; min-height:0; }
+    .pane { overflow:auto; padding:16px; }
+    .pane textarea {
+      width:100%; height:100%; background:transparent; border:none; outline:none;
+      color:inherit; font-family: var(--mono); font-size:14px; line-height:1.6;
+      resize:none;
+    }
+    .pane.preview { border-left:1px solid var(--border,#333); background:var(--bg,#0a0a0a); }
+    .slash-menu {
+      position:absolute; background:var(--bg-elev,#1a1a1a); border:1px solid var(--border,#333);
+      border-radius:6px; padding:4px; z-index:100; min-width:180px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .slash-item { padding:6px 10px; cursor:pointer; border-radius:4px; font-size:13px; }
+    .slash-item:hover, .slash-item.active { background: rgba(74,158,255,0.2); }
+    .slash-hint { color:var(--text-dim,#888); font-size:11px; margin-left:8px; }
+    [x-cloak] { display:none !important; }
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body x-data="editor()" x-init="init()" x-cloak>
+  <header class="editor-header">
+    <a href="/admin" class="btn ghost">← Dashboard</a>
+    <select x-model.number="topicId">
+      <template x-for="t in topics" :key="t.id">
+        <option :value="t.id" x-text="t.title"></option>
+      </template>
+    </select>
+    <input name="slug" x-model="slug" placeholder="slug" style="width:160px">
+    <input name="title" x-model="title" placeholder="Title">
+    <span class="status" :class="dirty ? 'dirty' : 'saved'" x-text="dirty ? '● unsaved' : '✓ saved'"></span>
+    <button class="btn" @click="save()">Save (Ctrl+S)</button>
+    <button class="btn danger" @click="remove()" x-show="id">Delete</button>
+  </header>
+
+  <main class="split">
+    <div class="pane">
+      <textarea
+        x-ref="ta"
+        x-model="body"
+        @input="onInput()"
+        @keydown.ctrl.s.prevent="save()"
+        @keydown.meta.s.prevent="save()"
+        @keydown="onKey($event)"
+        placeholder="# Bắt đầu viết markdown... Gõ / để xem slash commands."></textarea>
+    </div>
+    <div class="pane preview lab-container" x-html="previewHtml"></div>
+  </main>
+
+  <div class="slash-menu" x-show="slashOpen" :style="`top:${slashPos.y}px; left:${slashPos.x}px`" x-cloak>
+    <template x-for="(cmd, i) in slashCommands" :key="cmd.key">
+      <div class="slash-item" :class="{active: i === slashIdx}"
+           @click="applySlash(cmd)"
+           @mouseenter="slashIdx = i">
+        <strong x-text="cmd.label"></strong>
+        <span class="slash-hint" x-text="cmd.hint"></span>
+      </div>
+    </template>
+  </div>
+
+<script>
+function editor() {
+  const csrf = document.querySelector('meta[name=csrf-token]').content;
+  const SID = {{SECTION_ID}};
+  const SEED = {{SECTION_JSON}};
+
+  const jf = (url, opts = {}) => fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, ...(opts.headers||{}) }
+  }).then(r => r.json());
+
+  const SLASH_COMMANDS = [
+    { key: 'code',    label: '/code',    hint: 'fenced code block',
+      snippet: '```bash\n$CURSOR\n```\n' },
+    { key: 'mermaid', label: '/mermaid', hint: 'mermaid diagram',
+      snippet: '```mermaid\nflowchart LR\n  A --> B\n```\n' },
+    { key: 'info',    label: '/info',    hint: 'info callout',
+      snippet: '> [!INFO] $CURSOR\n> body\n' },
+    { key: 'warn',    label: '/warn',    hint: 'warning callout',
+      snippet: '> [!WARN] $CURSOR\n> body\n' },
+    { key: 'tip',     label: '/tip',     hint: 'tip callout',
+      snippet: '> [!TIP] $CURSOR\n> body\n' },
+    { key: 'quiz',    label: '/quiz',    hint: 'quiz placeholder',
+      snippet: '```quiz\nQ: $CURSOR\nA: \n```\n' },
+  ];
+
+  return {
+    id: SID,
+    topicId: SEED?.topic_id || null,
+    slug: SEED?.slug || '',
+    title: SEED?.title || '',
+    body: SEED?.body_md || '',
+    topics: [],
+    previewHtml: '',
+    dirty: false,
+    saving: false,
+    slashOpen: false,
+    slashIdx: 0,
+    slashPos: { x: 0, y: 0 },
+    slashCommands: SLASH_COMMANDS,
+
+    async init() {
+      const d = await jf('/admin/api/topics');
+      this.topics = d.topics || [];
+      if (!this.topicId && this.topics[0]) this.topicId = this.topics[0].id;
+      await this.preview();
+      this.maybeRestoreDraft();
+      setInterval(() => this.autoSaveDraft(), 5000);
+      window.addEventListener('beforeunload', (e) => {
+        if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
+      });
+    },
+
+    onInput() {
+      this.dirty = true;
+      clearTimeout(this._pTimer);
+      this._pTimer = setTimeout(() => this.preview(), 250);
+      this.checkSlashTrigger();
+    },
+
+    async preview() {
+      const r = await jf('/admin/api/render', { method: 'POST', body: JSON.stringify({ md: this.body }) });
+      this.previewHtml = r.html || '';
+    },
+
+    async save() {
+      if (this.saving) return;
+      if (!this.topicId || !this.slug || !this.title) {
+        alert('topic + slug + title bắt buộc');
+        return;
+      }
+      this.saving = true;
+      const payload = { topic_id: this.topicId, slug: this.slug, title: this.title, body_md: this.body };
+      let r;
+      if (this.id) {
+        r = await jf('/admin/api/sections/' + this.id, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        r = await jf('/admin/api/sections', { method: 'POST', body: JSON.stringify(payload) });
+        if (r.id) {
+          this.id = r.id;
+          history.replaceState(null, '', '/admin/edit/' + r.id);
+        }
+      }
+      this.saving = false;
+      if (r.error) { alert(r.error); return; }
+      this.dirty = false;
+      localStorage.removeItem(this.draftKey());
+    },
+
+    async remove() {
+      if (!this.id || !confirm('Xóa section này?')) return;
+      await jf('/admin/api/sections/' + this.id, { method: 'DELETE' });
+      location.href = '/admin';
+    },
+
+    draftKey() { return 'editor-draft-' + (this.id || 'new'); },
+    autoSaveDraft() {
+      if (!this.dirty) return;
+      localStorage.setItem(this.draftKey(), JSON.stringify({
+        body: this.body, title: this.title, slug: this.slug, savedAt: Date.now()
+      }));
+    },
+    maybeRestoreDraft() {
+      const raw = localStorage.getItem(this.draftKey());
+      if (!raw) return;
+      try {
+        const d = JSON.parse(raw);
+        const serverTs = (SEED?.updated_at || 0) * 1000;
+        if (d.savedAt > serverTs && d.body !== this.body) {
+          if (confirm(`Có draft lưu lúc ${new Date(d.savedAt).toLocaleString()}. Restore?`)) {
+            this.body = d.body; this.title = d.title; this.slug = d.slug;
+            this.dirty = true; this.preview();
+          } else {
+            localStorage.removeItem(this.draftKey());
+          }
+        }
+      } catch {}
+    },
+
+    onKey(e) {
+      if (e.key === 'Escape') this.slashOpen = false;
+      if (!this.slashOpen) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.slashIdx = (this.slashIdx + 1) % this.slashCommands.length; }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); this.slashIdx = (this.slashIdx - 1 + this.slashCommands.length) % this.slashCommands.length; }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); this.applySlash(this.slashCommands[this.slashIdx]); }
+    },
+
+    checkSlashTrigger() {
+      const ta = this.$refs.ta;
+      const pos = ta.selectionStart;
+      const before = this.body.slice(0, pos);
+      const lineStart = before.lastIndexOf('\n') + 1;
+      const currentLine = before.slice(lineStart);
+      if (currentLine === '/') {
+        const rect = ta.getBoundingClientRect();
+        this.slashPos = { x: rect.left + 20, y: rect.top + 40 };
+        this.slashOpen = true; this.slashIdx = 0;
+      } else {
+        this.slashOpen = false;
+      }
+    },
+
+    applySlash(cmd) {
+      const ta = this.$refs.ta;
+      const pos = ta.selectionStart;
+      const before = this.body.slice(0, pos - 1);  // strip the "/"
+      const after = this.body.slice(pos);
+      const [pre, post] = cmd.snippet.split('$CURSOR');
+      this.body = before + pre + (post ?? '') + after;
+      this.slashOpen = false;
+      this.dirty = true;
+      const newPos = (before + pre).length;
+      setTimeout(() => { ta.focus(); ta.setSelectionRange(newPos, newPos); this.preview(); }, 0);
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 *.pcap
 __pycache__/
 .venv/
@@ -9,3 +11,5 @@ build/
 .DS_Store
 bundle.tar.gz
 tmp-check/
+data/
+!data/.gitkeep

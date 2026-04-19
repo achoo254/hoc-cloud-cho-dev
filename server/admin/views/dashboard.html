@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{CSRF}}">
+  <title>Admin Dashboard — hoc-cloud</title>
+  <link rel="stylesheet" href="/_shared/lab-template.css">
+  <style>
+    body { padding: 24px; max-width: 1100px; margin: 0 auto; }
+    .admin-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; padding-bottom:16px; border-bottom:1px solid var(--border,#333); }
+    .admin-header h1 { margin:0; font-size:20px; }
+    .admin-header .user { color: var(--text-dim,#888); font-size:13px; }
+    .btn { padding:8px 14px; background:var(--accent,#4a9eff); color:#fff; border:none; border-radius:6px; cursor:pointer; text-decoration:none; font-size:13px; display:inline-block; }
+    .btn.danger { background:#c44; }
+    .btn.ghost { background:transparent; color:var(--text,#ccc); border:1px solid var(--border,#333); }
+    .topics-grid { display:grid; gap:20px; }
+    .topic-card { border:1px solid var(--border,#333); border-radius:8px; padding:16px; background:var(--bg-elev,#1a1a1a); }
+    .topic-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .topic-head h2 { margin:0; font-size:16px; }
+    .topic-slug { color: var(--text-dim,#888); font-family: var(--mono); font-size:12px; }
+    .section-list { list-style:none; padding:0; margin:0; }
+    .section-item { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:4px; transition:background 100ms; cursor:move; }
+    .section-item:hover { background: rgba(255,255,255,0.04); }
+    .section-item .title { flex:1; }
+    .section-item .slug { color: var(--text-dim,#888); font-family: var(--mono); font-size:11px; margin-left:8px; }
+    .row-actions { display:flex; gap:6px; }
+    .row-actions a, .row-actions button { font-size:12px; padding:4px 8px; }
+    input.inline { background:transparent; border:1px solid var(--border,#333); color:inherit; padding:4px 8px; border-radius:4px; font-size:13px; }
+    .empty { color:var(--text-dim,#888); font-style:italic; padding:12px; }
+    details > summary { cursor:pointer; color:var(--text-dim,#888); font-size:13px; margin:16px 0 8px; }
+    .new-topic-form { display:flex; gap:8px; margin-top:8px; }
+    .toolbar { display:flex; gap:8px; align-items:center; }
+    [x-cloak] { display: none !important; }
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body x-data="dashboard()" x-init="load()" x-cloak>
+  <header class="admin-header">
+    <h1>📚 Theory CMS</h1>
+    <div class="toolbar">
+      <a href="/admin/new-section" class="btn">+ New Section</a>
+      <span class="user">@{{USER}}</span>
+      <form method="post" action="/auth/logout" style="display:inline" onsubmit="event.preventDefault(); fetch('/auth/logout',{method:'POST',headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content}}).then(()=>location.href='/admin/login')">
+        <button class="btn ghost" type="submit">Logout</button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <details open>
+      <summary>Tạo topic mới</summary>
+      <form class="new-topic-form" @submit.prevent="createTopic()">
+        <input class="inline" x-model="newTopic.slug" placeholder="slug (vd: networking)" required>
+        <input class="inline" x-model="newTopic.title" placeholder="Title (vd: Networking)" required style="flex:1">
+        <button type="submit" class="btn">Create Topic</button>
+      </form>
+    </details>
+
+    <div class="topics-grid" style="margin-top:16px">
+      <template x-for="topic in topics" :key="topic.id">
+        <div class="topic-card">
+          <div class="topic-head">
+            <div>
+              <h2 x-text="topic.title"></h2>
+              <div class="topic-slug" x-text="'/' + topic.slug"></div>
+            </div>
+            <div class="row-actions">
+              <button class="btn ghost" @click="renameTopic(topic)">Rename</button>
+              <button class="btn danger" @click="removeTopic(topic)">Delete</button>
+            </div>
+          </div>
+          <ul class="section-list">
+            <template x-for="s in sectionsFor(topic.id)" :key="s.id">
+              <li class="section-item">
+                <span class="title" x-text="s.title"></span>
+                <span class="slug" x-text="'/' + s.slug"></span>
+                <div class="row-actions">
+                  <a :href="'/theory/' + topic.slug + '/' + s.slug" target="_blank" class="btn ghost">View</a>
+                  <a :href="'/admin/edit/' + s.id" class="btn">Edit</a>
+                  <button class="btn danger" @click="removeSection(s)">×</button>
+                </div>
+              </li>
+            </template>
+            <li class="empty" x-show="!sectionsFor(topic.id).length">— chưa có section —</li>
+          </ul>
+        </div>
+      </template>
+      <div x-show="!topics.length" class="empty">Chưa có topic nào. Tạo topic đầu tiên ở trên.</div>
+    </div>
+  </main>
+
+<script>
+function dashboard() {
+  const csrf = document.querySelector('meta[name=csrf-token]').content;
+  const jf = (url, opts = {}) => fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, ...(opts.headers||{}) }
+  }).then(r => r.json());
+
+  return {
+    topics: [],
+    sections: [],
+    newTopic: { slug: '', title: '' },
+    async load() {
+      const d = await jf('/admin/api/overview');
+      this.topics = d.topics || [];
+      this.sections = d.sections || [];
+    },
+    sectionsFor(topicId) { return this.sections.filter(s => s.topic_id === topicId); },
+    async createTopic() {
+      const r = await jf('/admin/api/topics', { method: 'POST', body: JSON.stringify(this.newTopic) });
+      if (r.error) { alert(r.error); return; }
+      this.newTopic = { slug: '', title: '' };
+      await this.load();
+    },
+    async renameTopic(t) {
+      const title = prompt('New title', t.title); if (!title) return;
+      const slug = prompt('New slug', t.slug); if (!slug) return;
+      await jf('/admin/api/topics/' + t.id, { method: 'PUT', body: JSON.stringify({ title, slug }) });
+      await this.load();
+    },
+    async removeTopic(t) {
+      if (!confirm(`Delete topic "${t.title}" và tất cả sections?`)) return;
+      await jf('/admin/api/topics/' + t.id, { method: 'DELETE' });
+      await this.load();
+    },
+    async removeSection(s) {
+      if (!confirm(`Delete section "${s.title}"?`)) return;
+      await jf('/admin/api/sections/' + s.id, { method: 'DELETE' });
+      await this.load();
+    },
+  };
+}
+</script>
+</body>
+</html>

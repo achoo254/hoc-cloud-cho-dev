@@ -14,11 +14,16 @@ module.exports = {
       cwd: VPS_CURRENT,
       instances: 1,
       exec_mode: 'fork',
-      max_memory_restart: '200M',
+      max_memory_restart: '300M',
       env: {
         NODE_ENV: 'production',
         PORT: 8387,
       },
+      // Load GITHUB_CLIENT_*, SESSION_SECRET, etc. from release's .env.
+      env_file: '.env',
+      error_file: './logs/err.log',
+      out_file: './logs/out.log',
+      merge_logs: true,
       // Restart policy
       autorestart: true,
       watch: false,
