@@ -17,3 +17,5 @@ backup-pre-kill-theory-260419.sql
 
 # Generated build artifacts — do not commit
 app/src/generated/*.json
+server/generated/
+dist-server/

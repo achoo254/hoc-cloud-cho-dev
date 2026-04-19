@@ -1,5 +1,4 @@
 import { serve } from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { fileURLToPath } from 'node:url';
@@ -80,43 +79,24 @@ if (DEV) {
     );
   });
 
-  const labsDir = resolve(projectRoot, 'labs');
   const serverDir = resolve(projectRoot, 'server');
   let t;
-  const debounced = (isLab) => {
+  const debounced = () => {
     clearTimeout(t);
-    t = setTimeout(() => {
-      if (isLab) { try { syncLabsToDb(); } catch (err) { console.warn('[sync-labs] watch failed:', err.message); } }
-      broadcastReload();
-    }, 200);
+    t = setTimeout(() => { broadcastReload(); }, 200);
   };
-  for (const dir of [labsDir, serverDir]) {
-    if (existsSync(dir)) {
-      const isLabsDir = dir === labsDir;
-      watch(dir, { recursive: true }, (_evt, file) => {
-        if (!file) return;
-        if (/\.(html|css|js|json|svg|png|jpg|webp|sql)$/i.test(file)) debounced(isLabsDir);
-      });
-    }
+  if (existsSync(serverDir)) {
+    watch(serverDir, { recursive: true }, (_evt, file) => {
+      if (!file) return;
+      if (/\.(js|json|sql)$/i.test(file)) debounced();
+    });
   }
-  console.log('[hoc-cloud-labs] dev live-reload watching labs/ + server/');
+  console.log('[hoc-cloud-labs] dev live-reload watching server/');
 }
 
-// API routes (mount before static catchall).
+// API routes (nginx serves SPA + static assets from app/dist).
 app.route('/', searchRoutes);
 app.route('/', progressRoutes);
-
-// Static files (labs assets + shared).
-app.use(
-  '/*',
-  serveStatic({
-    root: './',
-    rewriteRequestPath: (path) => (path === '/' ? '/labs/index.html' : `/labs${path}`),
-    onFound: (_path, c) => {
-      c.header('Cache-Control', DEV ? 'no-store' : 'public, max-age=300');
-    },
-  })
-);
 
 app.notFound((c) => c.text('Not Found', 404));
 

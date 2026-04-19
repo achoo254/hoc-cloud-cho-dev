@@ -1,35 +1,11 @@
-// Walk labs/**/*.html, extract <script id="lab-data"> JSON, upsert into labs table.
-// Idempotent via content_hash — skips rows whose hash matches DB.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { resolve, relative, dirname, basename } from 'node:path';
+// Upsert lab records into `labs` table. Source data comes from the build-time
+// generated module `server/generated/labs-data.mjs` so the bundled server does
+// not need to walk the filesystem.
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import db from '../db/sqlite-client.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, '..', '..');
-const labsDir = resolve(projectRoot, 'labs');
+import { labs } from '../generated/labs-data.mjs';
 
 const LAB_DATA_RE = /<script\s+type=["']application\/json["']\s+id=["']lab-data["']\s*>([\s\S]*?)<\/script>/i;
-
-function walkHtml(dir) {
-  const out = [];
-  for (const ent of readdirSync(dir, { withFileTypes: true })) {
-    const full = resolve(dir, ent.name);
-    if (ent.isDirectory()) {
-      if (ent.name.startsWith('_') || ent.name === 'node_modules') continue;
-      out.push(...walkHtml(full));
-    } else if (ent.isFile() && ent.name.endsWith('.html') && ent.name !== 'index.html') {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-function slugFromFile(file) {
-  // e.g. 08-dns.html → dns ; 01-tcp-ip-packet-journey.html → tcp-ip-packet-journey
-  return basename(file, '.html').replace(/^\d+-/, '');
-}
 
 function extractLabData(html) {
   const m = html.match(LAB_DATA_RE);
@@ -66,25 +42,20 @@ const upsert = db.prepare(`
 const getHash = db.prepare('SELECT content_hash FROM labs WHERE slug = ?');
 
 export function syncLabsToDb({ verbose = false } = {}) {
-  const files = walkHtml(labsDir);
   let inserted = 0, updated = 0, skipped = 0, failed = 0;
 
-  for (const file of files) {
-    const rel = relative(projectRoot, file).replace(/\\/g, '/');
-    const html = readFileSync(file, 'utf8');
-    const data = extractLabData(html);
-    if (!data) { failed++; if (verbose) console.warn(`[sync-labs] skip (no lab-data): ${rel}`); continue; }
+  for (const lab of labs) {
+    const data = extractLabData(lab.html);
+    if (!data) { failed++; if (verbose) console.warn(`[sync-labs] skip (no lab-data): ${lab.file_path}`); continue; }
 
-    const slug = slugFromFile(file);
-    const module = rel.split('/')[1] || 'unknown'; // labs/<module>/<file>
-    const hash = createHash('sha1').update(html).digest('hex');
-    const existing = getHash.get(slug);
+    const hash = createHash('sha1').update(lab.html).digest('hex');
+    const existing = getHash.get(lab.slug);
 
     const row = {
-      slug,
-      module,
-      title: String(data.title || slug),
-      file_path: rel,
+      slug: lab.slug,
+      module: lab.module,
+      title: String(data.title || lab.slug),
+      file_path: lab.file_path,
       tldr_json: JSON.stringify(data.tldr || []),
       walkthrough_json: JSON.stringify(data.walkthrough || []),
       quiz_json: JSON.stringify(data.quiz || []),
@@ -107,7 +78,7 @@ export function syncLabsToDb({ verbose = false } = {}) {
 }
 
 // CLI entry
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}` ||
+if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` ||
     process.argv[1]?.endsWith('sync-labs-to-db.js')) {
   syncLabsToDb({ verbose: true });
 }

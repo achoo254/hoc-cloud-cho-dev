@@ -6,10 +6,12 @@
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "node --watch server/server.js",
-    "dev:server": "node --watch server/server.js",
+    "dev": "npm run gen:server-data && node --watch server/server.js",
+    "dev:server": "npm run gen:server-data && node --watch server/server.js",
     "dev:app": "cd app && npx vite",
     "build:app": "cd app && npm run build",
+    "gen:server-data": "node scripts/build-server-data.mjs",
+    "build:server": "npm run gen:server-data && esbuild server/server.js --bundle --platform=node --target=node22 --format=esm --external:better-sqlite3 --outfile=dist-server/server.bundle.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "sync-labs": "node server/scripts/sync-labs-to-db.js",
     "validate:schema": "node scripts/validate-lab-schema.js",
     "export:labs": "node scripts/fixtures-to-ts.mjs",
@@ -24,6 +26,7 @@
     "hono": "^4.6.14"
   },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "zod": "^4.3.6"
   }
 }

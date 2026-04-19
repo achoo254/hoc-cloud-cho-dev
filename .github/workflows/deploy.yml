@@ -16,13 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node (match VPS ABI — MODULE_VERSION 127 = Node 22/23)
+      - name: Setup Node 22 (match VPS)
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      # Root deps cần cho gen:content (zod + codegen scripts) được Vite build gọi.
       - name: Install root deps
         run: npm ci
 
@@ -30,23 +29,44 @@ jobs:
         run: npm ci
         working-directory: app
 
-      - name: Build SPA (Vite + React → app/dist)
+      - name: Build FE bundle (Vite → app/dist)
         run: npm run build
         working-directory: app
+
+      - name: Build BE bundle (esbuild → dist-server/server.bundle.js)
+        run: npm run build:server
+
+      - name: Smoke test BE bundle (boot + /healthz)
+        run: |
+          mkdir -p /tmp/smoke/data
+          SQLITE_DB_PATH=/tmp/smoke/data/test.db NODE_ENV=production PORT=8399 HOST=127.0.0.1 \
+            node dist-server/server.bundle.js &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8399/healthz > /dev/null; then break; fi
+            sleep 0.5
+          done
+          curl -sf http://127.0.0.1:8399/healthz
+          kill $SERVER_PID
+
+      - name: Stage prod node_modules (better-sqlite3 only)
+        run: |
+          mkdir -p stage/node_modules
+          cp -r node_modules/better-sqlite3 stage/node_modules/
+          # bindings + dep tree của better-sqlite3
+          for dep in bindings file-uri-to-path; do
+            if [ -d "node_modules/$dep" ]; then cp -r "node_modules/$dep" stage/node_modules/; fi
+          done
 
       - name: Compute release id
         id: release
         run: echo "id=$(date -u +%y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
 
-      # Bundle chỉ chứa artifact cần deploy. node_modules server cài mới trên VPS
-      # để đảm bảo better-sqlite3 linked đúng ABI/libc của host.
       - name: Create bundle
         run: |
-          tar -czf bundle.tar.gz \
-            app/dist \
-            server \
-            package.json \
-            package-lock.json
+          cp dist-server/server.bundle.js stage/server.bundle.js
+          cp -r app/dist stage/app-dist
+          tar -czf bundle.tar.gz -C stage .
           ls -lh bundle.tar.gz
 
       - name: Upload bundle to VPS
@@ -73,9 +93,9 @@ jobs:
             STAGING="/tmp/hoccloud-deploy-$RELEASE"
             PM2_APP="hoccloud-server"
 
-            mkdir -p "$BASE/app" "$BASE/server" "$BASE/shared/data"
+            mkdir -p "$BASE/app/dist" "$BASE/node_modules" "$BASE/shared/data" "$BASE/logs"
 
-            # Persist .env ở shared/ — stack mới không dùng OAuth nữa.
+            # Persist .env ở shared/ (config only, không phải source).
             umask 077
             cat > "$BASE/shared/.env" <<EOF
             NODE_ENV=production
@@ -85,34 +105,38 @@ jobs:
             PUBLIC_BASE_URL=https://hoc-cloud.inetdev.io.vn
             EOF
 
-            # Extract vào staging.
+            # Extract bundle vào staging.
             EXTRACT="$STAGING/extract"
             mkdir -p "$EXTRACT"
             tar -xzf "$STAGING/bundle.tar.gz" -C "$EXTRACT"
 
-            # Sync SPA dist (atomic enough với rsync --delete).
-            rsync -a --delete "$EXTRACT/app/dist/" "$BASE/app/dist/"
+            # Sync FE → $BASE/app/dist (atomic-ish qua rsync --delete).
+            rsync -a --delete "$EXTRACT/app-dist/" "$BASE/app/dist/"
 
-            # Sync server (exclude node_modules + .env để giữ symlink shared).
-            rsync -a --delete \
-              --exclude='node_modules' \
-              --exclude='.env' \
-              "$EXTRACT/server/" "$BASE/server/"
+            # Replace BE bundle.
+            cp "$EXTRACT/server.bundle.js" "$BASE/server.bundle.js"
 
-            # Link shared .env → server/.env (server tự load .env từ project root).
-            ln -sfn "$BASE/shared/.env" "$BASE/server/.env"
+            # Sync native node_modules (chỉ better-sqlite3 + deps).
+            rsync -a --delete "$EXTRACT/node_modules/" "$BASE/node_modules/"
 
-            # Cài prod deps trên VPS (native better-sqlite3 cần rebuild đúng ABI).
-            cd "$BASE/server" && npm ci --omit=dev
+            # Symlink .env → shared (PM2 load từ cwd = $BASE).
+            ln -sfn "$BASE/shared/.env" "$BASE/.env"
 
-            # Nginx reload.
+            # Nginx reload (config đã setup sẵn, không deploy).
             sudo nginx -t && sudo systemctl reload nginx
 
-            # PM2 restart / start.
+            # PM2 restart/start bằng CLI args (không ship ecosystem.config.cjs).
+            cd "$BASE"
             if pm2 describe "$PM2_APP" >/dev/null 2>&1; then
               pm2 restart "$PM2_APP" --update-env
             else
-              pm2 start "$BASE/server/ecosystem.config.cjs" --name "$PM2_APP"
+              pm2 start "$BASE/server.bundle.js" \
+                --name "$PM2_APP" \
+                --cwd "$BASE" \
+                --max-memory-restart 300M \
+                --log "$BASE/logs/out.log" \
+                --error "$BASE/logs/err.log" \
+                --merge-logs
             fi
             pm2 save
 
