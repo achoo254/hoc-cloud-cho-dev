@@ -4,17 +4,14 @@
  * Handles loading skeletons and graceful error fallback.
  */
 
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { getProgress, type ProgressEntry, type ProgressResponse } from '@/lib/api'
 import { getIndex } from '@/lib/content-loader'
-import { DashboardToolbar, type ModuleFilter } from './dashboard-toolbar'
 import { StatsSection } from './stats-section'
 import { DueSection } from './due-section'
 import { RoadmapSection } from './roadmap-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
-import { DashboardFooter } from './dashboard-footer'
 
 // ── Static data (build-time import, no network) ───────────────────────────────
 
@@ -37,8 +34,6 @@ function ErrorBanner({ message }: { message: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function DashboardLayout() {
-  const [moduleFilter, setModuleFilter] = useState<ModuleFilter>('all')
-
   // Fetch server-side progress — stale 60s, error is non-fatal
   const {
     data: progressData,
@@ -55,12 +50,6 @@ export function DashboardLayout() {
 
   return (
     <div className="min-h-screen">
-      {/* Sticky filter/search toolbar */}
-      <DashboardToolbar
-        moduleFilter={moduleFilter}
-        onModuleFilterChange={setModuleFilter}
-      />
-
       <div className="container py-8 space-y-12">
 
         {/* Non-fatal error notice when server is unreachable */}
@@ -91,14 +80,10 @@ export function DashboardLayout() {
         <LabCatalogGrid
           labsIndex={ALL_LABS}
           progressEntries={progressEntries}
-          moduleFilter={moduleFilter}
           isLoading={isLoading}
         />
 
       </div>
-
-      {/* Footer */}
-      <DashboardFooter />
     </div>
   )
 }

@@ -5,7 +5,6 @@
  * Supports module filter prop from DashboardToolbar.
  */
 
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
@@ -15,7 +14,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { LabIndexEntry } from '@/lib/content-loader'
 import type { ProgressEntry } from '@/lib/api'
-import type { ModuleFilter } from './dashboard-toolbar'
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 
@@ -130,7 +128,6 @@ function LabCard({ lab, status }: LabCardProps) {
 interface LabCatalogGridProps {
   labsIndex: LabIndexEntry[]
   progressEntries: ProgressEntry[]
-  moduleFilter: ModuleFilter
   isLoading: boolean
 }
 
@@ -139,17 +136,10 @@ interface LabCatalogGridProps {
 export function LabCatalogGrid({
   labsIndex,
   progressEntries,
-  moduleFilter,
   isLoading,
 }: LabCatalogGridProps) {
   const reduce = useReducedMotionPreference()
-  const filtered = useMemo(
-    () =>
-      moduleFilter === 'all'
-        ? labsIndex
-        : labsIndex.filter((l) => l.module === moduleFilter),
-    [labsIndex, moduleFilter],
-  )
+  const filtered = labsIndex
 
   if (isLoading) {
     return (
