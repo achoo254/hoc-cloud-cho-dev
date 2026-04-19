@@ -19,10 +19,24 @@ rm -f "$TARBALL"
 # 2. Atomic symlink swap: current -> new release
 ln -sfn "$RELEASE_DIR" "$BASE/current"
 
-# 3. Reload PM2 (graceful, zero-downtime). Start if not already registered.
+# 3. Reload PM2. Force full restart if existing process has wrong cwd
+#    (e.g. an old release pinned via realpath) — otherwise the symlink swap is invisible
+#    to the running worker and stale files keep being served.
 cd "$BASE/current"
+EXPECTED_CWD="$BASE/current"
 if pm2 describe hoc-cloud-labs >/dev/null 2>&1; then
-  pm2 reload server/ecosystem.config.cjs --update-env
+  CURRENT_CWD=$(pm2 jlist | node -e "
+    let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+      const a=JSON.parse(d).find(x=>x.name==='hoc-cloud-labs');
+      console.log(a?.pm2_env?.pm_cwd||'');
+    });")
+  if [ "$CURRENT_CWD" != "$EXPECTED_CWD" ]; then
+    echo "[deploy] cwd mismatch (was=$CURRENT_CWD expected=$EXPECTED_CWD) → full restart"
+    pm2 delete hoc-cloud-labs || true
+    pm2 start server/ecosystem.config.cjs
+  else
+    pm2 reload server/ecosystem.config.cjs --update-env
+  fi
 else
   pm2 start server/ecosystem.config.cjs
 fi
