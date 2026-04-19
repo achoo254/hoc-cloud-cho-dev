@@ -11,7 +11,9 @@
     "dev:app": "cd app && npx vite",
     "build:app": "cd app && npm run build",
     "sync-labs": "node server/scripts/sync-labs-to-db.js",
-    "validate:schema": "node scripts/validate-lab-schema.js"
+    "validate:schema": "node scripts/validate-lab-schema.js",
+    "export:labs": "node scripts/fixtures-to-ts.mjs",
+    "gen:content": "node scripts/fixtures-to-ts.mjs && node scripts/generate-labs-index.mjs && node scripts/generate-search-index.mjs"
   },
   "engines": {
     "node": ">=20"
