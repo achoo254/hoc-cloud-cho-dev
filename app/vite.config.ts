@@ -81,4 +81,25 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
+
+  // preview mode mirrors dev proxy so `/api/*` works with `vite preview`
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+        ws: false,
+      },
+      '/healthz': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+      },
+      '/sse': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+        ws: false,
+      },
+    },
+  },
 }))

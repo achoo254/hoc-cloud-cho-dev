@@ -2,7 +2,7 @@
 title: UI Migration — Vite + React + shadcn/ui + Framer Motion
 slug: ui-migrate-vite-react
 date: 2026-04-19
-status: pending
+status: ready-to-deploy
 priority: P1
 effort: 10-15d (realistic after red-team)
 branch: master
@@ -68,7 +68,7 @@ Rewrite UI từ vanilla HTML/JS (~3150 LOC, 8 lab HTMLs) sang **Vite + React 18 
 | 4 | Dashboard (stats, due, roadmap, toolbar) ✅ | phase-04 | — |
 | 5 | Search (Command palette + client fallback) + Progress ✅ | phase-05 | — |
 | 6 | Polish (animations, dark mode, responsive, a11y) ✅ | phase-06 | — |
-| 7 | Deploy + cutover (nginx, dual-run, archive labs/) | phase-07 | — |
+| 7 | Deploy + cutover (nginx, dual-run, archive labs/) 🟡 ready | phase-07 | — |
 
 **Phase 00 là gate:** Không pass go-criteria → abort plan, fall back vanilla refactor.
 
