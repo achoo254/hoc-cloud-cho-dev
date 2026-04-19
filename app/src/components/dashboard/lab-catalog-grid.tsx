@@ -8,6 +8,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { Clock, Tag, ArrowRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -59,13 +60,14 @@ interface LabCardProps {
 
 function LabCard({ lab, status }: LabCardProps) {
   const badge = STATUS_BADGE[status]
+  const reduce = useReducedMotionPreference()
 
   return (
     <motion.div
       layoutId={`lab-card-${lab.slug}`}
       variants={cardVariants}
-      whileHover={{ y: -4, scale: 1.015, transition: { duration: 0.18 } }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={reduce ? {} : { y: -4, scale: 1.015, transition: { duration: 0.18 } }}
+      whileTap={reduce ? {} : { scale: 0.98 }}
     >
       <Link
         to={`/lab/${lab.slug}`}
@@ -140,6 +142,7 @@ export function LabCatalogGrid({
   moduleFilter,
   isLoading,
 }: LabCatalogGridProps) {
+  const reduce = useReducedMotionPreference()
   const filtered = useMemo(
     () =>
       moduleFilter === 'all'
@@ -182,7 +185,7 @@ export function LabCatalogGrid({
       ) : (
         <motion.div
           variants={gridVariants}
-          initial="hidden"
+          initial={reduce ? false : 'hidden'}
           animate="visible"
           className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
         >

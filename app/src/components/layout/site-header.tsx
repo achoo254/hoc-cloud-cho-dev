@@ -1,10 +1,13 @@
 import { Link } from 'react-router-dom'
 import { Moon, Sun, Search, Cloud } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/use-theme'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 
 export function SiteHeader() {
   const { theme, toggleTheme } = useTheme()
+  const reduce = useReducedMotionPreference()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -49,18 +52,39 @@ export function SiteHeader() {
             </Link>
           </Button>
 
-          {/* Theme toggle */}
+          {/* Theme toggle — animated sun/moon swap */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="relative overflow-hidden"
           >
-            {theme === 'dark' ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              {theme === 'dark' ? (
+                <motion.span
+                  key="sun"
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, rotate: -90, scale: 0.5 }}
+                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, rotate: 90, scale: 0.5 }}
+                  transition={{ duration: reduce ? 0.15 : 0.25 }}
+                  className="flex items-center justify-center"
+                >
+                  <Sun className="h-4 w-4" />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="moon"
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, rotate: 90, scale: 0.5 }}
+                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, rotate: -90, scale: 0.5 }}
+                  transition={{ duration: reduce ? 0.15 : 0.25 }}
+                  className="flex items-center justify-center"
+                >
+                  <Moon className="h-4 w-4" />
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Button>
         </div>
       </div>

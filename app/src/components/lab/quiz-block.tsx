@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle2, XCircle, RotateCcw } from 'lucide-react'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { QuizItem } from '@/lib/schema-lab'
@@ -30,6 +31,7 @@ export function QuizBlock({ items, onScore, className }: QuizBlockProps) {
     () => items.map(() => ({ selected: null, state: 'unanswered' })),
   )
   const [finished, setFinished] = useState(false)
+  const reduce = useReducedMotionPreference()
 
   const question = items[current]
   const answerState = answers[current]
@@ -103,14 +105,23 @@ export function QuizBlock({ items, onScore, className }: QuizBlockProps) {
         <span>{answers.filter((a) => a.state !== 'unanswered').length} answered</span>
       </div>
 
+      {/* Accessible live region — announces answer feedback to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isAnswered
+          ? answerState.state === 'correct'
+            ? 'Correct!'
+            : 'Incorrect. See the highlighted answer.'
+          : ''}
+      </div>
+
       {/* Question card */}
       <AnimatePresence mode="wait">
         <motion.div
           key={current}
-          initial={{ opacity: 0, x: 12 }}
+          initial={reduce ? false : { opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -12 }}
-          transition={{ duration: 0.18 }}
+          exit={reduce ? {} : { opacity: 0, x: -12 }}
+          transition={{ duration: reduce ? 0 : 0.18 }}
           className="rounded-xl border border-border bg-card p-5 space-y-4"
         >
           <p className="font-medium leading-relaxed">{question.q}</p>

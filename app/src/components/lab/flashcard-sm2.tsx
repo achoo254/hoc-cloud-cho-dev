@@ -6,6 +6,7 @@
 
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { sm2, type SM2Card, type SM2Quality, type SM2Result } from '@/lib/sm2'
@@ -67,6 +68,7 @@ export function FlashcardSM2({ cards, labSlug, className, onAllMastered }: Flash
   const masteredFiredRef = useRef(false)
 
   const card = cards[current]
+  const reduce = useReducedMotionPreference()
 
   function handleFlip() {
     setFlipped((f) => !f)
@@ -123,29 +125,32 @@ export function FlashcardSM2({ cards, labSlug, className, onAllMastered }: Flash
         <motion.div
           className="relative w-full h-full"
           style={{ transformStyle: 'preserve-3d' }}
-          animate={{ rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.35, ease: 'easeInOut' }}
+          animate={reduce ? {} : { rotateY: flipped ? 180 : 0 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.35, ease: 'easeInOut' }}
         >
-          {/* Front face */}
+          {/* Front face — hidden when reduced-motion + flipped (no 3D transform available) */}
           <div
             className={cn(
               'absolute inset-0 rounded-xl border border-border bg-card p-5',
               'flex flex-col items-center justify-center text-center',
+              reduce && flipped ? 'invisible' : '',
             )}
-            style={{ backfaceVisibility: 'hidden' }}
+            style={reduce ? undefined : { backfaceVisibility: 'hidden' }}
           >
             <p className="text-sm text-muted-foreground mb-2 uppercase tracking-wide">Front</p>
             <p className="font-medium text-base leading-relaxed">{card.front}</p>
             <p className="mt-3 text-xs text-muted-foreground">Click to flip</p>
           </div>
 
-          {/* Back face — rotated 180deg so it shows when parent is flipped */}
+          {/* Back face — rotated 180deg so it shows when parent is flipped.
+              In reduced-motion mode: shown via visibility toggle instead of 3D. */}
           <div
             className={cn(
               'absolute inset-0 rounded-xl border border-primary/40 bg-primary/5 p-5',
               'flex flex-col items-center justify-center text-center',
+              reduce && !flipped ? 'invisible' : '',
             )}
-            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+            style={reduce ? undefined : { backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
             <p className="text-sm text-muted-foreground mb-2 uppercase tracking-wide">Answer</p>
             <p className="font-medium text-base leading-relaxed">{card.back}</p>

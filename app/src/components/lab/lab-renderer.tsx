@@ -202,17 +202,21 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       <Separator />
 
-      {/* THINK */}
-      <TldrSection items={lab.tldr} />
+      {/* THINK — anchor for TOC */}
+      <div id="section-think">
+        <TldrSection items={lab.tldr} />
+      </div>
 
       <Separator />
 
-      {/* SEE */}
-      <WalkthroughSection steps={lab.walkthrough} />
+      {/* SEE — anchor for TOC */}
+      <div id="section-see">
+        <WalkthroughSection steps={lab.walkthrough} />
+      </div>
 
       <Separator />
 
-      {/* SHIP */}
+      {/* SHIP — anchored sub-sections for TOC */}
       <section className="space-y-8">
         <SectionHeading
           phase="SHIP"
@@ -220,14 +224,14 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
           description="Quiz, flashcards, and hands-on commands."
         />
 
-        <div className="space-y-2">
+        <div id="section-quiz" className="space-y-2">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Quiz
           </h3>
           <QuizBlock items={lab.quiz} onScore={handleQuizScore} />
         </div>
 
-        <div className="space-y-2">
+        <div id="section-flashcards" className="space-y-2">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Flashcards
           </h3>
@@ -244,7 +248,9 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
           />
         </div>
 
-        <TryAtHomeSection items={lab.try_at_home} />
+        <div id="section-commands">
+          <TryAtHomeSection items={lab.try_at_home} />
+        </div>
       </section>
     </article>
   )

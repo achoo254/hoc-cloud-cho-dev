@@ -37,7 +37,8 @@ interface CommandDialogProps extends DialogProps {
 function CommandDialog({ children, ...props }: CommandDialogProps) {
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0 shadow-lg">
+      {/* On mobile (<640px): full-width, full-height palette. sm+: normal centered dialog. */}
+      <DialogContent className="overflow-hidden p-0 shadow-lg w-full max-w-full max-h-full sm:max-w-xl sm:max-h-[85vh] rounded-none sm:rounded-lg top-0 translate-y-0 sm:top-[50%] sm:-translate-y-1/2">
         <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
           {children}
         </Command>

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LabRenderer } from '@/components/lab/lab-renderer'
+import { LabToc } from '@/components/lab/lab-toc'
 import { getLab } from '@/lib/content-loader'
 import type { LabContent } from '@/lib/schema-lab'
 
@@ -146,7 +147,14 @@ export default function LabViewerPage() {
           Back to Labs
         </Link>
       </Button>
-      <LabRenderer lab={state.lab} />
+
+      {/* Two-column layout on desktop: TOC sidebar + lab content */}
+      <div className="flex gap-8 items-start">
+        <LabToc />
+        <div className="flex-1 min-w-0">
+          <LabRenderer lab={state.lab} />
+        </div>
+      </div>
     </div>
   )
 }

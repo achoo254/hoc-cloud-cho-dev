@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Flame, CheckCircle2, Activity } from 'lucide-react'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { computeStreak, computeCompleted } from '@/lib/stats'
@@ -20,9 +21,16 @@ const containerVariants = {
   visible: { transition: { staggerChildren: 0.08 } },
 }
 
+/** Full-motion variant — stagger fade+slide */
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+}
+
+/** Reduced-motion variant — opacity only, no y transform */
+const itemVariantsReduced = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -38,6 +46,8 @@ interface StatsSectionProps {
 export function StatsSection({ progressEntries, totalLabs, isLoading }: StatsSectionProps) {
   const streak    = useMemo(() => computeStreak(progressEntries), [progressEntries])
   const completed = useMemo(() => computeCompleted(progressEntries), [progressEntries])
+  const reduce    = useReducedMotionPreference()
+  const iVariants = reduce ? itemVariantsReduced : itemVariants
 
   if (isLoading) {
     return (
@@ -55,20 +65,20 @@ export function StatsSection({ progressEntries, totalLabs, isLoading }: StatsSec
     <section aria-labelledby="stats-heading">
       <motion.div
         variants={containerVariants}
-        initial="hidden"
+        initial={reduce ? false : 'hidden'}
         animate="visible"
         className="space-y-4"
       >
         <motion.h2
           id="stats-heading"
-          variants={itemVariants}
+          variants={iVariants}
           className="text-xl font-semibold tracking-tight"
         >
           Tiến độ học
         </motion.h2>
 
         {/* Stat tiles — 3 cards */}
-        <motion.div variants={itemVariants} className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+        <motion.div variants={iVariants} className="grid gap-3 grid-cols-1 sm:grid-cols-3">
 
           <Card>
             <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-2">
@@ -116,7 +126,7 @@ export function StatsSection({ progressEntries, totalLabs, isLoading }: StatsSec
         </motion.div>
 
         {/* Heatmap card */}
-        <motion.div variants={itemVariants}>
+        <motion.div variants={iVariants}>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">

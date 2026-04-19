@@ -7,6 +7,7 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { CheckCircle2, Circle, Clock } from 'lucide-react'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { Badge } from '@/components/ui/badge'
 import type { LabIndexEntry } from '@/lib/content-loader'
 import type { ProgressEntry } from '@/lib/api'
@@ -36,6 +37,11 @@ const nodeVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 }
 
+const nodeVariantsReduced = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
+}
+
 // ── Timeline node ─────────────────────────────────────────────────────────────
 
 interface TimelineNodeProps {
@@ -49,6 +55,8 @@ interface TimelineNodeProps {
 function TimelineNode({ mod, labCount, completedCount, index, isLast }: TimelineNodeProps) {
   const ref = useRef<HTMLLIElement>(null)
   const inView = useInView(ref, { once: true, margin: '-60px 0px' })
+  const reduce = useReducedMotionPreference()
+  const variants = reduce ? nodeVariantsReduced : nodeVariants
 
   const pct = labCount > 0 ? Math.round((completedCount / labCount) * 100) : 0
   const isDone = !mod.placeholder && labCount > 0 && completedCount === labCount
@@ -57,11 +65,11 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
   return (
     <motion.li
       ref={ref}
-      variants={nodeVariants}
-      initial="hidden"
+      variants={variants}
+      initial={reduce ? false : 'hidden'}
       animate={inView ? 'visible' : 'hidden'}
-      // stagger via delay prop derived from index
-      transition={{ delay: index * 0.1 }}
+      // stagger via delay prop derived from index (skip delay when reduced)
+      transition={{ delay: reduce ? 0 : index * 0.1 }}
       className="relative flex gap-4"
     >
       {/* Vertical connector line */}
@@ -131,9 +139,9 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
           >
             <motion.div
               className="h-full rounded-full bg-primary"
-              initial={{ width: 0 }}
+              initial={reduce ? false : { width: 0 }}
               animate={inView ? { width: `${pct}%` } : { width: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.1 + 0.3, ease: 'easeOut' }}
+              transition={reduce ? { duration: 0 } : { duration: 0.6, delay: index * 0.1 + 0.3, ease: 'easeOut' }}
             />
           </div>
         )}

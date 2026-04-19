@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { BookOpen, Loader2, WifiOff } from 'lucide-react'
 
 import {
@@ -105,6 +106,7 @@ function mergeResults(
 
 export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   const navigate = useNavigate()
+  const reduce = useReducedMotionPreference()
   const [inputValue, setInputValue] = useState('')
   const query = useDebounce(inputValue, 300)
   const abortRef = useRef<AbortController | null>(null)
@@ -245,7 +247,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                   key={result.slug}
                   custom={i}
                   variants={itemVariants}
-                  initial="hidden"
+                  initial={reduce ? false : 'hidden'}
                   animate="visible"
                 >
                   <CommandItem
