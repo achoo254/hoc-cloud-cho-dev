@@ -105,8 +105,29 @@
 
 </main>
 
+<script defer src="/_shared/search-widget.js"></script>
+<script defer src="/_shared/progress-sync.js"></script>
 <script type="module">
 import { LabTemplate } from './_shared/lab-template.js';
+
+// Hydrate server-side progress badges on CATALOG once DOM is ready.
+window.addEventListener('load', async () => {
+  if (!window.ProgressSync) return;
+  try {
+    const { progress } = await window.ProgressSync.fetchAll();
+    const map = new Map((progress || []).map(p => [p.lab_slug, p]));
+    document.querySelectorAll('[data-lab-slug]').forEach(el => {
+      const p = map.get(el.getAttribute('data-lab-slug'));
+      if (!p) return;
+      const badge = document.createElement('span');
+      badge.className = 'progress-badge';
+      if (p.completed_at) badge.textContent = '✅ đã đọc';
+      else if (p.opened_at) badge.textContent = '🔵 đang đọc';
+      if (p.quiz_score != null) badge.textContent += ` · 📝 ${p.quiz_score}%`;
+      el.appendChild(badge);
+    });
+  } catch { /* silent */ }
+});
 
 const CATALOG = [
   {
