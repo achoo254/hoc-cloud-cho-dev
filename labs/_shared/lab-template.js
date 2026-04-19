@@ -3,6 +3,25 @@
 // SM-2 spaced repetition + progress tracking qua localStorage.
 
 const STORAGE_PREFIX = 'lab:';
+const USE_QUIZ_BANK = true;
+const QUIZ_BANK_URL = (labId) => `../_shared/quiz-bank/${labId}.json`;
+
+// Fetch external quiz bank; return null on any failure → caller falls back to inline.
+async function fetchQuizBank(labId) {
+  try {
+    const res = await fetch(QUIZ_BANK_URL(labId));
+    if (!res.ok) return null;
+    const pool = await res.json();
+    if (!Array.isArray(pool) || pool.length < 20) {
+      console.warn(`[lab:${labId}] bank too small (${pool?.length ?? 0}), fallback to inline`);
+      return null;
+    }
+    return pool;
+  } catch (e) {
+    console.warn(`[lab:${labId}] bank fetch failed:`, e.message);
+    return null;
+  }
+}
 
 // ===== SM-2 algorithm =====
 // quality: 0=Again, 1=Hard, 2=Good, 3=Easy
@@ -117,6 +136,8 @@ function pickSeeded(arr, n, seed) {
 // Daily selector: 8 due + 4 weak + 8 new-by-tier, fill random to 20, seeded-shuffle display order.
 function selectDailyQuiz(pool, srsState, streakDays, seed, size = 20) {
   const srs = srsState || {};
+  // Small pool (fallback inline) — just shuffle and return all.
+  if (pool.length <= size) return seededShuffle(pool, seed ^ 0x05);
   const now = Date.now();
   const DAY = 86400_000;
   const isDue = q => srs[q.id] && srs[q.id].lastSeen && (srs[q.id].lastSeen + (srs[q.id].interval || 1) * DAY) <= now;
@@ -157,7 +178,8 @@ function normalizePool(pool) {
   return (pool || []).map((q, i) => {
     if (q.id) return q;
     const id = `auto_${hashStr(String(q.q || '') + '|' + i).toString(36)}`;
-    return { ...q, id, difficulty: q.difficulty || 'medium', tags: q.tags || [] };
+    const hasDiff = !!q.difficulty;
+    return { ...q, id, difficulty: q.difficulty || 'medium', _autoDiff: !hasDiff, tags: q.tags || [] };
   });
 }
 
@@ -286,7 +308,7 @@ function renderQuiz(root, pool, labId) {
 
   items.forEach((q, idx) => {
     const card = el('div', { class: 'quiz-item' });
-    const diffChip = q.difficulty ? `<span class="quiz-diff quiz-diff-${q.difficulty}">${q.difficulty}</span> ` : '';
+    const diffChip = (q.difficulty && !q._autoDiff) ? `<span class="quiz-diff quiz-diff-${q.difficulty}">${q.difficulty}</span> ` : '';
     card.appendChild(el('div', { class: 'quiz-q', html: `Q${idx + 1}. ${diffChip}${q.q}` }));
     const opts = el('div', { class: 'quiz-options' });
     q.options.forEach((text, i) => {
@@ -445,6 +467,96 @@ function markVisited(labId, meta) {
   store.set(key, { ...prev, ...meta, lastVisit: Date.now() });
 }
 
+// ===== Reading position tracker =====
+// Slugify VN-friendly: bỏ dấu, lower-case, kebab-case.
+function slugify(s) {
+  return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'sec';
+}
+
+// Gán id cho mọi heading có thể bookmark, trả về list đã enrich.
+function assignAnchorIds() {
+  const nodes = [...document.querySelectorAll(
+    '.lab-section-title, .lab-hero h1, .walkthrough-step .step-what, h2, h3'
+  )];
+  const used = new Set();
+  nodes.forEach(n => {
+    if (n.id) { used.add(n.id); return; }
+    const base = slugify(n.textContent || 'sec');
+    let id = base, i = 2;
+    while (used.has(id) || document.getElementById(id)) id = `${base}-${i++}`;
+    n.id = id; used.add(id);
+  });
+  return nodes.filter(el => el.offsetParent !== null);
+}
+
+function trackReadingPosition(labId) {
+  let saveTimer;
+  const save = () => {
+    const headings = assignAnchorIds();
+    if (!headings.length) return;
+    const scrollY = window.scrollY;
+    const probe = scrollY + window.innerHeight * 0.28;
+    let current = headings[0];
+    for (const h of headings) {
+      const top = h.getBoundingClientRect().top + scrollY;
+      if (top <= probe) current = h; else break;
+    }
+    const section = (current.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 90);
+    const anchor = current.id;
+
+    let snippet = '';
+    let node = current.nextElementSibling;
+    let hops = 0;
+    while (node && hops < 8 && snippet.length < 60) {
+      const t = (node.textContent || '').trim().replace(/\s+/g, ' ');
+      if (t.length > 30) snippet = t.slice(0, 160);
+      node = node.nextElementSibling; hops++;
+    }
+
+    const docH = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = docH > 0 ? Math.min(100, Math.max(0, Math.round((scrollY / docH) * 100))) : 0;
+    store.set(`pos:${labId}`, { anchor, section, snippet, scrollY, pct, ts: Date.now() });
+  };
+
+  // Gán id sớm để hash từ URL (nếu có) trỏ được tới element.
+  assignAnchorIds();
+
+  window.addEventListener('scroll', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 350);
+  }, { passive: true });
+  setTimeout(save, 1200);
+}
+
+// Resume scroll: ưu tiên hash trên URL → fallback pos.anchor → pos.scrollY.
+// Re-scroll vài lần vì quiz bank fetch async + font/code-block làm layout shift.
+function maybeResumePosition(labId) {
+  const pos = store.get(`pos:${labId}`);
+  const hashId = decodeURIComponent((location.hash || '').slice(1));
+  const targetId = hashId || pos?.anchor;
+
+  const jump = () => {
+    if (targetId) {
+      const el = document.getElementById(targetId);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 70;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        return;
+      }
+    }
+    if (pos && typeof pos.scrollY === 'number' && new URLSearchParams(location.search).get('resume') === '1') {
+      window.scrollTo({ top: Math.max(0, pos.scrollY - 60), behavior: 'auto' });
+    }
+  };
+
+  if (!targetId && new URLSearchParams(location.search).get('resume') !== '1') return;
+
+  // Multi-pass: layout settles dần khi font + quiz bank load xong.
+  [50, 300, 800, 1500].forEach(t => setTimeout(jump, t));
+}
+
 export const LabTemplate = {
   sm2, store, daysUntil,
   // quiz engine (exposed for testing + phase 03/04)
@@ -458,6 +570,22 @@ export const LabTemplate = {
     store.remove(`quiz:${labId}:srs`);
     store.remove(`quiz:${labId}:daily`);
   },
+
+  resetLabFlashcards(labId) {
+    const prefix = STORAGE_PREFIX + `srs:${labId}:`;
+    Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+  },
+
+  resetLabAll(labId) {
+    const subPrefixes = [`srs:${labId}:`, `quiz:${labId}`, `meta:${labId}`, `pos:${labId}`];
+    Object.keys(localStorage).filter(k => {
+      if (!k.startsWith(STORAGE_PREFIX)) return false;
+      const sub = k.slice(STORAGE_PREFIX.length);
+      return subPrefixes.some(p => sub === p || sub.startsWith(p));
+    }).forEach(k => localStorage.removeItem(k));
+  },
+
+  getPosition(labId) { return store.get(`pos:${labId}`); },
 
   async init({ labId, title }) {
     const dataEl = document.getElementById('lab-data');
@@ -473,11 +601,18 @@ export const LabTemplate = {
     };
     mount('mount-tldr', renderTldr, data.tldr);
     mount('mount-walkthrough', renderWalkthrough, data.walkthrough);
-    mount('mount-quiz', renderQuiz, data.quiz);
+
+    // Prefer external quiz bank (60-100 Qs). Fallback to inline data.quiz on any error.
+    const bankPool = USE_QUIZ_BANK ? await fetchQuizBank(labId) : null;
+    const quizPool = bankPool || data.quiz;
+    mount('mount-quiz', renderQuiz, quizPool);
+
     mount('mount-flashcards', renderFlashcards, data.flashcards);
     mount('mount-tryAtHome', renderTryAtHome, data.tryAtHome);
 
     mountWhyToggle();
+    trackReadingPosition(labId);
+    maybeResumePosition(labId);
   },
 
   // For dashboard
@@ -511,3 +646,16 @@ export const LabTemplate = {
 
 // Auto-register global
 window.LabTemplate = LabTemplate;
+
+// ===== Live-reload client (dev only) =====
+// Chỉ kết nối SSE khi serve qua localhost. Endpoint không tồn tại ở production
+// → EventSource fail silent + auto-retry nhẹ (retry: 1500 từ server).
+(function setupLiveReload() {
+  const host = location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1') return;
+  try {
+    const es = new EventSource('/__livereload');
+    es.addEventListener('reload', () => location.reload());
+    es.onerror = () => { /* silent */ };
+  } catch { /* silent */ }
+})();

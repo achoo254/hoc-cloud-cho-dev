@@ -155,6 +155,14 @@ section.lab-section {
   padding: 18px; margin-bottom: 14px; background: var(--bg-input);
 }
 .quiz-item .quiz-q { font-weight: 600; margin: 0 0 12px; }
+.quiz-diff {
+  display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
+  margin-right: 6px; vertical-align: middle; font-family: var(--mono);
+}
+.quiz-diff-easy { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+.quiz-diff-medium { background: rgba(255, 159, 67, 0.12); color: var(--orange); border: 1px solid var(--orange); }
+.quiz-diff-hard { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
 .quiz-item .quiz-options { display: flex; flex-direction: column; gap: 6px; }
 .quiz-item .quiz-opt {
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px;
