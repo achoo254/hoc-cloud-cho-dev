@@ -3,6 +3,8 @@
  * All requests go through Vite proxy → http://localhost:3000
  */
 
+import type { SearchResponse } from '@/lib/schema-search'
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -53,12 +55,9 @@ export interface ProgressResponse {
   progress: ProgressEntry[]
 }
 
-export interface SearchResult {
-  slug: string
-  title: string
-  snippet: string
-  score: number
-}
+// Re-export server search result type so callers get the real BE shape
+// (preview / rank / file_path), not a stale local guess.
+export type { SearchResult } from '@/lib/schema-search'
 
 // ── API calls ────────────────────────────────────────────────────────────────
 
@@ -72,9 +71,11 @@ export const upsertProgress = (entry: Omit<ProgressEntry, 'opened_at'> & { opene
     body: JSON.stringify(entry),
   })
 
-/** GET /api/search?q=<query> */
-export const searchLabs = (q: string) =>
-  request<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`)
+/** GET /api/search?q=<query> — unwraps `{results: [...]}` to a bare array. */
+export const searchLabs = async (q: string) => {
+  const res = await request<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`)
+  return res.results
+}
 
 /** GET /healthz */
 export const getHealth = () =>

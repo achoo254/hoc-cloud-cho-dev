@@ -24,10 +24,10 @@ interface RoadmapModule {
 
 const ROADMAP_MODULES: RoadmapModule[] = [
   { id: '01-networking', num: '01', name: 'Networking', duration: '~8h', placeholder: false },
-  { id: '02-linux',      num: '02', name: 'Linux',      duration: 'Em sắp…', placeholder: true },
-  { id: '03-docker',     num: '03', name: 'Containers', duration: 'Em sắp…', placeholder: true },
-  { id: '04-k8s',        num: '04', name: 'Kubernetes', duration: 'Em sắp…', placeholder: true },
-  { id: '05-ansible',    num: '05', name: 'Ansible/IaC', duration: 'Em sắp…', placeholder: true },
+  { id: '02-linux',      num: '02', name: 'Linux',      duration: 'TBA', placeholder: true },
+  { id: '03-docker',     num: '03', name: 'Containers', duration: 'TBA', placeholder: true },
+  { id: '04-k8s',        num: '04', name: 'Kubernetes', duration: 'TBA', placeholder: true },
+  { id: '05-ansible',    num: '05', name: 'Ansible/IaC', duration: 'TBA', placeholder: true },
 ]
 
 // ── Animation ─────────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
           )}
           {mod.placeholder && (
             <Badge variant="outline" className="text-xs text-muted-foreground">
-              Em sắp…
+              Coming soon
             </Badge>
           )}
         </div>

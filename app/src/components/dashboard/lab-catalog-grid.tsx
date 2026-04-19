@@ -27,6 +27,31 @@ const cardVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
 }
 
+// ── Curated display order ─────────────────────────────────────────────────────
+// Pedagogical sequence for the 01-networking module. Labs not listed here
+// fall back to their original index order (appended after the curated list).
+
+const LAB_ORDER: string[] = [
+  'tcp-ip-packet-journey',
+  'subnet-cidr',
+  'tcp-udp',
+  'icmp-ping',
+  'arp',
+  'dhcp',
+  'http',
+  'dns',
+]
+
+function sortByCurriculum(labs: LabIndexEntry[]): LabIndexEntry[] {
+  const rank = new Map(LAB_ORDER.map((slug, i) => [slug, i]))
+  const max = LAB_ORDER.length
+  return [...labs].sort((a, b) => {
+    const ra = rank.get(a.slug) ?? max
+    const rb = rank.get(b.slug) ?? max
+    return ra - rb
+  })
+}
+
 // ── Progress badge helper ─────────────────────────────────────────────────────
 
 function labStatus(
@@ -139,7 +164,7 @@ export function LabCatalogGrid({
   isLoading,
 }: LabCatalogGridProps) {
   const reduce = useReducedMotionPreference()
-  const filtered = labsIndex
+  const filtered = sortByCurriculum(labsIndex)
 
   if (isLoading) {
     return (

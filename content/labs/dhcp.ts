@@ -7,7 +7,7 @@ const lab: LabContent = {
   "id": 6,
   "slug": "dhcp",
   "module": "01-networking",
-  "title": "DHCP — DORA flow",
+  "title": "Giao thức DHCP",
   "file_path": "labs/01-networking/06-dhcp.html",
   "estimated_minutes": 35,
   "content_hash": "45cde8530bd7c0c6f12f1fc9c9e1116d1a09b57c",

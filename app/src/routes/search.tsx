@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,14 +55,26 @@ export default function SearchPage() {
       {data && data.length > 0 && (
         <div className="space-y-3 max-w-lg">
           {data.map((result: SearchResult) => (
-            <Card key={result.slug}>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base">{result.title}</CardTitle>
+            <Link
+              key={result.slug}
+              to={`/lab/${result.slug}`}
+              className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
+            >
+              <Card className="hover:border-primary/50 transition-colors">
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-base">{result.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>{result.snippet}</CardDescription>
+                {result.preview && (
+                  <CardDescription
+                    className="[&_mark]:bg-primary/20 [&_mark]:text-foreground [&_mark]:rounded [&_mark]:px-0.5"
+                    // preview is server-produced HTML with <mark> highlights (trusted).
+                    dangerouslySetInnerHTML={{ __html: result.preview }}
+                  />
+                )}
               </CardContent>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

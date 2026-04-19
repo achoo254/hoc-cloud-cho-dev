@@ -2,7 +2,7 @@
   "id": 7,
   "slug": "http",
   "module": "01-networking",
-  "title": "HTTP & HTTPS — Request/Response",
+  "title": "Tìm hiểu HTTP",
   "file_path": "labs/01-networking/07-http.html",
   "estimated_minutes": 50,
   "content_hash": "fed3f1d065b41a0155bffae538292cb0ae0bbb9e",
