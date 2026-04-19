@@ -1,0 +1,11 @@
+set nocompatible
+syntax on
+set number
+set relativenumber
+set tabstop=4 shiftwidth=4 expandtab
+set smartindent
+set ignorecase smartcase
+set incsearch hlsearch
+set clipboard=unnamedplus
+set mouse=a
+set backspace=indent,eol,start

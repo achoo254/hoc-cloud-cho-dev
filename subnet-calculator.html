@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPv4 Subnet Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a0e17;
+    --bg-card: #111827;
+    --bg-card-hover: #1a2332;
+    --bg-input: #0d1321;
+    --border: #1e2d3d;
+    --border-focus: #00e5ff;
+    --accent: #00e5ff;
+    --accent-dim: rgba(0, 229, 255, 0.15);
+    --accent-glow: rgba(0, 229, 255, 0.3);
+    --green: #00ffa3;
+    --green-dim: rgba(0, 255, 163, 0.12);
+    --orange: #ff9f43;
+    --orange-dim: rgba(255, 159, 67, 0.12);
+    --red: #ff6b6b;
+    --red-dim: rgba(255, 107, 107, 0.12);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.12);
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-muted: #475569;
+    --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+    --sans: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  header .badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,229,255,0.2);
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+
+  header h1 {
+    font-family: var(--sans);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  header p {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 300;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+    transition: border-color 0.3s;
+  }
+
+  .card:hover { border-color: rgba(0,229,255,0.15); }
+
+  .card-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title::before {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+
+  /* Input Section */
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .ip-input-group {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .ip-input-group input {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 8px;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .ip-input-group input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim), inset 0 0 12px rgba(0,229,255,0.05);
+  }
+
+  .ip-input-group .dot {
+    color: var(--text-muted);
+    font-size: 24px;
+    font-weight: 700;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 2px;
+  }
+
+  .separator span {
+    font-size: 28px;
+    color: var(--text-muted);
+    font-weight: 300;
+  }
+
+  /* CIDR Slider */
+  .cidr-section { text-align: center; }
+
+  .cidr-value {
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: var(--mono);
+    line-height: 1;
+    text-shadow: 0 0 30px var(--accent-glow);
+  }
+
+  .cidr-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .slider-wrap {
+    margin-top: 14px;
+    position: relative;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(90deg, var(--green), var(--accent), var(--orange), var(--red));
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    background: var(--bg-deep);
+    border: 3px solid var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent-glow);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  .slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  .slider-ticks span {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+
+  /* Quick select buttons */
+  .quick-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+
+  .quick-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .quick-btn:hover, .quick-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  /* Results Grid */
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .result-item {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.25s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-item::after {
+    content: 'COPY';
+    position: absolute;
+    top: 8px; right: 10px;
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .result-item:hover::after { opacity: 0.6; }
+
+  .result-item:hover {
+    border-color: rgba(0,229,255,0.2);
+    background: var(--bg-card-hover);
+  }
+
+  .result-item.copied::after {
+    content: 'COPIED ✓';
+    opacity: 1;
+    color: var(--green);
+  }
+
+  .result-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .result-value {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .result-item.highlight .result-value { color: var(--accent); }
+  .result-item.green .result-value { color: var(--green); }
+  .result-item.orange .result-value { color: var(--orange); }
+  .result-item.purple .result-value { color: var(--purple); }
+  .result-item.full-width { grid-column: 1 / -1; }
+
+  /* Binary Display */
+  .binary-display {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 2;
+    overflow-x: auto;
+    padding: 4px 0;
+  }
+
+  .binary-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+
+  .binary-label {
+    width: 90px;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  .binary-bits {
+    display: flex;
+    gap: 2px;
+  }
+
+  .bit {
+    display: inline-flex;
+    width: 16px; height: 22px;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  .bit.network { background: var(--accent-dim); color: var(--accent); }
+  .bit.host { background: rgba(255,159,67,0.1); color: var(--orange); }
+  .bit.sep {
+    width: 8px;
+    color: var(--text-muted);
+    background: none;
+    font-size: 10px;
+  }
+
+  /* Subnet Table */
+  .subnet-table-wrap {
+    overflow-x: auto;
+    margin-top: 4px;
+  }
+
+  .subnet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .subnet-table th {
+    text-align: left;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+
+  .subnet-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(30,45,61,0.5);
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .subnet-table tr:hover td {
+    color: var(--text);
+    background: rgba(0,229,255,0.03);
+  }
+
+  .subnet-table .current td {
+    color: var(--accent);
+    background: var(--accent-dim);
+    font-weight: 500;
+  }
+
+  /* Class indicator */
+  .class-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 5px;
+    letter-spacing: 1px;
+  }
+
+  .class-A { background: var(--green-dim); color: var(--green); }
+  .class-B { background: var(--accent-dim); color: var(--accent); }
+  .class-C { background: var(--orange-dim); color: var(--orange); }
+  .class-D { background: var(--purple-dim); color: var(--purple); }
+  .class-E { background: var(--red-dim); color: var(--red); }
+
+  .private-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--red-dim);
+    color: var(--red);
+    letter-spacing: 1px;
+    margin-left: 8px;
+  }
+
+  /* Visual subnet blocks */
+  .subnet-visual {
+    display: flex;
+    height: 32px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .subnet-visual .net-part {
+    background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(0,229,255,0.1));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    border-right: 2px solid var(--accent);
+    min-width: 30px;
+  }
+
+  .subnet-visual .host-part {
+    background: linear-gradient(135deg, rgba(255,159,67,0.15), rgba(255,159,67,0.05));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--orange);
+    flex: 1;
+    min-width: 30px;
+  }
+
+  /* Error state */
+  .error-msg {
+    color: var(--red);
+    font-size: 11px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  .error-msg.show { display: block; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .input-row {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .separator { display: none; }
+    .results-grid { grid-template-columns: 1fr; }
+    .cidr-value { font-size: 32px; }
+    .app { padding: 20px 14px 40px; }
+    header h1 { font-size: 22px; }
+  }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card { animation: fadeUp 0.4s ease both; }
+  .card:nth-child(2) { animation-delay: 0.08s; }
+  .card:nth-child(3) { animation-delay: 0.16s; }
+  .card:nth-child(4) { animation-delay: 0.24s; }
+  .card:nth-child(5) { animation-delay: 0.32s; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="badge">Network Tool</div>
+    <h1>IPv4 <span>Subnet</span> Calculator</h1>
+    <p>Tính toán dải mạng nhanh &bull; CIDR &bull; VLSM</p>
+  </header>
+
+  <!-- Input Card -->
+  <div class="card">
+    <div class="card-title">Địa chỉ IP & CIDR</div>
+    <div class="input-row">
+      <div class="field">
+        <label>Địa chỉ IP</label>
+        <div class="ip-input-group">
+          <input type="text" id="oct1" maxlength="3" value="192" inputmode="numeric">
+          <span class="dot">.</span>
+          <input type="text" id="oct2" maxlength="3" value="168" inputmode="numeric">
+          <span class="dot">.</span>
+          <input type="text" id="oct3" maxlength="3" value="1" inputmode="numeric">
+          <span class="dot">.</span>
+          <input type="text" id="oct4" maxlength="3" value="100" inputmode="numeric">
+        </div>
+      </div>
+      <div class="separator"><span>/</span></div>
+      <div class="field cidr-section">
+        <div class="cidr-value" id="cidrDisplay">/24</div>
+        <div class="cidr-label">PREFIX LENGTH</div>
+        <div class="slider-wrap">
+          <input type="range" id="cidrSlider" min="0" max="32" value="24">
+          <div class="slider-ticks">
+            <span>/0</span><span>/8</span><span>/16</span><span>/24</span><span>/32</span>
+          </div>
+        </div>
+        <div class="quick-select" id="quickSelect">
+          <button class="quick-btn" data-cidr="8">/8</button>
+          <button class="quick-btn" data-cidr="16">/16</button>
+          <button class="quick-btn" data-cidr="20">/20</button>
+          <button class="quick-btn active" data-cidr="24">/24</button>
+          <button class="quick-btn" data-cidr="25">/25</button>
+          <button class="quick-btn" data-cidr="28">/28</button>
+          <button class="quick-btn" data-cidr="30">/30</button>
+          <button class="quick-btn" data-cidr="32">/32</button>
+        </div>
+      </div>
+    </div>
+    <div class="error-msg" id="errorMsg">⚠ Giá trị octet phải từ 0 – 255</div>
+  </div>
+
+  <!-- Results Card -->
+  <div class="card">
+    <div class="card-title">Kết quả tính toán</div>
+    <div class="results-grid" id="results">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- Binary Card -->
+  <div class="card">
+    <div class="card-title">Biểu diễn nhị phân</div>
+    <div class="binary-display" id="binaryDisplay"></div>
+    <div class="subnet-visual" id="subnetVisual"></div>
+  </div>
+
+  <!-- Reference Table Card -->
+  <div class="card">
+    <div class="card-title">Bảng tham chiếu CIDR</div>
+    <div class="subnet-table-wrap">
+      <table class="subnet-table" id="refTable"></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const octInputs = ['oct1','oct2','oct3','oct4'].map(id => $(id));
+const cidrSlider = $('cidrSlider');
+const cidrDisplay = $('cidrDisplay');
+const quickBtns = document.querySelectorAll('.quick-btn');
+
+// Auto-tab & validate octets
+octInputs.forEach((inp, i) => {
+  inp.addEventListener('input', e => {
+    let v = inp.value.replace(/\D/g, '');
+    if (v.length > 3) v = v.slice(0,3);
+    if (parseInt(v) > 255) v = '255';
+    inp.value = v;
+    if (v.length === 3 && i < 3) octInputs[i+1].focus();
+    calculate();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === '.' && i < 3) {
+      e.preventDefault();
+      octInputs[i+1].focus();
+    }
+    if (e.key === 'Backspace' && inp.value === '' && i > 0) {
+      octInputs[i-1].focus();
+    }
+  });
+  inp.addEventListener('focus', () => inp.select());
+});
+
+cidrSlider.addEventListener('input', () => {
+  updateCIDR(parseInt(cidrSlider.value));
+  calculate();
+});
+
+quickBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    updateCIDR(parseInt(btn.dataset.cidr));
+    calculate();
+  });
+});
+
+function updateCIDR(val) {
+  cidrSlider.value = val;
+  cidrDisplay.textContent = '/' + val;
+  quickBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.cidr) === val));
+}
+
+function getIP() {
+  return octInputs.map(inp => {
+    const v = parseInt(inp.value);
+    return isNaN(v) ? 0 : Math.min(255, Math.max(0, v));
+  });
+}
+
+function ipToInt(octets) {
+  return ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
+}
+
+function intToIP(n) {
+  return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+}
+
+function maskFromCIDR(cidr) {
+  return cidr === 0 ? 0 : (~0 << (32 - cidr)) >>> 0;
+}
+
+function getClass(first) {
+  if (first < 128) return 'A';
+  if (first < 192) return 'B';
+  if (first < 224) return 'C';
+  if (first < 240) return 'D';
+  return 'E';
+}
+
+function isPrivate(octets) {
+  const [a,b] = octets;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+function toBin32(n) {
+  return n.toString(2).padStart(32, '0');
+}
+
+function formatNumber(n) {
+  return n.toLocaleString('en-US');
+}
+
+function calculate() {
+  const octets = getIP();
+  const cidr = parseInt(cidrSlider.value);
+  const valid = octets.every(o => o >= 0 && o <= 255);
+
+  $('errorMsg').classList.toggle('show', !valid);
+  if (!valid) return;
+
+  const ipInt = ipToInt(octets);
+  const mask = maskFromCIDR(cidr);
+  const wildcard = (~mask) >>> 0;
+  const network = (ipInt & mask) >>> 0;
+  const broadcast = (network | wildcard) >>> 0;
+  const hostBits = 32 - cidr;
+  const totalHosts = Math.pow(2, hostBits);
+  const usableHosts = cidr >= 31 ? (cidr === 32 ? 1 : 2) : totalHosts - 2;
+  const firstHost = cidr >= 31 ? network : (network + 1) >>> 0;
+  const lastHost = cidr >= 31 ? broadcast : (broadcast - 1) >>> 0;
+  const ipClass = getClass(octets[0]);
+  const priv = isPrivate(octets);
+
+  const privateHTML = priv ? '<span class="private-badge">PRIVATE</span>' : '';
+  const classHTML = `<span class="class-badge class-${ipClass}">Class ${ipClass}</span>${privateHTML}`;
+
+  const items = [
+    { label: 'Network Address', value: intToIP(network) + ' /' + cidr, cls: 'highlight' },
+    { label: 'Broadcast Address', value: intToIP(broadcast), cls: 'orange' },
+    { label: 'Subnet Mask', value: intToIP(mask), cls: '' },
+    { label: 'Wildcard Mask', value: intToIP(wildcard), cls: '' },
+    { label: 'First Usable Host', value: intToIP(firstHost), cls: 'green' },
+    { label: 'Last Usable Host', value: intToIP(lastHost), cls: 'green' },
+    { label: 'Usable Hosts', value: formatNumber(usableHosts), cls: 'purple' },
+    { label: 'Total Addresses', value: formatNumber(totalHosts), cls: '' },
+    { label: 'IP Class & Type', value: classHTML, cls: 'full-width', raw: true },
+  ];
+
+  const html = items.map(it => `
+    <div class="result-item ${it.cls}" onclick="${it.raw ? '' : `copyValue(this, '${it.value}')`}">
+      <div class="result-label">${it.label}</div>
+      <div class="result-value">${it.value}</div>
+    </div>
+  `).join('');
+
+  $('results').innerHTML = html;
+
+  // Binary display
+  renderBinary(ipInt, mask, network, cidr);
+
+  // Visual bar
+  const netPct = Math.max(5, (cidr / 32) * 100);
+  $('subnetVisual').innerHTML = `
+    <div class="net-part" style="width:${netPct}%">NET ${cidr}b</div>
+    <div class="host-part">HOST ${32-cidr}b</div>
+  `;
+
+  // Reference table
+  renderRefTable(cidr);
+}
+
+function renderBinary(ipInt, mask, network, cidr) {
+  const ipBin = toBin32(ipInt);
+  const maskBin = toBin32(mask);
+  const netBin = toBin32(network);
+
+  function makeRow(label, bits, cidr) {
+    let html = `<div class="binary-row"><span class="binary-label">${label}</span><div class="binary-bits">`;
+    for (let i = 0; i < 32; i++) {
+      if (i > 0 && i % 8 === 0) html += `<span class="bit sep">.</span>`;
+      const cls = i < cidr ? 'network' : 'host';
+      html += `<span class="bit ${cls}">${bits[i]}</span>`;
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  $('binaryDisplay').innerHTML =
+    makeRow('IP', ipBin, cidr) +
+    makeRow('Mask', maskBin, cidr) +
+    makeRow('Network', netBin, cidr);
+}
+
+function renderRefTable(currentCIDR) {
+  const rows = [];
+  const common = [8,10,12,14,16,18,20,21,22,23,24,25,26,27,28,29,30,31,32];
+
+  rows.push(`<tr>
+    <th>CIDR</th><th>Subnet Mask</th><th>Addresses</th><th>Usable</th>
+  </tr>`);
+
+  common.forEach(c => {
+    const m = maskFromCIDR(c);
+    const total = Math.pow(2, 32 - c);
+    const usable = c >= 31 ? (c === 32 ? 1 : 2) : total - 2;
+    const isCurrent = c === currentCIDR;
+    rows.push(`<tr class="${isCurrent ? 'current' : ''}">
+      <td>/${c}</td>
+      <td>${intToIP(m)}</td>
+      <td>${formatNumber(total)}</td>
+      <td>${formatNumber(usable)}</td>
+    </tr>`);
+  });
+
+  $('refTable').innerHTML = rows.join('');
+}
+
+function copyValue(el, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    el.classList.add('copied');
+    setTimeout(() => el.classList.remove('copied'), 1200);
+  });
+}
+
+// Paste full IP/CIDR support
+document.addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+  const match = text.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/);
+  if (match) {
+    e.preventDefault();
+    octInputs[0].value = match[1];
+    octInputs[1].value = match[2];
+    octInputs[2].value = match[3];
+    octInputs[3].value = match[4];
+    if (match[5]) updateCIDR(Math.min(32, parseInt(match[5])));
+    calculate();
+  }
+});
+
+// Init
+calculate();
+</script>
+</body>
+</html>

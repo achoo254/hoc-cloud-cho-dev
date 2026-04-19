@@ -1,0 +1,39 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prom_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports: ["9093:9093"]
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    ports: ["9100:9100"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+
+volumes:
+  prom_data:
+  grafana_data:
