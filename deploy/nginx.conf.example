@@ -1,5 +1,5 @@
 # /etc/nginx/conf.d/hoc-cloud.conf
-# Reverse proxy: hoc-cloud.inetdev.io.vn -> Vite SPA (app/dist/) + Hono API on :3000
+# Reverse proxy: hoc-cloud.inetdev.io.vn -> Vite SPA (app/dist/) + Hono API on :8387
 #
 # Setup steps:
 #   1. Copy to /etc/nginx/conf.d/hoc-cloud.conf
@@ -25,9 +25,9 @@ server {
     gzip_types text/plain text/css application/javascript application/json image/svg+xml font/woff2;
     gzip_min_length 1024;
 
-    # --- API proxy (Hono on :3000) ---
+    # --- API proxy (Hono on :8387) ---
     location /api/ {
-        proxy_pass         http://127.0.0.1:3000;
+        proxy_pass         http://127.0.0.1:8387;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
@@ -38,7 +38,7 @@ server {
 
     # --- SSE endpoint — buffering MUST be off for EventSource to work ---
     location /sse {
-        proxy_pass         http://127.0.0.1:3000;
+        proxy_pass         http://127.0.0.1:8387;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
@@ -54,7 +54,7 @@ server {
 
     # --- Health check ---
     location /healthz {
-        proxy_pass         http://127.0.0.1:3000;
+        proxy_pass         http://127.0.0.1:8387;
         proxy_http_version 1.1;
         proxy_set_header   Host $host;
     }
