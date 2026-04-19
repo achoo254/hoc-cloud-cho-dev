@@ -6,7 +6,7 @@
  *   SHIP:  Quiz, Flashcards, Try-at-home commands
  */
 
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -171,13 +171,14 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
 export function LabRenderer({ lab, className }: LabRendererProps) {
   const { update } = useProgress(lab.slug)
 
-  // Mark as opened on first render (fire-and-forget, idempotent on server)
-  // We use a ref-like pattern via useState init function
-  const [_opened] = useState(() => {
+  // Fire opened_at once per mount — useRef guard prevents double-fire in StrictMode
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (openedRef.current) return
+    openedRef.current = true
     update({ opened_at: new Date().toISOString(), completed_at: null, quiz_score: null })
-    return true
-  })
-  void _opened
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleQuizScore(score: number) {
     update({
@@ -230,7 +231,17 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Flashcards
           </h3>
-          <FlashcardSM2 cards={lab.flashcards} labSlug={lab.slug} />
+          <FlashcardSM2
+            cards={lab.flashcards}
+            labSlug={lab.slug}
+            onAllMastered={() => {
+              update({
+                opened_at: null,
+                completed_at: new Date().toISOString(),
+                quiz_score: null,
+              })
+            }}
+          />
         </div>
 
         <TryAtHomeSection items={lab.try_at_home} />

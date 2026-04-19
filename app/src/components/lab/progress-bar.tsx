@@ -12,14 +12,14 @@ interface ProgressBarProps {
 }
 
 export function ProgressBar({ labSlug, className }: ProgressBarProps) {
-  const { progress, isLoading } = useProgress(labSlug)
+  const { entry, isLoading } = useProgress(labSlug)
 
   // Derive a 0–100 value: opened=33, quiz done=66, completed=100
   let pct = 0
-  if (progress) {
-    if (progress.opened_at) pct = 33
-    if (progress.quiz_score !== null) pct = 66
-    if (progress.completed_at) pct = 100
+  if (entry) {
+    if (entry.opened_at) pct = 33
+    if (entry.quiz_score !== null) pct = 66
+    if (entry.completed_at) pct = 100
   }
 
   if (isLoading) {

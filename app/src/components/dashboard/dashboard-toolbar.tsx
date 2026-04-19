@@ -1,10 +1,9 @@
 /**
  * dashboard-toolbar.tsx — Sticky top toolbar: search trigger (Ctrl+K),
  * theme toggle, and module filter Select.
- * Search palette is wired in phase 05; this phase renders a stub dialog.
+ * Search palette state is managed by SearchContext (see root-layout.tsx).
  */
 
-import { useState, useEffect } from 'react'
 import { Search, Moon, Sun, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,13 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useTheme } from '@/hooks/use-theme'
+import { useSearch } from '@/lib/search-context'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,19 +39,7 @@ export function DashboardToolbar({
   onModuleFilterChange,
 }: DashboardToolbarProps) {
   const { theme, toggleTheme } = useTheme()
-  const [searchOpen, setSearchOpen] = useState(false)
-
-  // Global Ctrl+K / Cmd+K handler
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setSearchOpen(true)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  const { setOpen: setSearchOpen } = useSearch()
 
   return (
     <>
@@ -125,23 +107,6 @@ export function DashboardToolbar({
         </div>
       </div>
 
-      {/* Search stub dialog — phase 05 will replace body with cmdk */}
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Search className="h-4 w-4" aria-hidden="true" />
-              Tìm kiếm lab
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-6 text-center text-muted-foreground text-sm">
-            <p>Search coming in phase 05.</p>
-            <p className="mt-1 text-xs">
-              Tính năng tìm kiếm full-text sẽ được triển khai ở phase tiếp theo.
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

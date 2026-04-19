@@ -4,7 +4,7 @@
  * Per-card state persisted in localStorage keyed by `srs:{labSlug}:{idx}`.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,8 @@ interface FlashcardSM2Props {
   cards: Flashcard[]
   labSlug: string
   className?: string
+  /** Fired once when every card has been reviewed with Good/Easy (ef >= 2.5, reps >= 1) */
+  onAllMastered?: () => void
 }
 
 type StoredCard = SM2Result
@@ -48,11 +50,21 @@ const QUALITY_BUTTONS: { label: string; quality: SM2Quality; variant: string }[]
   { label: 'Easy',  quality: 4, variant: 'border-green-500/60 hover:bg-green-500/10 text-green-500' },
 ]
 
-export function FlashcardSM2({ cards, labSlug, className }: FlashcardSM2Props) {
+/** A card is "mastered" when it has been reviewed with Good or Easy at least once */
+function isCardMastered(labSlug: string, idx: number): boolean {
+  const stored = loadCard(labSlug, idx) as SM2Result | SM2Card
+  const reps = 'reps' in stored ? (stored.reps ?? 0) : 0
+  const ef = 'ef' in stored ? (stored.ef ?? 0) : 0
+  return reps >= 1 && ef >= 2.5
+}
+
+export function FlashcardSM2({ cards, labSlug, className, onAllMastered }: FlashcardSM2Props) {
   const [current, setCurrent] = useState(0)
   const [flipped, setFlipped] = useState(false)
   // Tracks how many reviews done this session (for display only)
   const [reviewed, setReviewed] = useState(0)
+  // Guard: only fire onAllMastered once
+  const masteredFiredRef = useRef(false)
 
   const card = cards[current]
 
@@ -65,6 +77,20 @@ export function FlashcardSM2({ cards, labSlug, className }: FlashcardSM2Props) {
     const result = sm2(stored, quality)
     saveCard(labSlug, current, result)
     setReviewed((r) => r + 1)
+
+    // Check all-mastered after saving this card
+    if (!masteredFiredRef.current && onAllMastered) {
+      const allMastered = cards.every((_, idx) =>
+        idx === current
+          ? result.reps >= 1 && result.ef >= 2.5   // use result for current card
+          : isCardMastered(labSlug, idx),
+      )
+      if (allMastered) {
+        masteredFiredRef.current = true
+        onAllMastered()
+      }
+    }
+
     // Advance to next card (wrap around)
     setCurrent((c) => (c + 1) % cards.length)
     setFlipped(false)
