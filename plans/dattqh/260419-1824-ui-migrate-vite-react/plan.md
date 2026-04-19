@@ -63,7 +63,7 @@ Rewrite UI từ vanilla HTML/JS (~3150 LOC, 8 lab HTMLs) sang **Vite + React 18 
 |---|---|---|---|
 | 0 | **Spike + Fixtures** ✅ reality-check DONE | phase-00 | — |
 | 1 | Scaffold (Vite+React+TS+Tailwind+shadcn) ✅ | phase-01 | — |
-| 2 | Core components (LabRenderer, Quiz, Flashcard) | phase-02 | — |
+| 2 | Core components (LabRenderer, Quiz, Flashcard) ✅ | phase-02 | — |
 | 3 | Content pipeline (dump 8 labs → `content/labs/*.ts`) — simplified | phase-03 | — |
 | 4 | Dashboard (stats, due, roadmap, toolbar) | phase-04 | — |
 | 5 | Search (Command palette + client fallback) + Progress | phase-05 | — |

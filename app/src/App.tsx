@@ -4,6 +4,7 @@ import IndexPage from '@/routes/index'
 import LabViewerPage from '@/routes/lab-viewer'
 import SearchPage from '@/routes/search'
 import NotFoundPage from '@/routes/not-found'
+import DevPlaygroundPage from '@/routes/dev-playground'
 
 const router = createBrowserRouter([
   {
@@ -13,6 +14,7 @@ const router = createBrowserRouter([
       { index: true, element: <IndexPage /> },
       { path: 'lab/:slug', element: <LabViewerPage /> },
       { path: 'search', element: <SearchPage /> },
+      { path: 'dev/playground', element: <DevPlaygroundPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
