@@ -13,3 +13,4 @@ bundle.tar.gz
 tmp-check/
 data/
 !data/.gitkeep
+backup-pre-kill-theory-260419.sql
