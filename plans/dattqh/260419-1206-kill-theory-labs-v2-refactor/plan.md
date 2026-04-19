@@ -10,7 +10,7 @@ progress:
   phase-02: done (migrations 002 + 003 applied, labs/labs_fts/progress tables live, 8 labs indexed)
   phase-03: done (schema v2 validator + 3 callouts + 4-toggle group)
   phase-04: done (DNS lab — 12 tldr + 7 walkthrough + 6 tryAtHome với v2 fields đủ; misconceptions/dependsOn/enables/estimatedMinutes=45)
-  phase-05: deferred (7 remaining labs — content work ~5d, out of single-session scope)
+  phase-05: done (7 labs refactored, verified 0 missing fields)
   phase-06: done (/api/search FTS5 + global search-widget + `/` shortcut)
   phase-07: done (/api/progress + anon UUID cookie + progress-sync.js + dashboard badges)
   phase-08: done (README updated, structure + API docs + 4 chân kiềng)
