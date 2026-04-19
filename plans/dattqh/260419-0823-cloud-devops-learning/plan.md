@@ -23,7 +23,7 @@ Lộ trình học cloud/devops cho dev: không hàn lâm, tập trung **core con
 
 | # | Phase | Status | File |
 |---|-------|--------|------|
-| 01 | Networking & OSI | in-progress | [phase-01-networking.md](phase-01-networking.md) |
+| 01 | Networking & OSI | labs-ready | [phase-01-networking.md](phase-01-networking.md) |
 | 02 | Linux cơ bản & Server | pending | [phase-02-linux.md](phase-02-linux.md) |
 | 03 | Docker & Containerization | pending | [phase-03-docker.md](phase-03-docker.md) |
 | 04 | Python cho Sysadmin | pending | [phase-04-python-sysadmin.md](phase-04-python-sysadmin.md) |
@@ -33,7 +33,8 @@ Lộ trình học cloud/devops cho dev: không hàn lâm, tập trung **core con
 | 08 | CI/CD | pending | [phase-08-cicd.md](phase-08-cicd.md) |
 
 ## Artifacts đã có
-- `subnet-calculator.html` — IPv4 subnet calculator (dùng cho phase 01)
+- `subnet-calculator.html` — IPv4 subnet calculator legacy (phase 01)
+- `labs/` — 8/8 lab WHY-first cho phase 01 (OSI, Subnet, TCP/UDP, ICMP, ARP, DHCP, HTTP, DNS). Dashboard: `labs/index.html`. Chạy: `cd labs && python -m http.server 8000`.
 
 ## Cấu trúc học mỗi chủ đề
 1. **Why** — Vấn đề nó giải quyết
