@@ -567,7 +567,7 @@
   "tldr": [
     {
       "what": "TCP — Transmission Control Protocol",
-      "why": "Dùng khi dữ liệu phải đến đủ và đúng thứ tự (web, SSH, DB). TCP đảm bảo bằng cách retransmit khi mất gói — bạn không phải tự xử lý mất gói trong code.",
+      "why": "Dùng khi dữ liệu phải đến đủ và đúng thứ tự (web, SSH, DB). TCP đảm bảo bằng cách retransmit khi mất gói — không cần tự xử lý mất gói trong application code.",
       "whyBreaks": "Dùng TCP cho game multiplayer real-time: retransmit gói cũ block gói mới → Head-of-Line blocking → lag spike không kiểm soát được, đặc biệt khi mạng có >1% packet loss.",
       "deploymentUse": "Mọi service cần data integrity: HTTP/HTTPS (nginx), database (MySQL port 3306, Postgres 5432), SSH (port 22), file transfer. Nếu mất 1 byte là corrupt → dùng TCP."
     },
@@ -625,7 +625,27 @@
       "why": "Thấy rõ sự khác biệt: UDP gửi thẳng không cần server sẵn sàng. Nếu server chưa lắng nghe, gói vẫn gửi đi — UDP không báo lỗi. Đây là lý do cần timeout ở tầng app khi dùng UDP.",
       "whyBreaks": "Gửi UDP khi không có server listen → không báo lỗi ở phía gửi (khác TCP refused ngay). Kernel đích gửi ICMP Port Unreachable — nhưng nếu firewall block ICMP thì sender không biết gì. Debug UDP failure khó hơn TCP vì thiếu connection state.",
       "observeWith": "sudo tcpdump -i lo -n 'port 9001' -v  # Xem UDP datagram không có handshake flags\nss -ulnp  # Kiểm tra UDP socket đang listen",
-      "code": "# Terminal 1 — UDP server\nnc -u -l 9000\n\n# Terminal 2 — UDP client (không handshake)\nnc -u 127.0.0.1 9000\n# Gõ text → hiện ở Terminal 1 ngay, không cần bắt tay trước\n\n# So sánh: gửi UDP khi không có server\nnc -u 127.0.0.1 9001  # port chưa mở\necho 'hello' | nc -u 127.0.0.1 9001  # gửi không báo lỗi"
+      "code": "# Terminal 1 — UDP server\nnc -u -l 9000\n\n# Terminal 2 — UDP client (không handshake)\nnc -u 127.0.0.1 9000\n# Gõ text → hiện ở Terminal 1 ngay, không cần bắt tay trước\n\n# So sánh: gửi UDP khi không có server\nnc -u 127.0.0.1 9001  # port chưa mở\necho 'hello' | nc -u 127.0.0.1 9001  # gửi không báo lỗi",
+      "failModes": [
+        {
+          "symptom": "UDP client gửi data nhưng server không nhận — không có báo lỗi nào ở client",
+          "evidence": "sudo tcpdump -i lo -n 'port 9001' thấy UDP packet đi ra nhưng không có packet về. Server side không in gì. Không có error message ở client — đây là behavior by design của UDP best-effort"
+        },
+        {
+          "symptom": "UDP gửi không lỗi nhưng server log thiếu message",
+          "evidence": "Đếm số message gửi vs số nhận: client gửi 1000 gói, server log chỉ thấy 950 — 50 gói bị drop silently (packet loss 5%). Phát hiện bằng application-level sequence counter, UDP không tự báo"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Dùng tcpdump để xác nhận UDP packet có thực sự được gửi đi không",
+          "command": "sudo tcpdump -i lo -n 'udp port 9001' -c 5"
+        },
+        {
+          "step": "Nếu cần delivery guarantee với UDP, implement sequence number ở tầng app",
+          "command": "# Không có lệnh OS — đây là logic phải implement trong application code"
+        }
+      ]
     },
     {
       "step": 4,
@@ -657,7 +677,40 @@
       "why": "TCP không chỉ bắt tay khi mở mà còn khi đóng: FIN → FIN-ACK → ACK. Hiểu TIME_WAIT giúp debug 'Address already in use' khi restart server — kernel chờ hết TIME_WAIT (60s).",
       "whyBreaks": "Restart service ngay sau khi dừng → 'Address already in use' vì port vẫn ở TIME_WAIT. Fix: SO_REUSEADDR (hầu hết production server đã set). Nếu thấy quá nhiều TIME_WAIT → có thể connection không được reuse (thiếu keepalive/connection pool).",
       "observeWith": "ss -tn state time-wait  # Xem connection đang ở TIME_WAIT\nwatch -n1 'ss -tn | grep TIME-WAIT | wc -l'  # Đếm real-time khi open/close connection",
-      "code": "# Xem TCP states khi kết nối đóng\nss -tn\n\n# Xem TIME_WAIT (xuất hiện ngay sau khi đóng kết nối)\nss -tn | grep TIME-WAIT\n\n# Fix 'Address already in use' khi dev: SO_REUSEADDR\n# (nginx, node.js đều set flag này mặc định)"
+      "code": "# Xem TCP states khi kết nối đóng\nss -tn\n\n# Xem TIME_WAIT (xuất hiện ngay sau khi đóng kết nối)\nss -tn | grep TIME-WAIT\n\n# Fix 'Address already in use' khi dev: SO_REUSEADDR\n# (nginx, node.js đều set flag này mặc định)",
+      "failModes": [
+        {
+          "symptom": "Server không nhận được connection mới dù đang chạy — client báo 'cannot assign requested address'",
+          "evidence": "ss -tn | grep TIME-WAIT | wc -l trả về hàng chục nghìn (>28000 trên default ephemeral range 32768-60999). Client kernel không tìm được port ephemeral trống để mở connection mới"
+        },
+        {
+          "symptom": "Restart nginx/node ngay sau khi stop → 'bind: Address already in use'",
+          "evidence": "ss -tn | grep ':80.*TIME-WAIT' hoặc ss -tlnp | grep ':80' không thấy LISTEN nhưng port vẫn bị chiếm. Kernel giữ socket ở TIME_WAIT ~60s (2×MSL, RFC 793)"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Kiểm tra số lượng TIME_WAIT hiện tại",
+          "command": "ss -tn state time-wait | wc -l"
+        },
+        {
+          "step": "Xem range ephemeral port của kernel",
+          "command": "cat /proc/sys/net/ipv4/ip_local_port_range"
+        },
+        {
+          "step": "Tăng ephemeral port range để có nhiều port hơn (tạm thời, cần tune keepalive/pool là giải pháp thực sự)",
+          "command": "sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535'"
+        },
+        {
+          "step": "Bật tcp_tw_reuse để tái dùng TIME_WAIT socket cho outbound connection (an toàn khi enable timestamps)",
+          "command": "sudo sysctl -w net.ipv4.tcp_tw_reuse=1"
+        }
+      ],
+      "automateScript": {
+        "lang": "bash",
+        "code": "#!/bin/bash\n# watch-tcp-states.sh — Monitor TCP state counts theo thời gian thực\n# Dùng khi debug TIME_WAIT exhaustion hoặc theo dõi connection leak\nINTERVAL=${1:-2}\necho \"Monitoring TCP states every ${INTERVAL}s (Ctrl+C để dừng)\"\necho \"---\"\nwhile true; do\n  echo \"$(date '+%H:%M:%S')  $(ss -tn | awk 'NR>1{print $1}' | sort | uniq -c | sort -rn | tr '\\n' '  ')\"\n  sleep \"$INTERVAL\"\ndone",
+        "note": "Chạy trên production server khi nghi ngờ TIME_WAIT exhaustion hoặc connection pool leak. Output: timestamp + count từng TCP state (ESTAB, TIME-WAIT, CLOSE-WAIT...). Interval mặc định 2s, truyền tham số để thay đổi: ./watch-tcp-states.sh 5"
+      }
     }
   ],
   "quiz": [
@@ -694,7 +747,7 @@
       }
     },
     {
-      "q": "Bạn thấy 'Connection refused' khi curl một server. Nguyên nhân khả năng nhất là gì?",
+      "q": "Lỗi 'Connection refused' xuất hiện khi curl một server. Nguyên nhân khả năng nhất là gì?",
       "options": [
         "Firewall chặn packet",
         "DNS không resolve được hostname",
@@ -742,7 +795,7 @@
       }
     },
     {
-      "q": "Bạn debug một game multiplayer bị lag cao. Developer bảo 'server dùng TCP'. Vấn đề có thể là gì?",
+      "q": "Debug một game multiplayer bị lag cao. Developer cho biết 'server dùng TCP'. Vấn đề có thể là gì?",
       "options": [
         "TCP không hỗ trợ nhiều kết nối đồng thời",
         "TCP retransmit khi mất gói — đây làm tăng latency không kiểm soát được trong game",
@@ -758,7 +811,7 @@
       }
     },
     {
-      "q": "Điều gì xảy ra khi bạn gửi UDP packet đến một port không có process listen?",
+      "q": "Điều gì xảy ra khi gửi UDP packet đến một port không có process listen?",
       "options": [
         "Gói bị drop silently, không có phản hồi gì",
         "Kết nối timeout sau 30 giây",

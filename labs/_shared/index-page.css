@@ -494,3 +494,29 @@
   /* roadmap + heatmap are allowed to scroll-x internally */
   .roadmap-timeline, .hm-scroll, .toolbar-chips { overflow-x: auto; }
 }
+
+/* ===== DUE TODAY hero block ===== */
+.due-section { margin: 24px 0; }
+.due-today-card {
+  background: var(--bg-elevated);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+}
+.due-today-card .due-num { font-size: 64px; font-weight: 700; color: var(--accent); line-height: 1; }
+.due-today-card .due-label { font-size: 18px; color: var(--text); margin-top: 8px; }
+.due-today-card .due-meta { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+.due-today-card .due-cta {
+  display: inline-block; margin-top: 20px; padding: 12px 32px;
+  background: var(--accent); color: var(--bg); border-radius: 6px;
+  font-weight: 600; text-decoration: none;
+}
+.due-today-card.empty { border-color: var(--border); }
+.due-today-card.empty .due-num { color: var(--text-dim); }
+
+/* Resume empty state */
+.resume-empty {
+  padding: 16px; border: 1px dashed var(--border); border-radius: 8px;
+  color: var(--text-dim); font-size: 14px; text-align: center;
+}

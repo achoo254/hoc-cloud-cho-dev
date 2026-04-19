@@ -1,5 +1,7 @@
 # Plan — WHY Schema v2 (WHY + WHEN-IT-BREAKS + SEE-IT-ON-VPS + DEPLOY-READY)
 
+> **Status: superseded** by `plans/dattqh/260419-1737-schema-v3-think-see-ship/` (2026-04-19) — nâng lên schema v3 (THINK · SEE · SHIP) với 12 sections. Spec hiện hành: `docs/lab-schema-v3.md`.
+
 > Reframe triết lý WHY-first cho **dev deploy-ready**: hiểu đủ sâu về hệ thống để *triển khai và vận hành cơ bản* dịch vụ trên cloud — không phải thay thế sysadmin/devops. Có **1 VPS thật** làm sân tập.
 
 ## Status

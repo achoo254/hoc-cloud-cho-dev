@@ -183,10 +183,21 @@ function normalizePool(pool) {
   });
 }
 
-// ===== Validators — enforce WHY-first (Schema v2: WHY + WHEN-IT-BREAKS + SEE-IT-ON-VPS + DEPLOY-READY) =====
+// ===== Validators — Schema v3 (THINK · SEE · SHIP · OUTPUT) =====
+// Mandatory (9): misconceptions, why, whyBreaks, observeWith, deploymentUse,
+//                tldr, quiz, flashcards, tryAtHome
+// Optional (3): failModes, fixSteps, automateScript — hidden if absent.
 function validateData(labId, data) {
   if (window.SKIP_WHY_WARN) return;
   const warn = (msg) => console.warn(`[lab:${labId}] missing — ${msg}`);
+  if (!Array.isArray(data.misconceptions) || data.misconceptions.length < 2) {
+    warn('misconceptions (≥2 required, mandatory in v3)');
+  }
+  (data.misconceptions || []).forEach((m, i) => {
+    if (!m.wrong) warn(`misconceptions[${i}].wrong`);
+    if (!m.right) warn(`misconceptions[${i}].right`);
+    if (!m.why)   warn(`misconceptions[${i}].why`);
+  });
   (data.tldr || []).forEach((r, i) => {
     if (!r.why) warn(`tldr[${i}].why`);
     if (!r.whyBreaks) warn(`tldr[${i}].whyBreaks`);
@@ -210,13 +221,16 @@ function validateData(labId, data) {
   });
 }
 
-// ===== Callout renderer (Schema v2) =====
-// type: 'breaks' | 'observe' | 'deploy' | 'misconception'
+// ===== Callout renderer (Schema v3: THINK · SEE · SHIP) =====
+// type: 'breaks' | 'observe' | 'deploy' | 'misconception' | 'fail' | 'fix' | 'automate'
 const CALLOUT_META = {
   breaks:        { icon: '⚠️', label: 'Khi hỏng' },
   observe:       { icon: '👁️', label: 'Quan sát' },
   deploy:        { icon: '🚀', label: 'Khi deploy thật' },
   misconception: { icon: '📚', label: 'Hiểu lầm phổ biến' },
+  fail:          { icon: '🔴', label: 'Triệu chứng khi hỏng' },
+  fix:           { icon: '🔧', label: 'Cách sửa' },
+  automate:      { icon: '⚙️', label: 'Script hoá' },
 };
 function renderCallout(type, html) {
   if (!html) return null;
@@ -226,6 +240,70 @@ function renderCallout(type, html) {
     el('strong', { class: 'callout-label' }, meta.label + ': '),
     el('span', { class: 'callout-body', html }),
   ]);
+}
+
+// FAIL callout: [{symptom, evidence}] → bullet list trong 1 callout.
+function renderFailCallout(failModes) {
+  if (!Array.isArray(failModes) || !failModes.length) return null;
+  const meta = CALLOUT_META.fail;
+  const body = el('div', { class: 'callout-body' });
+  const ul = el('ul', { class: 'fail-list' });
+  failModes.forEach(f => {
+    if (!f || (!f.symptom && !f.evidence)) return;
+    const li = el('li');
+    if (f.symptom) li.appendChild(el('div', { class: 'fail-symptom', html: f.symptom }));
+    if (f.evidence) li.appendChild(el('div', { class: 'fail-evidence', html: `<code>${escapeHtml(f.evidence)}</code>` }));
+    ul.appendChild(li);
+  });
+  if (!ul.childNodes.length) return null;
+  body.appendChild(ul);
+  return el('div', { class: 'callout callout-fail' }, [
+    el('span', { class: 'callout-icon' }, meta.icon + ' '),
+    el('strong', { class: 'callout-label' }, meta.label + ': '),
+    body,
+  ]);
+}
+
+// FIX callout: [{step, command?}] → ordered list; command render trong <code>.
+function renderFixCallout(fixSteps) {
+  if (!Array.isArray(fixSteps) || !fixSteps.length) return null;
+  const meta = CALLOUT_META.fix;
+  const body = el('div', { class: 'callout-body' });
+  const ol = el('ol', { class: 'fix-list' });
+  fixSteps.forEach(s => {
+    if (!s || !s.step) return;
+    const li = el('li');
+    li.appendChild(el('div', { class: 'fix-step', html: s.step }));
+    if (s.command) {
+      li.appendChild(el('pre', { class: 'fix-cmd' }, [
+        el('code', { html: escapeHtml(s.command) }),
+      ]));
+    }
+    ol.appendChild(li);
+  });
+  if (!ol.childNodes.length) return null;
+  body.appendChild(ol);
+  return el('div', { class: 'callout callout-fix' }, [
+    el('span', { class: 'callout-icon' }, meta.icon + ' '),
+    el('strong', { class: 'callout-label' }, meta.label + ': '),
+    body,
+  ]);
+}
+
+// AUTOMATE callout: {lang, code, note?} → code block + optional note.
+function renderAutomateCallout(automate) {
+  if (!automate || !automate.code) return null;
+  const meta = CALLOUT_META.automate;
+  const wrapper = el('div', { class: 'callout callout-automate' });
+  wrapper.appendChild(el('div', { class: 'callout-header' }, [
+    el('span', { class: 'callout-icon' }, meta.icon + ' '),
+    el('strong', { class: 'callout-label' }, meta.label),
+  ]));
+  wrapper.appendChild(makeCodeBlock(automate.code, automate.lang || 'bash'));
+  if (automate.note) {
+    wrapper.appendChild(el('div', { class: 'callout-note', html: automate.note }));
+  }
+  return wrapper;
 }
 
 // ===== Renderers =====
@@ -270,6 +348,7 @@ function renderTldr(root, items) {
 }
 
 function renderWalkthrough(root, steps) {
+  // Order (v3): header → why → BREAKS → code → OBSERVE → FAIL → FIX → AUTOMATE → DEPLOY → note
   steps?.forEach((s, i) => {
     const div = el('div', { class: 'walkthrough-step' });
     div.appendChild(el('div', { class: 'step-header' }, [
@@ -280,6 +359,9 @@ function renderWalkthrough(root, steps) {
     const breaks = renderCallout('breaks', s.whyBreaks);           if (breaks) div.appendChild(breaks);
     if (s.code) div.appendChild(makeCodeBlock(s.code, s.lang));
     const observe = renderCallout('observe', s.observeWith);       if (observe) div.appendChild(observe);
+    const fail = renderFailCallout(s.failModes);                   if (fail) div.appendChild(fail);
+    const fix = renderFixCallout(s.fixSteps);                      if (fix) div.appendChild(fix);
+    const automate = renderAutomateCallout(s.automateScript);      if (automate) div.appendChild(automate);
     const deploy = renderCallout('deploy', s.deploymentUse);       if (deploy) div.appendChild(deploy);
     if (s.note) div.appendChild(el('div', { class: 'text-dim mt-8', html: s.note, style: 'font-size:13px' }));
     root.appendChild(div);
@@ -537,10 +619,13 @@ function renderDepBadges(heroEl, data) {
 // ===== Toggle group: WHY / BREAKS / OBSERVE / DEPLOY =====
 // Each toggle hides its class on <body>; state persisted in localStorage.
 const TOGGLES = [
-  { key: 'why',     label: '💡 WHY',     cls: 'why-hidden' },
-  { key: 'breaks',  label: '⚠️ BREAKS',  cls: 'breaks-hidden' },
-  { key: 'observe', label: '👁️ OBSERVE', cls: 'observe-hidden' },
-  { key: 'deploy',  label: '🚀 DEPLOY',  cls: 'deploy-hidden' },
+  { key: 'why',      label: '💡 WHY',      cls: 'why-hidden' },
+  { key: 'breaks',   label: '⚠️ BREAKS',   cls: 'breaks-hidden' },
+  { key: 'observe',  label: '👁️ OBSERVE',  cls: 'observe-hidden' },
+  { key: 'fail',     label: '🔴 FAIL',     cls: 'fail-hidden' },
+  { key: 'fix',      label: '🔧 FIX',      cls: 'fix-hidden' },
+  { key: 'automate', label: '⚙️ AUTOMATE', cls: 'automate-hidden' },
+  { key: 'deploy',   label: '🚀 DEPLOY',   cls: 'deploy-hidden' },
 ];
 function mountWhyToggle() {
   // Migrate legacy `lab:hideWhy` → `lab:toggle:why`

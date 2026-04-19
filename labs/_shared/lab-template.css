@@ -329,7 +329,7 @@ pre.code-plain { padding: 14px 16px; border-radius: 6px; overflow-x: auto; backg
 h1:hover .header-anchor, h2:hover .header-anchor, h3:hover .header-anchor,
 h4:hover .header-anchor { opacity: 0.6; }
 
-/* ===== Schema v2 callouts (Breaks / Observe / Deploy / Misconception) ===== */
+/* ===== Schema v3 callouts (Breaks / Observe / Deploy / Misconception / Fail / Fix / Automate) ===== */
 .callout {
   border-left: 3px solid var(--callout-color, var(--border));
   background: var(--callout-bg, var(--bg-input));
@@ -346,6 +346,39 @@ h4:hover .header-anchor { opacity: 0.6; }
 .callout-observe { --callout-color: #60a5fa; --callout-bg: rgba(96, 165, 250, 0.08); }
 .callout-deploy  { --callout-color: #a78bfa; --callout-bg: rgba(167, 139, 250, 0.08); }
 .callout-misconception { --callout-color: #fbbf24; --callout-bg: rgba(251, 191, 36, 0.08); }
+
+/* FAIL — triệu chứng + evidence (deeper red for action gravity) */
+.callout-fail { --callout-color: #ef4444; --callout-bg: rgba(239, 68, 68, 0.08); }
+.callout-fail .fail-list { margin: 4px 0 0; padding-left: 20px; }
+.callout-fail .fail-list li { margin-bottom: 8px; }
+.callout-fail .fail-symptom { color: var(--text); }
+.callout-fail .fail-evidence { margin-top: 4px; font-size: 12px; color: var(--text-dim); }
+.callout-fail .fail-evidence code {
+  background: rgba(239, 68, 68, 0.12); padding: 2px 6px; border-radius: 3px;
+  font-family: var(--mono); color: #fca5a5; font-size: 11.5px;
+}
+
+/* FIX — action sau FAIL (green) */
+.callout-fix { --callout-color: #34d399; --callout-bg: rgba(52, 211, 153, 0.08); }
+.callout-fix .fix-list { margin: 4px 0 0; padding-left: 22px; }
+.callout-fix .fix-list li { margin-bottom: 8px; }
+.callout-fix .fix-step { color: var(--text); }
+.callout-fix .fix-cmd {
+  margin: 6px 0 0; padding: 8px 10px; border-radius: 4px;
+  background: rgba(52, 211, 153, 0.06); overflow-x: auto;
+}
+.callout-fix .fix-cmd code {
+  font-family: var(--mono); font-size: 12px; color: #a7f3d0;
+  background: transparent; padding: 0;
+}
+
+/* AUTOMATE — script hoá (cyan/accent) */
+.callout-automate { --callout-color: #00e5ff; --callout-bg: rgba(0, 229, 255, 0.06); }
+.callout-automate .callout-header { margin-bottom: 6px; }
+.callout-automate .code-block { margin: 0; }
+.callout-automate .callout-note {
+  margin-top: 8px; font-size: 12px; color: var(--text-dim); font-style: italic;
+}
 
 /* Misconceptions block (top of lab) */
 .misconceptions-block {
@@ -391,6 +424,9 @@ body.why-hidden     .why-block,
 body.why-hidden     .col-why > .why-block,
 body.why-hidden     .step-why,
 body.why-hidden     .try-why { display: none !important; }
-body.breaks-hidden  .callout-breaks  { display: none !important; }
-body.observe-hidden .callout-observe { display: none !important; }
-body.deploy-hidden  .callout-deploy  { display: none !important; }
+body.breaks-hidden   .callout-breaks   { display: none !important; }
+body.observe-hidden  .callout-observe  { display: none !important; }
+body.fail-hidden     .callout-fail     { display: none !important; }
+body.fix-hidden      .callout-fix      { display: none !important; }
+body.automate-hidden .callout-automate { display: none !important; }
+body.deploy-hidden   .callout-deploy   { display: none !important; }

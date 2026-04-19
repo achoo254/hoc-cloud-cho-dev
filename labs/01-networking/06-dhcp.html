@@ -590,8 +590,33 @@
       "what": "DHCPOFFER — Server đề xuất IP",
       "why": "Server nhận Discover, chọn IP trống từ pool, rồi broadcast Offer. Tại sao vẫn broadcast? Vì client chưa có IP để unicast tới. Server có thể nhớ IP đề xuất trong thời gian ngắn chờ Request từ client.",
       "code": "# Xem DHCP pool configuration (isc-dhcp-server)\ncat /etc/dhcp/dhcpd.conf\n\n# Xem lease hiện tại của server\ncat /var/lib/dhcp/dhcpd.leases\n\n# Ví dụ cấu hình pool:\n# subnet 192.168.1.0 netmask 255.255.255.0 {\n#   range 192.168.1.50 192.168.1.200;\n#   option routers 192.168.1.1;\n#   option domain-name-servers 8.8.8.8;\n#   default-lease-time 86400;\n# }",
-      "whyBreaks": "Pool cạn là lý do phổ biến nhất server không gửi Offer. Mỗi VM dev clone không release lease → sau vài tháng pool .50-.200 đầy hết. Dấu hiệu: dhcpd.leases có hàng trăm entry, nhiều đã expired nhưng server chưa reap.",
-      "observeWith": "cat /var/lib/dhcp/dhcpd.leases | grep -c 'lease' — đếm số lease. grep 'binding state active' /var/lib/dhcp/dhcpd.leases | wc -l — đếm lease đang active. So sánh với kích thước pool để biết còn bao nhiêu IP trống."
+      "whyBreaks": "Pool cạn là lý do thường gặp nhất khi server không gửi Offer. Mỗi VM dev clone không release lease → sau vài tháng pool .50-.200 đầy hết. Dấu hiệu: dhcpd.leases có hàng trăm entry, nhiều đã expired nhưng server chưa reap.",
+      "observeWith": "cat /var/lib/dhcp/dhcpd.leases | grep -c 'lease' — đếm số lease. grep 'binding state active' /var/lib/dhcp/dhcpd.leases | wc -l — đếm lease đang active. So sánh với kích thước pool để biết còn bao nhiêu IP trống.",
+      "failModes": [
+        {
+          "symptom": "Client không lấy được IP — máy mới boot hiển thị 169.254.x.x (APIPA), mọi DHCPDISCOVER không nhận Offer",
+          "evidence": "grep 'no free leases' /var/log/syslog cho thấy: 'dhcpd: no free leases on subnet 192.168.1.0' — pool .50-.200 (151 địa chỉ) đã hết sạch"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Đếm số lease active và so sánh với pool size để xác nhận pool hết",
+          "command": "grep -c 'binding state active' /var/lib/dhcp/dhcpd.leases"
+        },
+        {
+          "step": "Tìm lease đã expired nhưng chưa được reap (thường từ VM clone không release)",
+          "command": "awk '/lease/{ip=$2} /binding state active/{print ip}' /var/lib/dhcp/dhcpd.leases | sort -u | wc -l"
+        },
+        {
+          "step": "Restart dhcpd để force reap expired lease (ngắn hạn) hoặc mở rộng pool range trong dhcpd.conf",
+          "command": "sudo systemctl restart isc-dhcp-server && sudo journalctl -u isc-dhcp-server -n 20"
+        }
+      ],
+      "automateScript": {
+        "lang": "bash",
+        "code": "#!/bin/bash\n# Monitor DHCP pool usage, alert khi > 80% đầy\n# Chạy cron mỗi 15 phút\nLEASE_FILE=\"/var/lib/dhcp/dhcpd.leases\"\nPOOL_SIZE=${1:-151}  # range .50-.200\nACTIVE=$(grep -c 'binding state active' \"$LEASE_FILE\" 2>/dev/null || echo 0)\nPCT=$(( ACTIVE * 100 / POOL_SIZE ))\necho \"[$(date '+%Y-%m-%d %H:%M')] DHCP pool: $ACTIVE/$POOL_SIZE leases active ($PCT%)\"\nif [ \"$PCT\" -gt 80 ]; then\n  logger -t dhcp-monitor \"WARN: DHCP pool ${PCT}% full ($ACTIVE/$POOL_SIZE)\"\n  echo \"WARN: Pool ${PCT}% full — consider expanding range in dhcpd.conf\"\nfi",
+        "note": "Cron: */15 * * * * /usr/local/bin/dhcp-pool-monitor.sh 151. Điều chỉnh POOL_SIZE khớp với range trong dhcpd.conf."
+      }
     },
     {
       "step": 3,
@@ -623,12 +648,28 @@
       "why": "Enterprise network thường có 1 DHCP server trung tâm phục vụ nhiều subnet. Relay agent (interface ip helper) trên router đóng vai trò 'phiên dịch viên' giữa broadcast và unicast. Không có relay → DHCP chỉ hoạt động trong 1 subnet.",
       "code": "# Cấu hình relay agent (isc-dhcp-relay)\nsudo apt install isc-dhcp-relay\n\n# /etc/default/isc-dhcp-relay\n# SERVERS=\"10.0.0.1\"  # DHCP server IP\n# INTERFACES=\"eth0 eth1\"  # Interfaces cần relay\n\n# Verify relay đang chạy\nsudo systemctl status isc-dhcp-relay\n\n# Cisco router (ip helper-address)\n# interface GigabitEthernet0/1\n#   ip helper-address 10.0.0.1",
       "whyBreaks": "Thêm VLAN mới mà quên config ip helper-address trên router → toàn bộ VM trong VLAN mới không lấy được IP. Debug: ping từ router đến DHCP server trước, rồi check relay config. Lỗi hay gặp: SERVERS trong relay config trỏ sai IP server.",
-      "observeWith": "sudo tcpdump -i eth0 port 67 -n trên relay agent — xem DHCP packet đến interface và relay forward đi. Trên DHCP server: sudo tcpdump -i any port 67 -n xem có nhận packet từ relay agent IP không (src sẽ là IP relay, không phải IP client)."
+      "observeWith": "sudo tcpdump -i eth0 port 67 -n trên relay agent — xem DHCP packet đến interface và relay forward đi. Trên DHCP server: sudo tcpdump -i any port 67 -n xem có nhận packet từ relay agent IP không (src sẽ là IP relay, không phải IP client).",
+      "failModes": [
+        {
+          "symptom": "VM trong VLAN mới không lấy được IP, tcpdump trên relay agent không thấy DHCP packet đến từ VLAN đó",
+          "evidence": "sudo tcpdump -i eth0.20 port 67 -n không có output dù client gửi Discover — interface VLAN trunk chưa được thêm vào INTERFACES trong /etc/default/isc-dhcp-relay"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Kiểm tra INTERFACES trong relay config có bao gồm VLAN interface mới không",
+          "command": "cat /etc/default/isc-dhcp-relay | grep INTERFACES"
+        },
+        {
+          "step": "Thêm VLAN interface vào relay và restart",
+          "command": "sed -i 's/INTERFACES=\"/INTERFACES=\"eth0.20 /' /etc/default/isc-dhcp-relay && sudo systemctl restart isc-dhcp-relay"
+        }
+      ]
     },
     {
       "step": 7,
       "what": "Debug DHCP fail — không lấy được IP",
-      "why": "Đây là lý do thực tế bạn học DHCP: debug được. Biết DORA flow → biết lỗi ở bước nào. Không có Offer → server chết hoặc pool hết. Có Offer nhưng không có Ack → conflict hoặc server config sai.",
+      "why": "Mục tiêu thực tế của lab DHCP: debug được khi có sự cố. Biết DORA flow → biết lỗi ở bước nào. Không có Offer → server chết hoặc pool hết. Có Offer nhưng không có Ack → conflict hoặc server config sai.",
       "code": "# 1. Check interface có UP không (L1/L2)\nip link show eth0\n\n# 2. Force DORA, xem verbose output\nsudo dhclient -v eth0 2>&1\n\n# 3. Capture để thấy bước nào fail\nsudo tcpdump -i eth0 -n -vv 'udp port 67 or udp port 68'\n\n# 4. Nếu không có Offer: check DHCP server running\n# sudo systemctl status isc-dhcp-server\n\n# 5. Fallback: set static IP tạm\nsudo ip addr add 192.168.1.99/24 dev eth0\nsudo ip route add default via 192.168.1.1",
       "whyBreaks": "Debug checklist theo thứ tự: (1) Interface UP? → ip link. (2) Discover đi ra? → tcpdump. (3) Offer về? → nếu không, server/pool problem. (4) Ack về? → nếu không, NACK/conflict. (5) IP được apply? → ip addr. Bỏ qua bước nào là debug mù.",
       "observeWith": "journalctl -u dhclient -f — log real-time của DHCP client, thấy từng bước DORA và error message rõ ràng. Kết hợp sudo tcpdump -i any port 67 or port 68 -n ở terminal khác để thấy packet level đồng thời."
@@ -644,7 +685,7 @@
         "Để DHCP server dễ nhận ra packet Discover"
       ],
       "correct": 1,
-      "whyCorrect": "Client vừa boot chưa được gán IP nào. TCP/IP yêu cầu source IP để gửi packet. RFC 2131 quy định 0.0.0.0 dùng khi client chưa có địa chỉ — đây là cách hợp lệ duy nhất để gửi UDP khi không có IP.",
+      "whyCorrect": "Client vừa boot chưa được gán IP nào. TCP/IP yêu cầu source IP để gửi packet. <a href=\"https://datatracker.ietf.org/doc/html/rfc2131\" target=\"_blank\">RFC 2131</a> quy định 0.0.0.0 dùng khi client chưa có địa chỉ — đây là cách hợp lệ duy nhất để gửi UDP khi không có IP.",
       "whyOthersWrong": {
         "0": "0.0.0.0 không liên quan bảo mật — packet vẫn broadcast toàn LAN, mọi người đều thấy. MAC address còn cố định hơn.",
         "2": "Địa chỉ broadcast là 255.255.255.255. 0.0.0.0 là 'unspecified address' khác hoàn toàn.",
@@ -664,7 +705,7 @@
       "whyOthersWrong": {
         "0": "Client biết IP server từ DHCPOFFER — field 'server identifier'. Lý do broadcast không phải vì không biết IP.",
         "2": "Ngược lại — broadcast tốn tài nguyên hơn unicast vì tất cả host đều phải xử lý. Broadcast ở đây là có mục đích cụ thể.",
-        "3": "Đây là thiết kế có chủ đích, không phải lỗi. RFC 2131 giải thích rõ lý do."
+        "3": "Đây là thiết kế có chủ đích, không phải lỗi. <a href=\"https://datatracker.ietf.org/doc/html/rfc2131\" target=\"_blank\">RFC 2131</a> giải thích rõ lý do."
       }
     },
     {
@@ -756,7 +797,7 @@
     },
     {
       "front": "Tại sao DHCPDISCOVER dùng src=0.0.0.0?",
-      "back": "Client chưa có IP nào. 0.0.0.0 là 'unspecified address' theo RFC 2131 — cách hợp lệ để gửi UDP khi chưa có địa chỉ.",
+      "back": "Client chưa có IP nào. 0.0.0.0 là 'unspecified address' theo <a href=\"https://datatracker.ietf.org/doc/html/rfc2131\" target=\"_blank\">RFC 2131</a> — cách hợp lệ để gửi UDP khi chưa có địa chỉ.",
       "why": "Hiểu điều này giải thích toàn bộ lý do DHCP phải dùng broadcast — không thể unicast khi không có source IP."
     },
     {
@@ -893,7 +934,7 @@
       badgeClass: 'badge-request',
       arrowId: 'arrow-request',
       title: '3/4 — DHCPREQUEST',
-      why: 'Client broadcast để các DHCP server khác biết mình chọn server nào. Các server không được chọn sẽ giải phóng IP đã dự trữ. IP vẫn chưa chính thức — cần ACK mới xong.',
+      why: 'Client broadcast để các DHCP server khác biết server nào được chọn. Các server không được chọn sẽ giải phóng IP đã dự trữ. IP vẫn chưa chính thức — cần ACK mới xong.',
       activeNode: 'client',
       fields: [
         { label: 'Source IP', val: '0.0.0.0 (vẫn chưa có)', cls: 'orange' },

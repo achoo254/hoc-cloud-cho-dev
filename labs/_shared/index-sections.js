@@ -3,7 +3,7 @@
 
 import { LabTemplate } from './lab-template.js';
 import { computeUserStats } from './index-stats.js';
-import { renderHero, renderHowItWorks, renderFeatures } from './index-sections-hero.js';
+import { renderDueToday } from './index-sections-due.js';
 import { renderResume, renderStats, renderHeatmap } from './index-sections-stats.js';
 import { renderRoadmap } from './index-sections-roadmap.js';
 import { renderCatalogToolbar, applyToolbarState } from './index-sections-toolbar.js';
@@ -155,9 +155,7 @@ function injectSkipLink() {
 export async function bootIndex(catalog) {
   injectSkipLink();
 
-  renderHero(document.getElementById('hero-mount'), catalog);
-  renderHowItWorks(document.getElementById('how-mount'));
-  renderFeatures(document.getElementById('features-mount'));
+  renderDueToday(document.getElementById('due-mount'), catalog, null);
   renderRoadmap(document.getElementById('roadmap-mount'), catalog, null);
 
   // Skeleton while stats load
@@ -166,8 +164,12 @@ export async function bootIndex(catalog) {
 
   const stats = await computeUserStats(catalog);
 
+  renderDueToday(document.getElementById('due-mount'), catalog, stats);
+
   if (!stats.hasData) {
-    statIds.forEach(id => { const m = document.getElementById(id); if (m) m.hidden = true; });
+    // Keep resume-mount visible with empty state; hide stats/heatmap when no activity
+    renderResume(document.getElementById('resume-mount'), stats);
+    ['stats-mount', 'heatmap-mount'].forEach(id => { const m = document.getElementById(id); if (m) m.hidden = true; });
   } else {
     renderResume(document.getElementById('resume-mount'), stats);
     renderStats(document.getElementById('stats-mount'), stats, catalog);

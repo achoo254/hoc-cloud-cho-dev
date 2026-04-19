@@ -50,7 +50,13 @@ export function renderResume(mount, stats) {
       </button>`);
   }
 
-  if (cards.length === 0) { mount.hidden = true; return; }
+  if (cards.length === 0) {
+    mount.innerHTML = `
+      <section class="resume-section" aria-label="Resume your progress">
+        <div class="resume-empty">Chưa có lab nào dang dở. Chọn lab ở catalog để bắt đầu.</div>
+      </section>`;
+    return;
+  }
 
   mount.innerHTML = `
     <section class="resume-section" aria-label="Resume your progress">
@@ -79,7 +85,7 @@ export function renderStats(mount, stats, catalog) {
 
   mount.innerHTML = `
     <section class="stats-section" aria-labelledby="stats-h2">
-      <h2 id="stats-h2" class="section-title">Tiến độ của bạn</h2>
+      <h2 id="stats-h2" class="section-title">Tiến độ học</h2>
       <div class="stats-grid">${tilesHtml}</div>
     </section>`;
 }

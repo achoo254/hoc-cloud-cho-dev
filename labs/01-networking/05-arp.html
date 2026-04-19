@@ -240,7 +240,7 @@
       </div>
       <div class="arp-concept-card">
         <h4>Frame cần gì để đi?</h4>
-        <p>Ethernet frame có 3 trường bắt buộc: <code>Dst MAC</code>, <code>Src MAC</code>, <code>EtherType</code>. Muốn gửi cho IP 192.168.1.10, bạn phải biết MAC của nó trước — đó chính là việc ARP làm.</p>
+        <p>Ethernet frame có 3 trường bắt buộc: <code>Dst MAC</code>, <code>Src MAC</code>, <code>EtherType</code>. Để gửi cho IP 192.168.1.10, host phải biết MAC của nó trước — đó chính là việc ARP làm.</p>
       </div>
       <div class="arp-concept-card">
         <h4>ARP Cache — nhớ để khỏi hỏi lại</h4>
@@ -359,7 +359,7 @@
 
       <!-- ARP Spoofing warning -->
       <div class="spoof-banner" id="spoof-banner">
-        ⚠️ <strong>ARP Spoofing:</strong> Kẻ tấn công có thể gửi ARP Reply giả với MAC của mình cho cả 2 bên → trở thành man-in-the-middle. Cache bị đầu độc → mọi traffic đi qua attacker. Phòng chống: Dynamic ARP Inspection (DAI) trên switch, hoặc dùng VPN/TLS.
+        ⚠️ <strong>ARP Spoofing:</strong> Kẻ tấn công có thể gửi ARP Reply giả khai MAC của attacker cho cả 2 bên → trở thành man-in-the-middle. Cache bị đầu độc → mọi traffic đi qua attacker. Phòng chống: Dynamic ARP Inspection (DAI) trên switch, hoặc dùng VPN/TLS.
       </div>
 
       <!-- Frame detail -->
@@ -451,7 +451,7 @@
     {
       "wrong": "Ping 8.8.8.8 sẽ ARP cho 8.8.8.8",
       "right": "Ping 8.8.8.8 (khác subnet) → ARP cho IP gateway (192.168.1.1). ARP chỉ hoạt động trong cùng broadcast domain — không ARP qua router được.",
-      "why": "Điểm dev hay nhầm nhất. Frame đi từ máy bạn đến router, không đến 8.8.8.8 trực tiếp. Router nhận frame, bóc, đóng frame mới để forward tiếp."
+      "why": "Điểm hay nhầm nhất. Frame đi từ host đến router, không đến 8.8.8.8 trực tiếp. Router nhận frame, bóc, đóng frame mới để forward tiếp."
     },
     {
       "wrong": "ip neigh show STALE nghĩa là entry sai hoặc lỗi",
@@ -498,7 +498,7 @@
     },
     {
       "what": "ARP Spoofing",
-      "why": "Attacker gửi ARP Reply giả nhanh hơn, khai báo MAC của mình ứng với IP gateway/victim → cả 2 máy lưu MAC sai vào cache → mọi traffic đi qua attacker (MITM). Không cần crack mật khẩu — chỉ cần ở cùng LAN.",
+      "why": "Attacker gửi ARP Reply giả nhanh hơn, khai báo MAC của attacker ứng với IP gateway/victim → cả 2 máy lưu MAC sai vào cache → mọi traffic đi qua attacker (MITM). Không cần crack mật khẩu — chỉ cần ở cùng LAN.",
       "whyBreaks": "Victim không detect được: mọi traffic vẫn đi được (attacker forward tiếp), latency tăng nhẹ. Dấu hiệu: 2 IP có cùng MAC trong ip neigh, hoặc latency đột biến trong LAN. Sau khi MITM: attacker đọc/sửa traffic không encrypt.",
       "deploymentUse": "Phòng ngừa: Dynamic ARP Inspection (DAI) trên managed switch, dùng HTTPS/TLS cho mọi service (MITM không đọc được), VPN trong LAN không tin cậy (khách sạn, cafe). Trên cloud: security group ngăn VM khác spoof ARP nhờ hypervisor enforcement."
     }
@@ -518,7 +518,23 @@
       "why": "Cache miss → kernel phát frame broadcast (Eth dst=FF:FF:FF:FF:FF:FF) hỏi 'Ai có IP 192.168.1.10?'. Mọi máy trong LAN nhận nhưng chỉ máy có IP đó reply. Capture được bằng tcpdump để xem thực tế.",
       "whyBreaks": "Không thấy ARP Reply sau Request → host không tồn tại, host tắt, hoặc host disable ARP (một số firewall config). Phân biệt: nếu thấy Request broadcast nhưng không có Reply → vấn đề ở phía đích, không phải sender.",
       "observeWith": "sudo tcpdump -i eth0 -n arp  # Xem 'arp who-has' (request) và 'arp reply' (reply)\n# Request: Ethernet dst=ff:ff:ff:ff:ff:ff (broadcast)\n# Reply: Ethernet dst=<MAC của người hỏi> (unicast)\nsudo arping -I eth0 -c 1 192.168.1.10  # Test ARP thủ công, xem có reply không",
-      "code": "# Xem ARP broadcast trên dây bằng tcpdump\nsudo tcpdump -i eth0 -n arp\n\n# Hoặc dùng arping để thủ công gửi ARP request\nsudo arping -I eth0 -c 1 192.168.1.10"
+      "code": "# Xem ARP broadcast trên dây bằng tcpdump\nsudo tcpdump -i eth0 -n arp\n\n# Hoặc dùng arping để thủ công gửi ARP request\nsudo arping -I eth0 -c 1 192.168.1.10",
+      "failModes": [
+        {
+          "symptom": "Mạng chậm đột ngột, mọi máy trong LAN bị ảnh hưởng dù không có traffic lớn",
+          "evidence": "dmesg hoặc /var/log/kern.log: 'net_ratelimit: X callbacks suppressed' kèm tcpdump thấy hàng trăm ARP Request/giây từ nhiều src MAC khác nhau — dấu hiệu ARP storm do loop hoặc misconfigured NIC bonding"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Xác định nguồn storm: đếm ARP rate trên switch port hoặc tcpdump",
+          "command": "sudo tcpdump -i eth0 -n arp | awk '{print $NF}' | sort | uniq -c | sort -rn | head -20"
+        },
+        {
+          "step": "Cô lập port nghi ngờ trên managed switch để dừng storm",
+          "command": "sudo ip link set eth0 down  # tạm thời isolate interface đang bị flood"
+        }
+      ]
     },
     {
       "step": 3,
@@ -539,10 +555,35 @@
     {
       "step": 5,
       "what": "Bước 5 — ARP Spoofing: đầu độc cache",
-      "why": "Attacker gửi gratuitous ARP Reply (không được yêu cầu): 'Tôi là 192.168.1.1 và MAC tôi là attacker_mac'. Nạn nhân cập nhật cache với MAC sai → gửi traffic tới attacker thay vì gateway. Dùng arpspoof (dsniff) hoặc Scapy. Phòng: DAI trên managed switch.",
-      "whyBreaks": "ARP không authenticate sender — bất kỳ máy nào cũng có thể claim bất kỳ IP nào. Đây là lỗ hổng by design của RFC 826. Không thể 'patch' ARP — phải phòng ở tầng khác (DAI switch, VPN, TLS).",
+      "why": "Attacker gửi gratuitous ARP Reply (không được yêu cầu): '192.168.1.1 có MAC là attacker_mac'. Nạn nhân cập nhật cache với MAC sai → gửi traffic tới attacker thay vì gateway. Dùng arpspoof (dsniff) hoặc Scapy. Phòng: DAI trên managed switch.",
+      "whyBreaks": "ARP không authenticate sender — bất kỳ máy nào cũng có thể claim bất kỳ IP nào. Đây là lỗ hổng by design của <a href=\"https://datatracker.ietf.org/doc/html/rfc826\" target=\"_blank\">RFC 826</a>. Không thể 'patch' ARP — phải phòng ở tầng khác (DAI switch, VPN, TLS).",
       "observeWith": "ip neigh show | awk '{print $5}' | sort | uniq -d  # Tìm MAC trùng lặp\n# Nếu có output → 2 IP chia sẻ 1 MAC → dấu hiệu spoofing hoặc NIC bonding\narp-scan --localnet  # Scan ARP toàn LAN, so sánh MAC với expected",
-      "code": "# Phát hiện ARP spoofing bằng arp-scan hoặc xem bất thường\n# (trên Linux - chỉ để học, KHÔNG dùng tấn công thật)\narp -a | sort -t'.' -k4 -n  # Xem toàn bộ cache, tìm MAC trùng lặp\n\n# Phát hiện: 2 IP có cùng MAC = dấu hiệu spoofing\n# ip neigh | awk '{print $5}' | sort | uniq -d"
+      "code": "# Phát hiện ARP spoofing bằng arp-scan hoặc xem bất thường\n# (trên Linux - chỉ để học, KHÔNG dùng tấn công thật)\narp -a | sort -t'.' -k4 -n  # Xem toàn bộ cache, tìm MAC trùng lặp\n\n# Phát hiện: 2 IP có cùng MAC = dấu hiệu spoofing\n# ip neigh | awk '{print $5}' | sort | uniq -d",
+      "failModes": [
+        {
+          "symptom": "Traffic đến gateway bị mất hoặc đi sai hướng, latency LAN tăng đột biến ~2-5ms",
+          "evidence": "ip neigh show | awk '/192.168.1.1/{print}' trả ra MAC không khớp với MAC thật của gateway — ví dụ: '192.168.1.1 dev eth0 lladdr de:ad:be:ef:00:01 REACHABLE' trong khi MAC thật gateway là aa:bb:cc:dd:ee:01"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Xác nhận MAC gateway thật bằng cách hỏi trực tiếp switch hoặc so sánh với baseline",
+          "command": "sudo arping -I eth0 -c 2 192.168.1.1 | grep 'reply from'"
+        },
+        {
+          "step": "Xóa ARP cache entry bị nhiễm, buộc re-resolve",
+          "command": "sudo ip neigh del 192.168.1.1 dev eth0 && ping -c 1 192.168.1.1"
+        },
+        {
+          "step": "Thêm static ARP entry cho gateway để chặn spoof tiếp theo (tạm thời)",
+          "command": "sudo ip neigh add 192.168.1.1 lladdr aa:bb:cc:dd:ee:01 dev eth0 nud permanent"
+        }
+      ],
+      "automateScript": {
+        "lang": "bash",
+        "code": "#!/bin/bash\n# Phát hiện duplicate MAC (ARP spoofing indicator) trên LAN\n# Dùng arp-scan, chạy cron mỗi 5 phút\nINTERFACE=${1:-eth0}\nDUPS=$(sudo arp-scan --interface=\"$INTERFACE\" --localnet 2>/dev/null \\\n  | awk '/DUP/{print $1, $2}' | sort -u)\nif [ -n \"$DUPS\" ]; then\n  echo \"[ALERT $(date '+%Y-%m-%d %H:%M:%S')] Duplicate MAC detected on $INTERFACE:\"\n  echo \"$DUPS\"\n  logger -t arp-monitor \"ALERT: duplicate MAC — $DUPS\"\nfi",
+        "note": "Cron: */5 * * * * /usr/local/bin/arp-monitor.sh eth0. Cần gói arp-scan. Log vào syslog để alert tập trung."
+      }
     },
     {
       "step": 6,
@@ -555,9 +596,9 @@
     {
       "step": 7,
       "what": "Bước 7 — Gratuitous ARP và IP conflict detection",
-      "why": "Khi interface up, Linux tự gửi Gratuitous ARP: broadcast 'Tôi có IP 192.168.1.5'. Mục đích: (1) cập nhật cache mọi máy với MAC mới, (2) phát hiện IP conflict — nếu có ai reply thì có 2 máy cùng IP. Đây cũng là cơ chế failover VIP (VRRP/keepalived) dùng.",
+      "why": "Khi interface up, Linux tự gửi Gratuitous ARP: broadcast '192.168.1.5 có MAC là ...'. Mục đích: (1) cập nhật cache mọi máy với MAC mới, (2) phát hiện IP conflict — nếu có ai reply thì có 2 máy cùng IP. Đây cũng là cơ chế failover VIP (VRRP/keepalived) dùng.",
       "whyBreaks": "Sau keepalived failover mà không gửi Gratuitous ARP → các host trong LAN giữ cache cũ (MAC node primary) → traffic đến VIP vẫn đi tới node đã down → downtime kéo dài đến khi cache expire (~5 phút). Gratuitous ARP là bước bắt buộc trong failover.",
-      "observeWith": "sudo tcpdump -i eth0 arp  # Xem Gratuitous ARP khi arping -A\n# Gratuitous: sender IP = target IP (tự hỏi chính mình)\narping -D -I eth0 192.168.1.5  # Duplicate Address Detection: exit 1 = conflict",
+      "observeWith": "sudo tcpdump -i eth0 arp  # Xem Gratuitous ARP khi arping -A\n# Gratuitous: sender IP = target IP (host tự hỏi chính địa chỉ của nó)\narping -D -I eth0 192.168.1.5  # Duplicate Address Detection: exit 1 = conflict",
       "code": "# Gửi Gratuitous ARP thủ công (ví dụ sau failover)\narping -A -I eth0 -c 3 192.168.1.5\n\n# Hoặc dùng arping để kiểm tra IP conflict:\narping -D -I eth0 192.168.1.5\n# Exit code 1 = có conflict"
     }
   ],
@@ -579,10 +620,10 @@
       }
     },
     {
-      "q": "Bạn ping 8.8.8.8 từ máy 192.168.1.5. ARP request sẽ hỏi MAC của IP nào?",
+      "q": "Ping 8.8.8.8 từ host 192.168.1.5. ARP request sẽ hỏi MAC của IP nào?",
       "options": [
         "8.8.8.8 — IP đích cần ping",
-        "192.168.1.5 — IP của chính mình",
+        "192.168.1.5 — IP của host gửi",
         "192.168.1.1 — IP của default gateway",
         "Không có ARP vì 8.8.8.8 là Internet"
       ],
@@ -590,7 +631,7 @@
       "whyCorrect": "8.8.8.8 không cùng subnet → kernel tra routing table → next hop là default gateway 192.168.1.1. Frame phải tới gateway trước → ARP hỏi MAC của 192.168.1.1, không phải 8.8.8.8. MAC của 8.8.8.8 không tồn tại trong LAN này.",
       "whyOthersWrong": {
         "0": "8.8.8.8 ở mạng khác — ARP chỉ hoạt động trong cùng 1 broadcast domain (LAN). Không thể ARP qua router.",
-        "1": "ARP chính mình vô nghĩa. Gratuitous ARP khác — gửi để thông báo, không phải hỏi.",
+        "1": "ARP chính host gửi là vô nghĩa. Gratuitous ARP khác — gửi để thông báo, không phải hỏi.",
         "3": "Sai — ARP vẫn xảy ra, nhưng cho IP gateway. Nếu không có ARP thì không có frame nào đi được."
       }
     },
@@ -637,7 +678,7 @@
       "correct": 1,
       "whyCorrect": "ARP không có cơ chế xác thực — máy nhận Reply sẽ tin tưởng và cập nhật cache ngay lập tức, kể cả khi không gửi Request trước (gratuitous ARP). Victim gửi traffic tới attacker_mac thay vì gateway → attacker forward tiếp để tránh lộ, đọc/sửa nội dung.",
       "whyOthersWrong": {
-        "0": "ARP không có cơ chế verify — đây là weakness by design. RFC 826 không có authentication.",
+        "0": "ARP không có cơ chế verify — đây là weakness by design. <a href=\"https://datatracker.ietf.org/doc/html/rfc826\" target=\"_blank\">RFC 826</a> không có authentication.",
         "2": "Switch thông thường (unmanaged) không inspect ARP. Chỉ managed switch với Dynamic ARP Inspection (DAI) mới block.",
         "3": "Router chỉ xử lý L3 (IP). Frame vào router dựa trên MAC — nếu MAC đúng là router thì router nhận bình thường."
       }
@@ -659,7 +700,7 @@
       }
     },
     {
-      "q": "Sau khi ip neigh flush all, bạn ping 192.168.1.10 thành công. Điều gì xảy ra với ARP?",
+      "q": "Sau khi ip neigh flush all, ping 192.168.1.10 thành công. Điều gì xảy ra với ARP?",
       "options": [
         "Ping dùng IP trực tiếp, không cần ARP",
         "ARP Request broadcast → Reply từ 192.168.1.10 → cache được populate → ICMP gửi được",
@@ -704,11 +745,11 @@
     {
       "front": "ARP Spoofing hoạt động thế nào?",
       "back": "Attacker gửi ARP Reply giả (không cần được hỏi trước): 'IP_victim/gateway có MAC=attacker_mac'. Nạn nhân tin → cache nhiễm → MITM.",
-      "why": "ARP không có authentication — đây là điểm yếu by design của RFC 826. Biết điều này để hiểu tại sao cần DAI trên switch và tại sao không tin mạng LAN lạ (khách sạn, cafe)."
+      "why": "ARP không có authentication — đây là điểm yếu by design của <a href=\"https://datatracker.ietf.org/doc/html/rfc826\" target=\"_blank\">RFC 826</a>. Biết điều này để hiểu tại sao cần DAI trên switch và tại sao không tin mạng LAN lạ (khách sạn, cafe)."
     },
     {
       "front": "Gratuitous ARP là gì? Dùng khi nào?",
-      "back": "ARP Request/Reply mà sender IP = target IP (tự hỏi chính mình). Dùng: (1) thông báo MAC mới sau failover, (2) phát hiện IP conflict, (3) VRRP/keepalived.",
+      "back": "ARP Request/Reply mà sender IP = target IP (host tự khai IP của chính nó). Dùng: (1) thông báo MAC mới sau failover, (2) phát hiện IP conflict, (3) VRRP/keepalived.",
       "why": "Keepalived/VRRP gửi Gratuitous ARP khi VIP chuyển sang node backup — mọi máy cập nhật cache với MAC mới. Không có Gratuitous ARP thì traffic bị blackhole trong ~5 phút đến khi cache cũ expire."
     },
     {
@@ -736,7 +777,7 @@
     {
       "why": "Quan sát ARP Request/Reply trực tiếp trên dây — thấy broadcast và unicast bằng mắt thường",
       "cmd": "# Flush cache trước để đảm bảo có ARP mới\nsudo ip neigh flush all\n\n# Capture ARP trên terminal 1\nsudo tcpdump -i eth0 -n -vvv arp\n\n# Trên terminal 2: ping để trigger\nping -c 1 192.168.1.1",
-      "observeWith": "# Request: Ethernet dst=ff:ff:ff:ff:ff:ff (broadcast)\n# 'arp who-has 192.168.1.1 tell 192.168.1.5'\n# Reply: Ethernet dst=<MAC của bạn> (unicast)\n# 'arp reply 192.168.1.1 is-at aa:bb:cc:dd:ee:01'"
+      "observeWith": "# Request: Ethernet dst=ff:ff:ff:ff:ff:ff (broadcast)\n# 'arp who-has 192.168.1.1 tell 192.168.1.5'\n# Reply: Ethernet dst=<MAC requester> (unicast)\n# 'arp reply 192.168.1.1 is-at aa:bb:cc:dd:ee:01'"
     },
     {
       "why": "Xem ARP cache và hiểu trạng thái REACHABLE/STALE — cơ sở để debug 'host unreachable'",
@@ -809,8 +850,8 @@
       },
       {
         title: 'Bước 3/5 — PC-C và Gateway im lặng',
-        desc: 'PC-C (192.168.1.20) và Gateway (192.168.1.1) đọc ARP Request — IP không khớp với mình → bỏ qua. Chỉ PC-B phải trả lời.',
-        why: '<strong>Tại sao chỉ có 1 máy reply?</strong> ARP Request chứa Target IP. Mỗi máy so sánh Target IP với IP của mình — không khớp thì drop. Thiết kế này ngăn ARP storm.',
+        desc: 'PC-C (192.168.1.20) và Gateway (192.168.1.1) đọc ARP Request — IP không khớp → bỏ qua. Chỉ PC-B phải trả lời.',
+        why: '<strong>Tại sao chỉ có 1 máy reply?</strong> ARP Request chứa Target IP. Mỗi máy so sánh Target IP với IP của chính nó — không khớp thì drop. Thiết kế này ngăn ARP storm.',
         highlight: { b: 'highlight-reply' },
         frame: null,
         logType: 'info',
