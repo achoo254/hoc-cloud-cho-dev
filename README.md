@@ -10,22 +10,25 @@ Personal workspace để tự học Cloud/DevOps. Vite+React SPA + Hono API serv
 | `server/` | Hono.js: `/api/search` (FTS5) + `/api/progress` + `/sse` reload |
 | `content/` | Lab TypeScript modules (generated từ `fixtures/labs/*.json`) |
 | `fixtures/` | Lab fixture JSON — source of truth cho lab content |
-| `docs/` | Tài liệu dự án (architecture, guidelines, roadmap) |
+| `scripts/` | Build scripts (fixtures → TS, server data bundler) |
+| `docs/` | Tài liệu dự án |
 | `plans/` | Plan triển khai các thay đổi |
-| `deploy/` | Nginx config + remote deploy script |
+| `deploy/` | `nginx.conf.example` tham chiếu |
 | `data/` | `hoccloud.db` — SQLite (labs + FTS + progress) |
 
 ## Development
 
 ```bash
-npm install          # install root + server deps
+npm install              # root deps
+npm install --prefix app # app deps
 ```
 
 ```bash
-# Terminal 1
-npm run dev:server   # Hono API on :3000
-# Terminal 2
-npm run dev:app      # Vite dev server on :5173 (proxy → :3000)
+# Terminal 1 — Hono API (port 8387)
+npm run dev:server
+
+# Terminal 2 — Vite dev server (port 5173, proxy /api → :8387)
+npm run dev:app
 ```
 
 Open http://localhost:5173
@@ -33,29 +36,27 @@ Open http://localhost:5173
 ## Building for production
 
 ```bash
-npm run build --prefix app
-# outputs to app/dist/
-# also regenerates content/ (gen:content runs automatically before vite build)
+npm run build --prefix app   # FE → app/dist/
+npm run build:server         # BE → dist-server/server.bundle.js (esbuild)
 ```
 
 ## Deploy
 
-```bash
-bash deploy/remote-deploy.sh [user@host]
-```
+GitHub Actions workflow `.github/workflows/deploy.yml` tự chạy khi push `master`:
+1. Build FE (Vite) + BE (esbuild bundle)
+2. Smoke test `/healthz`
+3. Stage chỉ `app/dist/` + `server.bundle.js` + `node_modules/better-sqlite3`
+4. SCP lên VPS, extract, `pm2 restart`
 
-Script sẽ: build SPA locally → rsync `app/dist/` + `server/` → reload nginx → restart pm2.
-Xem `deploy/remote-deploy.sh` để cấu hình `REMOTE_HOST`, `REMOTE_BASE`, `PM2_APP`.
+VPS không cần `package.json`, không `npm ci`. Nginx config tham chiếu ở `deploy/nginx.conf.example`.
 
 ## Thêm lab mới
 
-Lab content sống trong `fixtures/labs/*.json` (schema v3). Quy trình:
-
-1. Thêm fixture JSON vào `fixtures/labs/` (copy từ lab hiện có, sửa `slug` + `title` + content)
-2. Validate schema: `npm run validate:schema`
-3. Regenerate content modules: `npm run gen:content`
-4. Kiểm tra trong app: `npm run dev:app`
-5. Sync vào DB: `node server/scripts/sync-labs-to-db.js`
+1. Tạo fixture JSON trong `fixtures/labs/` (schema v3 — xem `docs/lab-schema-v3.md`)
+2. Validate: `node scripts/validate-lab-fixtures.js`
+3. Generate content modules + indexes: `npm run gen:content`
+4. Xem trong app: `npm run dev:app` (FE tự reload)
+5. Sync vào DB server: `node server/scripts/sync-labs-to-db.js`
 
 Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 
@@ -64,10 +65,10 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 | Method | Path | Mô tả |
 |--------|------|-------|
 | GET | `/healthz` | Health + DB status |
-| GET | `/api/search?q=<q>` | FTS5 full-text search qua labs |
-| GET | `/api/progress` | Trả `{ uuid, progress: [...] }` cho cookie |
+| GET | `/api/search?q=<q>` | FTS5 full-text search (bm25 rank + `<mark>` highlight) |
+| GET | `/api/progress` | Trả `{ uuid, progress: [...] }` theo cookie |
 | POST | `/api/progress` | Upsert `{ lab_slug, opened_at?, completed_at?, quiz_score? }` |
-| GET | `/sse` | Server-Sent Events (hot reload dev) |
+| GET | `/sse/reload` | Server-Sent Events (dev live-reload) |
 
 ## Cheat-sheet
 
@@ -75,15 +76,9 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 # Reset progress (browser)
 DevTools → Application → Local Storage → xoá key lab:*
 
-# Sync fixtures → DB
+# Sync fixtures → DB (chạy ngầm khi server boot, cũng chạy CLI được)
 node server/scripts/sync-labs-to-db.js
 
-# DB migration
-node server/db/migrate.js
-
-# Rollback nginx (MODE A — fast)
-bash deploy/rollback.sh nginx
-
-# Full code rollback
-bash deploy/rollback.sh [<sha>]
+# Fresh DB (local dev)
+rm data/hoccloud.db && npm run dev:server
 ```

@@ -1,55 +1,57 @@
--- Phase 1 initial schema: topics, sections (+ FTS5), lab_links, admin_sessions
+-- Unified initial schema (reset cuts 002/003 legacy).
+-- Tables: labs + labs_fts (FTS5 external-content) + progress.
 
-CREATE TABLE IF NOT EXISTS topics (
+CREATE TABLE IF NOT EXISTS labs (
   id INTEGER PRIMARY KEY,
   slug TEXT UNIQUE NOT NULL,
+  module TEXT NOT NULL,
   title TEXT NOT NULL,
-  order_idx INTEGER DEFAULT 0,
-  created_at INTEGER DEFAULT (strftime('%s','now'))
+  file_path TEXT NOT NULL,
+  tldr_json TEXT NOT NULL DEFAULT '[]',
+  walkthrough_json TEXT NOT NULL DEFAULT '[]',
+  quiz_json TEXT NOT NULL DEFAULT '[]',
+  flashcards_json TEXT NOT NULL DEFAULT '[]',
+  try_at_home_json TEXT NOT NULL DEFAULT '[]',
+  estimated_minutes INTEGER,
+  content_hash TEXT,
+  updated_at INTEGER DEFAULT (strftime('%s','now'))
 );
 
-CREATE TABLE IF NOT EXISTS sections (
-  id INTEGER PRIMARY KEY,
-  topic_id INTEGER REFERENCES topics(id) ON DELETE CASCADE,
-  slug TEXT NOT NULL,
-  title TEXT NOT NULL,
-  body_md TEXT NOT NULL DEFAULT '',
-  order_idx INTEGER DEFAULT 0,
-  updated_at INTEGER DEFAULT (strftime('%s','now')),
-  UNIQUE(topic_id, slug)
-);
+CREATE INDEX IF NOT EXISTS idx_labs_module ON labs(module, slug);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS sections_fts USING fts5(
-  title, body_md,
-  content='sections', content_rowid='id',
+-- FTS5 external-content index — column names mirror labs.* for snippet() to work.
+CREATE VIRTUAL TABLE IF NOT EXISTS labs_fts USING fts5(
+  title, tldr_json, walkthrough_json, quiz_json, flashcards_json, try_at_home_json,
+  content='labs', content_rowid='id',
   tokenize='unicode61 remove_diacritics 2'
 );
 
-CREATE TRIGGER IF NOT EXISTS sections_ai AFTER INSERT ON sections BEGIN
-  INSERT INTO sections_fts(rowid, title, body_md) VALUES (new.id, new.title, new.body_md);
+CREATE TRIGGER IF NOT EXISTS labs_ai AFTER INSERT ON labs BEGIN
+  INSERT INTO labs_fts(rowid, title, tldr_json, walkthrough_json, quiz_json, flashcards_json, try_at_home_json)
+  VALUES (new.id, new.title, new.tldr_json, new.walkthrough_json, new.quiz_json, new.flashcards_json, new.try_at_home_json);
 END;
 
-CREATE TRIGGER IF NOT EXISTS sections_ad AFTER DELETE ON sections BEGIN
-  INSERT INTO sections_fts(sections_fts, rowid, title, body_md) VALUES('delete', old.id, old.title, old.body_md);
+CREATE TRIGGER IF NOT EXISTS labs_ad AFTER DELETE ON labs BEGIN
+  INSERT INTO labs_fts(labs_fts, rowid, title, tldr_json, walkthrough_json, quiz_json, flashcards_json, try_at_home_json)
+  VALUES('delete', old.id, old.title, old.tldr_json, old.walkthrough_json, old.quiz_json, old.flashcards_json, old.try_at_home_json);
 END;
 
-CREATE TRIGGER IF NOT EXISTS sections_au AFTER UPDATE ON sections BEGIN
-  INSERT INTO sections_fts(sections_fts, rowid, title, body_md) VALUES('delete', old.id, old.title, old.body_md);
-  INSERT INTO sections_fts(rowid, title, body_md) VALUES (new.id, new.title, new.body_md);
+CREATE TRIGGER IF NOT EXISTS labs_au AFTER UPDATE ON labs BEGIN
+  INSERT INTO labs_fts(labs_fts, rowid, title, tldr_json, walkthrough_json, quiz_json, flashcards_json, try_at_home_json)
+  VALUES('delete', old.id, old.title, old.tldr_json, old.walkthrough_json, old.quiz_json, old.flashcards_json, old.try_at_home_json);
+  INSERT INTO labs_fts(rowid, title, tldr_json, walkthrough_json, quiz_json, flashcards_json, try_at_home_json)
+  VALUES (new.id, new.title, new.tldr_json, new.walkthrough_json, new.quiz_json, new.flashcards_json, new.try_at_home_json);
 END;
 
-CREATE TABLE IF NOT EXISTS lab_links (
-  section_id INTEGER REFERENCES sections(id) ON DELETE CASCADE,
+-- Progress tracking (anonymous UUID, multi-device).
+CREATE TABLE IF NOT EXISTS progress (
+  user_uuid TEXT NOT NULL,
   lab_slug TEXT NOT NULL,
-  PRIMARY KEY (section_id, lab_slug)
+  opened_at INTEGER,
+  completed_at INTEGER,
+  quiz_score INTEGER,
+  last_updated INTEGER DEFAULT (strftime('%s','now')),
+  PRIMARY KEY (user_uuid, lab_slug)
 );
 
-CREATE TABLE IF NOT EXISTS admin_sessions (
-  token_hash TEXT PRIMARY KEY,
-  github_user TEXT NOT NULL,
-  expires_at INTEGER NOT NULL,
-  created_at INTEGER DEFAULT (strftime('%s','now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_sections_topic ON sections(topic_id, order_idx);
-CREATE INDEX IF NOT EXISTS idx_admin_sessions_exp ON admin_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_uuid, last_updated DESC);

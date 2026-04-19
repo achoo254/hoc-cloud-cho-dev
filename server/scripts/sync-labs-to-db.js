@@ -1,22 +1,7 @@
-// Upsert lab records into `labs` table. Source data comes from the build-time
-// generated module `server/generated/labs-data.mjs` so the bundled server does
-// not need to walk the filesystem.
-import { createHash } from 'node:crypto';
+// Upsert lab records into `labs` table from build-time generated module.
+// Source: fixtures/labs/*.json (schema v3). Content already parsed — no HTML extract.
 import db from '../db/sqlite-client.js';
 import { labs } from '../generated/labs-data.mjs';
-
-const LAB_DATA_RE = /<script\s+type=["']application\/json["']\s+id=["']lab-data["']\s*>([\s\S]*?)<\/script>/i;
-
-function extractLabData(html) {
-  const m = html.match(LAB_DATA_RE);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1]);
-  } catch (err) {
-    console.warn(`[sync-labs] JSON parse error: ${err.message}`);
-    return null;
-  }
-}
 
 const upsert = db.prepare(`
   INSERT INTO labs (slug, module, title, file_path, tldr_json, walkthrough_json,
@@ -41,31 +26,27 @@ const upsert = db.prepare(`
 `);
 const getHash = db.prepare('SELECT content_hash FROM labs WHERE slug = ?');
 
-export function syncLabsToDb({ verbose = false } = {}) {
-  let inserted = 0, updated = 0, skipped = 0, failed = 0;
+export function syncLabsToDb() {
+  let inserted = 0, updated = 0, skipped = 0;
 
   for (const lab of labs) {
-    const data = extractLabData(lab.html);
-    if (!data) { failed++; if (verbose) console.warn(`[sync-labs] skip (no lab-data): ${lab.file_path}`); continue; }
-
-    const hash = createHash('sha1').update(lab.html).digest('hex');
     const existing = getHash.get(lab.slug);
 
     const row = {
       slug: lab.slug,
       module: lab.module,
-      title: String(data.title || lab.slug),
+      title: lab.title,
       file_path: lab.file_path,
-      tldr_json: JSON.stringify(data.tldr || []),
-      walkthrough_json: JSON.stringify(data.walkthrough || []),
-      quiz_json: JSON.stringify(data.quiz || []),
-      flashcards_json: JSON.stringify(data.flashcards || []),
-      try_at_home_json: JSON.stringify(data.tryAtHome || data.try_at_home || []),
-      estimated_minutes: Number.isFinite(data.estimatedMinutes) ? data.estimatedMinutes : null,
-      content_hash: hash,
+      tldr_json: JSON.stringify(lab.tldr),
+      walkthrough_json: JSON.stringify(lab.walkthrough),
+      quiz_json: JSON.stringify(lab.quiz),
+      flashcards_json: JSON.stringify(lab.flashcards),
+      try_at_home_json: JSON.stringify(lab.tryAtHome),
+      estimated_minutes: lab.estimatedMinutes,
+      content_hash: lab.content_hash,
     };
 
-    if (existing && existing.content_hash === hash) {
+    if (existing && existing.content_hash === lab.content_hash) {
       skipped++;
       continue;
     }
@@ -73,12 +54,10 @@ export function syncLabsToDb({ verbose = false } = {}) {
     if (existing) updated++; else inserted++;
   }
 
-  console.log(`[sync-labs] ${inserted} new, ${updated} updated, ${skipped} unchanged, ${failed} skipped (no lab-data)`);
-  return { inserted, updated, skipped, failed };
+  console.log(`[sync-labs] ${inserted} new, ${updated} updated, ${skipped} unchanged`);
+  return { inserted, updated, skipped };
 }
 
-// CLI entry
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` ||
-    process.argv[1]?.endsWith('sync-labs-to-db.js')) {
-  syncLabsToDb({ verbose: true });
+if (process.argv[1]?.endsWith('sync-labs-to-db.js')) {
+  syncLabsToDb();
 }
