@@ -5,318 +5,113 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Learning Labs — Cloud/DevOps</title>
 <link rel="stylesheet" href="_shared/lab-template.css">
-<style>
-  .hero-big { text-align: left; padding: 50px 28px; }
-  .hero-big h1 { font-size: 36px; margin: 0 0 10px; letter-spacing: -0.02em; }
-  .hero-big p { color: var(--text-dim); font-size: 16px; max-width: 720px; }
-  .phase-group { margin-bottom: 32px; }
-  .phase-title {
-    font-family: var(--mono); font-size: 13px; color: var(--text-dim);
-    text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 14px;
-  }
-  .phase-title .count { color: var(--accent); }
-  .due-banner {
-    background: var(--why-dim); border: 1px solid var(--why-border);
-    border-radius: 8px; padding: 16px 20px; margin-bottom: 24px;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .due-banner .big { font-size: 24px; font-weight: 700; color: var(--why); }
-  .lab-card { position: relative; }
-  .lab-card .progress-bar {
-    height: 4px; background: var(--bg-input); border-radius: 2px; margin-top: 10px; overflow: hidden;
-  }
-  .lab-card .progress-bar .fill {
-    height: 100%; background: var(--green); transition: width 0.3s;
-  }
-
-  /* Bookmark preview — "đang đọc tới đâu" */
-  .lab-bookmark {
-    margin-top: 12px; padding: 10px 12px;
-    background: var(--why-dim); border-left: 2px solid var(--why);
-    border-radius: 4px; font-size: 12px; line-height: 1.5;
-    cursor: pointer; transition: background 0.15s, transform 0.15s;
-  }
-  .lab-bookmark:hover {
-    background: rgba(255, 184, 107, 0.22);
-    transform: translateX(2px);
-  }
-  .lab-bookmark .bm-resume {
-    color: var(--why); font-family: var(--mono); font-size: 11px;
-    margin-top: 6px; opacity: 0.85;
-  }
-  .lab-bookmark:hover .bm-resume { opacity: 1; }
-  .lab-bookmark .bm-head {
-    display: flex; justify-content: space-between; gap: 8px;
-    color: var(--why); font-family: var(--mono); font-size: 11px;
-    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
-  }
-  .lab-bookmark .bm-section { color: var(--text); font-weight: 600; }
-  .lab-bookmark .bm-snippet {
-    color: var(--text-dim); margin-top: 4px;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .lab-bookmark .bm-pct { color: var(--text-muted); }
-
-  /* Card action menu */
-  .lab-card .card-menu-btn {
-    position: absolute; top: 10px; right: 10px;
-    width: 28px; height: 28px; border-radius: 6px;
-    background: transparent; border: 1px solid transparent;
-    color: var(--text-dim); font-size: 18px; line-height: 1;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s; z-index: 2;
-  }
-  .lab-card:hover .card-menu-btn { border-color: var(--border); color: var(--text); }
-  .lab-card .card-menu-btn:hover { background: var(--bg-input); color: var(--accent); border-color: var(--accent); }
-  .card-menu-pop {
-    position: absolute; top: 42px; right: 10px; z-index: 20;
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px; min-width: 200px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-    display: none;
-  }
-  .card-menu-pop.open { display: block; }
-  .card-menu-pop button {
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    width: 100%; padding: 8px 10px; border: 0; background: transparent;
-    color: var(--text); font-family: var(--sans); font-size: 13px; text-align: left;
-    border-radius: 5px; cursor: pointer;
-  }
-  .card-menu-pop button:hover { background: var(--bg-input); color: var(--accent); }
-  .card-menu-pop button.danger:hover { background: var(--red-dim); color: var(--red); }
-  .card-menu-pop .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
-  .card-menu-pop .menu-hint { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
-</style>
+<link rel="stylesheet" href="_shared/index-page.css">
 </head>
 <body>
 
-<main class="lab-container">
+<main class="lab-container" id="main-content">
 
-  <section class="lab-section hero-big">
-    <h1>Learning Labs</h1>
-    <p>Mỗi lab = 1 buổi học tự chứa. WHY-first, có playground + quiz + flashcard SM-2. Production: <a href="https://hoc-cloud.inetdev.io.vn" style="color: var(--accent)">hoc-cloud.inetdev.io.vn</a>. Local dev:</p>
-    <div class="code-block mt-16" style="max-width: 500px">npm install &amp;&amp; npm start<button class="copy-btn" onclick="navigator.clipboard.writeText('npm install && npm start'); this.textContent='✓ copied';">copy</button></div>
-  </section>
+  <!-- Phase 02: Hero / How / Features -->
+  <div id="hero-mount"></div>
+  <div id="how-mount"></div>
+  <div id="features-mount"></div>
 
-  <div id="due-banner-mount"></div>
+  <!-- Phase 04: Roadmap -->
+  <div id="roadmap-mount"></div>
 
+  <!-- Phase 03: Resume strip / Stats / Heatmap -->
+  <div id="resume-mount"></div>
+  <div id="stats-mount"></div>
+  <div id="heatmap-mount"></div>
+
+  <!-- Phase 05: Catalog toolbar + catalog -->
+  <div id="catalog-toolbar-mount"></div>
   <div id="phases-mount"></div>
+
+  <!-- Phase 06: Footer -->
+  <div id="footer-mount"></div>
 
 </main>
 
 <script defer src="/_shared/search-widget.js"></script>
 <script defer src="/_shared/progress-sync.js"></script>
 <script type="module">
-import { LabTemplate } from './_shared/lab-template.js';
-
-// Hydrate server-side progress badges on CATALOG once DOM is ready.
-window.addEventListener('load', async () => {
-  if (!window.ProgressSync) return;
-  try {
-    const { progress } = await window.ProgressSync.fetchAll();
-    const map = new Map((progress || []).map(p => [p.lab_slug, p]));
-    document.querySelectorAll('[data-lab-slug]').forEach(el => {
-      const p = map.get(el.getAttribute('data-lab-slug'));
-      if (!p) return;
-      const badge = document.createElement('span');
-      badge.className = 'progress-badge';
-      if (p.completed_at) badge.textContent = '✅ đã đọc';
-      else if (p.opened_at) badge.textContent = '🔵 đang đọc';
-      if (p.quiz_score != null) badge.textContent += ` · 📝 ${p.quiz_score}%`;
-      el.appendChild(badge);
-    });
-  } catch { /* silent */ }
-});
+import { bootIndex } from './_shared/index-sections.js';
 
 const CATALOG = [
   {
+    id: 'phase-01',
     phase: 'Phase 01 — Networking',
+    duration: '8-10h',
+    prereq: [],
     labs: [
-      { id: 'net-01-tcp-ip', title: 'TCP/IP 4 Layer — Hành trình của 1 cú ping', href: '01-networking/01-tcp-ip-packet-journey.html', cards: 14, status: 'ready' },
-      { id: 'net-02-subnet', title: 'IPv4 Subnet & CIDR', href: '01-networking/02-subnet-cidr.html', cards: 14, status: 'ready' },
-      { id: 'net-03-tcp-udp', title: 'TCP vs UDP — Handshake & Port', href: '01-networking/03-tcp-udp.html', cards: 12, status: 'ready' },
-      { id: 'net-04-icmp', title: 'ICMP — Ping & Traceroute', href: '01-networking/04-icmp-ping.html', cards: 10, status: 'ready' },
-      { id: 'net-05-arp', title: 'ARP — IP → MAC resolution', href: '01-networking/05-arp.html', cards: 11, status: 'ready' },
-      { id: 'net-06-dhcp', title: 'DHCP — DORA flow', href: '01-networking/06-dhcp.html', cards: 12, status: 'ready' },
-      { id: 'net-07-http', title: 'HTTP & HTTPS — Request/Response', href: '01-networking/07-http.html', cards: 13, status: 'ready' },
-      { id: 'net-08-dns', title: 'DNS — Recursive resolution', href: '01-networking/08-dns.html', cards: 14, status: 'ready' },
+      { id: 'net-01-tcp-ip',  title: 'TCP/IP 4 Layer — Hành trình của 1 cú ping', href: '01-networking/01-tcp-ip-packet-journey.html', cards: 14, status: 'ready' },
+      { id: 'net-02-subnet',  title: 'IPv4 Subnet & CIDR',                         href: '01-networking/02-subnet-cidr.html',            cards: 14, status: 'ready' },
+      { id: 'net-03-tcp-udp', title: 'TCP vs UDP — Handshake & Port',              href: '01-networking/03-tcp-udp.html',                cards: 12, status: 'ready' },
+      { id: 'net-04-icmp',    title: 'ICMP — Ping & Traceroute',                   href: '01-networking/04-icmp-ping.html',              cards: 10, status: 'ready' },
+      { id: 'net-05-arp',     title: 'ARP — IP → MAC resolution',                  href: '01-networking/05-arp.html',                    cards: 11, status: 'ready' },
+      { id: 'net-06-dhcp',    title: 'DHCP — DORA flow',                           href: '01-networking/06-dhcp.html',                   cards: 12, status: 'ready' },
+      { id: 'net-07-http',    title: 'HTTP & HTTPS — Request/Response',            href: '01-networking/07-http.html',                   cards: 13, status: 'ready' },
+      { id: 'net-08-dns',     title: 'DNS — Recursive resolution',                 href: '01-networking/08-dns.html',                    cards: 14, status: 'ready' },
     ],
   },
   {
+    id: 'phase-02',
     phase: 'Phase 02 — Linux',
+    duration: '6-8h',
+    prereq: ['phase-01'],
     labs: [
-      { id: 'linux-vim', title: 'Vim basics', href: '#', cards: 0, status: 'todo' },
-      { id: 'linux-cli', title: 'Command line essentials', href: '#', cards: 0, status: 'todo' },
+      { id: 'linux-vim', title: 'Vim basics',               href: '#', cards: 0, status: 'todo' },
+      { id: 'linux-cli', title: 'Command line essentials',  href: '#', cards: 0, status: 'todo' },
     ],
   },
   {
+    id: 'phase-03',
     phase: 'Phase 03 — Docker',
+    duration: '5-7h',
+    prereq: ['phase-02'],
     labs: [
       { id: 'docker-101', title: 'Container vs VM', href: '#', cards: 0, status: 'todo' },
     ],
   },
+  {
+    id: 'phase-04',
+    phase: 'Phase 04 — Python',
+    duration: '6-8h',
+    prereq: ['phase-01'],
+    labs: [],
+  },
+  {
+    id: 'phase-05',
+    phase: 'Phase 05 — Observability',
+    duration: '4-6h',
+    prereq: ['phase-03'],
+    labs: [],
+  },
+  {
+    id: 'phase-06',
+    phase: 'Phase 06 — CI/CD',
+    duration: '5-7h',
+    prereq: ['phase-03'],
+    labs: [],
+  },
+  {
+    id: 'phase-07',
+    phase: 'Phase 07 — Kubernetes',
+    duration: '8-12h',
+    prereq: ['phase-06'],
+    labs: [],
+  },
+  {
+    id: 'phase-08',
+    phase: 'Phase 08 — Cloud',
+    duration: '8-10h',
+    prereq: ['phase-07'],
+    labs: [],
+  },
 ];
 
-// Render phase grid
-const root = document.getElementById('phases-mount');
-let totalDueAcrossLabs = 0;
-
-CATALOG.forEach(group => {
-  const div = document.createElement('div');
-  div.className = 'phase-group';
-  const readyCount = group.labs.filter(l => l.status === 'ready').length;
-  div.innerHTML = `<h3 class="phase-title">${group.phase} · <span class="count">${readyCount}</span>/${group.labs.length} lab</h3>`;
-  const grid = document.createElement('div');
-  grid.className = 'dashboard-grid';
-
-  group.labs.forEach(lab => {
-    const a = document.createElement('a');
-    a.className = 'lab-card';
-    a.href = lab.status === 'todo' ? '#' : lab.href;
-    if (lab.status === 'todo') { a.style.opacity = '0.5'; a.style.pointerEvents = 'none'; }
-
-    const srs = lab.cards > 0 ? LabTemplate.getDueCount(lab.id, lab.cards) : { due: 0, new: lab.cards };
-    const quiz = LabTemplate.getQuizScore(lab.id);
-    const pos = LabTemplate.getPosition(lab.id);
-    totalDueAcrossLabs += srs.due;
-
-    let statusBadge = '';
-    if (lab.status === 'ready') {
-      if (srs.new === lab.cards && !quiz) statusBadge = '<span class="lab-status status-new">NEW</span>';
-      else if (srs.new > 0 || srs.due > 0 || !quiz) statusBadge = '<span class="lab-status status-wip">IN PROGRESS</span>';
-      else statusBadge = '<span class="lab-status status-done">DONE</span>';
-    } else if (lab.status === 'legacy') {
-      statusBadge = '<span class="lab-status" style="background:var(--bg-input);color:var(--text-dim)">LEGACY</span>';
-    } else {
-      statusBadge = '<span class="lab-status" style="background:var(--bg-input);color:var(--text-muted)">TODO</span>';
-    }
-
-    const progress = lab.cards > 0
-      ? Math.round(((lab.cards - srs.new - srs.due) / lab.cards) * 100)
-      : 0;
-
-    const bookmarkHtml = (lab.status === 'ready' && pos && pos.section)
-      ? `<div class="lab-bookmark" data-resume="1" title="Mở lab và cuộn tới đây">
-           <div class="bm-head">
-             <span>📍 đang đọc · ${pos.pct}%</span>
-             <span class="bm-pct">${formatRelTime(pos.ts)}</span>
-           </div>
-           <div class="bm-section">${escapeHtml(pos.section)}</div>
-           ${pos.snippet ? `<div class="bm-snippet">${escapeHtml(pos.snippet)}</div>` : ''}
-           <div class="bm-resume">↵ click để tiếp tục</div>
-         </div>`
-      : '';
-
-    const menuHtml = (lab.status === 'ready') ? `
-      <button type="button" class="card-menu-btn" aria-label="Tùy chọn" title="Tùy chọn">⋯</button>
-      <div class="card-menu-pop" role="menu">
-        <button type="button" data-act="reset-quiz">
-          <span>Reset quiz</span><span class="menu-hint">câu hỏi hôm nay</span>
-        </button>
-        <button type="button" data-act="reset-flash">
-          <span>Reset flashcards</span><span class="menu-hint">SM-2 state</span>
-        </button>
-        <div class="menu-sep"></div>
-        <button type="button" class="danger" data-act="reset-all">
-          <span>Reset tất cả</span><span class="menu-hint">+ vị trí đọc</span>
-        </button>
-      </div>` : '';
-
-    a.innerHTML = `
-      ${menuHtml}
-      <div>${statusBadge}</div>
-      <div class="lab-title">${lab.title}</div>
-      <div class="lab-meta">
-        ${lab.cards > 0 ? `<span>${srs.new} mới · ${srs.due} cần ôn</span>` : ''}
-        ${quiz ? ` · <span>quiz ${quiz.correct}/${quiz.total}</span>` : ''}
-        ${lab.note ? `<div class="mt-8">${lab.note}</div>` : ''}
-      </div>
-      ${lab.cards > 0 ? `<div class="progress-bar"><div class="fill" style="width:${progress}%"></div></div>` : ''}
-      ${bookmarkHtml}
-    `;
-
-    if (lab.status === 'ready') {
-      wireCardMenu(a, lab);
-      const bm = a.querySelector('.lab-bookmark[data-resume]');
-      if (bm && pos?.anchor) {
-        bm.addEventListener('click', e => {
-          e.preventDefault(); e.stopPropagation();
-          location.href = `${lab.href}#${encodeURIComponent(pos.anchor)}`;
-        });
-      }
-    }
-    grid.appendChild(a);
-  });
-  div.appendChild(grid);
-  root.appendChild(div);
-});
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-}
-
-function formatRelTime(ts) {
-  if (!ts) return '';
-  const diff = Math.max(0, Date.now() - ts);
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'vừa xong';
-  if (m < 60) return `${m}p trước`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h trước`;
-  const d = Math.floor(h / 24);
-  return `${d}d trước`;
-}
-
-function wireCardMenu(card, lab) {
-  const btn = card.querySelector('.card-menu-btn');
-  const pop = card.querySelector('.card-menu-pop');
-  if (!btn || !pop) return;
-
-  const closeAll = () => document.querySelectorAll('.card-menu-pop.open').forEach(p => p.classList.remove('open'));
-
-  const stop = e => { e.preventDefault(); e.stopPropagation(); };
-
-  btn.addEventListener('click', e => {
-    stop(e);
-    const wasOpen = pop.classList.contains('open');
-    closeAll();
-    if (!wasOpen) pop.classList.add('open');
-  });
-
-  pop.addEventListener('click', stop);
-
-  pop.querySelectorAll('button[data-act]').forEach(b => {
-    b.addEventListener('click', e => {
-      stop(e);
-      const act = b.dataset.act;
-      const labels = { 'reset-quiz': 'quiz', 'reset-flash': 'flashcards', 'reset-all': 'TOÀN BỘ tiến độ' };
-      if (!confirm(`Reset ${labels[act]} của "${lab.title}"?`)) return;
-      if (act === 'reset-quiz') LabTemplate.resetLabQuiz(lab.id);
-      else if (act === 'reset-flash') LabTemplate.resetLabFlashcards(lab.id);
-      else LabTemplate.resetLabAll(lab.id);
-      closeAll();
-      location.reload();
-    });
-  });
-}
-
-document.addEventListener('click', () => {
-  document.querySelectorAll('.card-menu-pop.open').forEach(p => p.classList.remove('open'));
-});
-
-// Due banner
-const banner = document.getElementById('due-banner-mount');
-if (totalDueAcrossLabs > 0) {
-  banner.innerHTML = `
-    <div class="due-banner">
-      <span class="big">${totalDueAcrossLabs}</span>
-      <div>
-        <strong>Bạn có thẻ cần ôn hôm nay.</strong>
-        <div class="text-dim" style="font-size:13px">Vào từng lab rồi kéo xuống mục Flashcards.</div>
-      </div>
-    </div>`;
-}
+bootIndex(CATALOG);
 </script>
 </body>
 </html>

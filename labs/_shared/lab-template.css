@@ -26,6 +26,12 @@
   --text-muted: #64748b;
   --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
   --sans: 'Space Grotesk', system-ui, sans-serif;
+  /* Heatmap activity levels — dark → green scale */
+  --heatmap-0: #0d1321;
+  --heatmap-1: #0a3622;
+  --heatmap-2: #0e5c38;
+  --heatmap-3: #00a060;
+  --heatmap-4: #00ffa3;
 }
 
 * { box-sizing: border-box; }
