@@ -22,19 +22,29 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install production deps
-        run: npm ci --omit=dev
+      # Root deps cần cho gen:content (zod + codegen scripts) được Vite build gọi.
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install app deps
+        run: npm ci
+        working-directory: app
+
+      - name: Build SPA (Vite + React → app/dist)
+        run: npm run build
+        working-directory: app
 
       - name: Compute release id
         id: release
         run: echo "id=$(date -u +%y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
 
+      # Bundle chỉ chứa artifact cần deploy. node_modules server cài mới trên VPS
+      # để đảm bảo better-sqlite3 linked đúng ABI/libc của host.
       - name: Create bundle
         run: |
           tar -czf bundle.tar.gz \
+            app/dist \
             server \
-            labs \
-            node_modules \
             package.json \
             package-lock.json
           ls -lh bundle.tar.gz
@@ -46,45 +56,64 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
-          source: "bundle.tar.gz,deploy/remote-deploy.sh"
-          target: "/tmp/hoc-cloud-deploy-${{ steps.release.outputs.id }}"
+          source: "bundle.tar.gz"
+          target: "/tmp/hoccloud-deploy-${{ steps.release.outputs.id }}"
 
       - name: Deploy on VPS
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          GITHUB_CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          GITHUB_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          GITHUB_ADMIN_WHITELIST: ${{ secrets.ADMIN_WHITELIST }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
-          envs: GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET,GITHUB_ADMIN_WHITELIST,SESSION_SECRET
           script: |
             set -euo pipefail
             RELEASE="${{ steps.release.outputs.id }}"
-            BASE="/var/www/hoc-cloud-cho-dev"
-            STAGING="/tmp/hoc-cloud-deploy-$RELEASE"
-            mkdir -p "$BASE/releases" "$BASE/shared"
+            BASE="/var/www/hoccloud"
+            STAGING="/tmp/hoccloud-deploy-$RELEASE"
+            PM2_APP="hoccloud-server"
 
-            # Persist .env in shared/ so it survives release swaps.
-            # Values come from GitHub environment secrets; re-rendered every deploy.
+            mkdir -p "$BASE/app" "$BASE/server" "$BASE/shared/data"
+
+            # Persist .env ở shared/ — stack mới không dùng OAuth nữa.
             umask 077
             cat > "$BASE/shared/.env" <<EOF
             NODE_ENV=production
             PORT=8387
             HOST=127.0.0.1
-            GITHUB_CLIENT_ID=$GITHUB_CLIENT_ID
-            GITHUB_CLIENT_SECRET=$GITHUB_CLIENT_SECRET
-            GITHUB_ADMIN_WHITELIST=$GITHUB_ADMIN_WHITELIST
-            SESSION_SECRET=$SESSION_SECRET
             SQLITE_DB_PATH=$BASE/shared/data/hoccloud.db
             PUBLIC_BASE_URL=https://hoc-cloud.inetdev.io.vn
             EOF
-            mkdir -p "$BASE/shared/data"
 
-            mv "$STAGING/bundle.tar.gz" "$BASE/releases/$RELEASE.tar.gz"
-            bash "$STAGING/deploy/remote-deploy.sh" "$RELEASE"
+            # Extract vào staging.
+            EXTRACT="$STAGING/extract"
+            mkdir -p "$EXTRACT"
+            tar -xzf "$STAGING/bundle.tar.gz" -C "$EXTRACT"
+
+            # Sync SPA dist (atomic enough với rsync --delete).
+            rsync -a --delete "$EXTRACT/app/dist/" "$BASE/app/dist/"
+
+            # Sync server (exclude node_modules + .env để giữ symlink shared).
+            rsync -a --delete \
+              --exclude='node_modules' \
+              --exclude='.env' \
+              "$EXTRACT/server/" "$BASE/server/"
+
+            # Link shared .env → server/.env (server tự load .env từ project root).
+            ln -sfn "$BASE/shared/.env" "$BASE/server/.env"
+
+            # Cài prod deps trên VPS (native better-sqlite3 cần rebuild đúng ABI).
+            cd "$BASE/server" && npm ci --omit=dev
+
+            # Nginx reload.
+            sudo nginx -t && sudo systemctl reload nginx
+
+            # PM2 restart / start.
+            if pm2 describe "$PM2_APP" >/dev/null 2>&1; then
+              pm2 restart "$PM2_APP" --update-env
+            else
+              pm2 start "$BASE/server/ecosystem.config.cjs" --name "$PM2_APP"
+            fi
+            pm2 save
+
             rm -rf "$STAGING"

@@ -1,17 +1,12 @@
-// PM2 process config. On VPS, PM2 starts from /var/www/hoc-cloud-cho-dev/current/
-// (symlink to latest release), so relative paths resolve correctly after atomic swap.
-//
-// IMPORTANT: cwd MUST be the symlink path string, not __dirname. Node resolves __dirname
-// to the realpath of the actual release dir at process start, pinning PM2 to that release
-// forever — every later symlink swap is invisible. Hardcoding the symlink path makes
-// pm2 reload spawn the new worker pointing at the freshly-swapped release.
-const VPS_CURRENT = '/var/www/hoc-cloud-cho-dev/current';
+// PM2 process config cho stack Vite+React. Server chạy từ /var/www/hoccloud/server/
+// (rsync thẳng, không release symlink) — đơn giản hoá so với pattern cũ.
+const VPS_SERVER = '/var/www/hoccloud/server';
 module.exports = {
   apps: [
     {
-      name: 'hoc-cloud-labs',
-      script: './server/server.js',
-      cwd: VPS_CURRENT,
+      name: 'hoccloud-server',
+      script: './server.js',
+      cwd: VPS_SERVER,
       instances: 1,
       exec_mode: 'fork',
       max_memory_restart: '300M',
@@ -19,12 +14,12 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 8387,
       },
-      // Load GITHUB_CLIENT_*, SESSION_SECRET, etc. from release's .env.
+      // Load runtime config (SQLITE_DB_PATH, PUBLIC_BASE_URL...) từ server/.env
+      // (symlink tới /var/www/hoccloud/shared/.env do CI tạo).
       env_file: '.env',
       error_file: './logs/err.log',
       out_file: './logs/out.log',
       merge_logs: true,
-      // Restart policy
       autorestart: true,
       watch: false,
       max_restarts: 10,
