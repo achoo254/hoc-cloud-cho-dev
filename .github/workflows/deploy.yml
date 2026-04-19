@@ -1,0 +1,67 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: DEPLOY SERVER STAGING
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install production deps
+        run: npm ci --omit=dev
+
+      - name: Compute release id
+        id: release
+        run: echo "id=$(date -u +%y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: Create bundle
+        run: |
+          tar -czf bundle.tar.gz \
+            server \
+            labs \
+            node_modules \
+            package.json \
+            package-lock.json
+          ls -lh bundle.tar.gz
+
+      - name: Upload bundle to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          source: "bundle.tar.gz,deploy/remote-deploy.sh"
+          target: "/tmp/hoc-cloud-deploy-${{ steps.release.outputs.id }}"
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            set -euo pipefail
+            RELEASE="${{ steps.release.outputs.id }}"
+            BASE="/var/www/hoc-cloud-cho-dev"
+            STAGING="/tmp/hoc-cloud-deploy-$RELEASE"
+            mkdir -p "$BASE/releases"
+            mv "$STAGING/bundle.tar.gz" "$BASE/releases/$RELEASE.tar.gz"
+            bash "$STAGING/deploy/remote-deploy.sh" "$RELEASE"
+            rm -rf "$STAGING"
