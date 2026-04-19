@@ -16,6 +16,16 @@ mkdir -p "$RELEASE_DIR"
 tar -xzf "$TARBALL" -C "$RELEASE_DIR"
 rm -f "$TARBALL"
 
+# 1b. Link persisted config + data into the release dir.
+#     .env lives in shared/ (rewritten each deploy from CI secrets).
+#     data/ also persists so SQLite DB survives releases.
+if [ -f "$BASE/shared/.env" ]; then
+  ln -sfn "$BASE/shared/.env" "$RELEASE_DIR/.env"
+fi
+mkdir -p "$BASE/shared/data"
+rm -rf "$RELEASE_DIR/data"
+ln -sfn "$BASE/shared/data" "$RELEASE_DIR/data"
+
 # 2. Atomic symlink swap: current -> new release
 ln -sfn "$RELEASE_DIR" "$BASE/current"
 

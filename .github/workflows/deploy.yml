@@ -51,17 +51,40 @@ jobs:
 
       - name: Deploy on VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GITHUB_CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          GITHUB_ADMIN_WHITELIST: ${{ secrets.ADMIN_WHITELIST }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
+          envs: GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET,GITHUB_ADMIN_WHITELIST,SESSION_SECRET
           script: |
             set -euo pipefail
             RELEASE="${{ steps.release.outputs.id }}"
             BASE="/var/www/hoc-cloud-cho-dev"
             STAGING="/tmp/hoc-cloud-deploy-$RELEASE"
-            mkdir -p "$BASE/releases"
+            mkdir -p "$BASE/releases" "$BASE/shared"
+
+            # Persist .env in shared/ so it survives release swaps.
+            # Values come from GitHub environment secrets; re-rendered every deploy.
+            umask 077
+            cat > "$BASE/shared/.env" <<EOF
+            NODE_ENV=production
+            PORT=8387
+            HOST=127.0.0.1
+            GITHUB_CLIENT_ID=$GITHUB_CLIENT_ID
+            GITHUB_CLIENT_SECRET=$GITHUB_CLIENT_SECRET
+            GITHUB_ADMIN_WHITELIST=$GITHUB_ADMIN_WHITELIST
+            SESSION_SECRET=$SESSION_SECRET
+            SQLITE_DB_PATH=$BASE/shared/data/hoccloud.db
+            PUBLIC_BASE_URL=https://hoc-cloud.inetdev.io.vn
+            EOF
+            mkdir -p "$BASE/shared/data"
+
             mv "$STAGING/bundle.tar.gz" "$BASE/releases/$RELEASE.tar.gz"
             bash "$STAGING/deploy/remote-deploy.sh" "$RELEASE"
             rm -rf "$STAGING"
