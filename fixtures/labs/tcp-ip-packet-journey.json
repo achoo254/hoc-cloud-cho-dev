@@ -18,7 +18,7 @@
       "pdu": "Message",
       "device": "Process (nginx, curl, ping...)",
       "protocol": "HTTP, DNS, SSH, TLS, FTP",
-      "why": "Tầng dev tương tác trực tiếp qua API/protocol. Lỗi 400/500/Bad Request = Application fail, KHÔNG phải lỗi mạng.",
+      "why": "Nơi application 'nói chuyện' — HTTP request, gửi email, query DNS. Lỗi 400/500/502 không phải lỗi mạng — là app hoặc server có vấn đề.",
       "whyBreaks": "Nhầm lỗi Application thành lỗi mạng → debug sai hướng hàng giờ. Lỗi 502 Bad Gateway là Application layer fail, không phải cáp mạng vấn đề. Nếu thiếu hiểu biết tầng này, sẽ restart server vô ích thay vì check log nginx/app.",
       "deploymentUse": "Khi VPS deploy xong, check log application trước: journalctl -u nginx, docker logs <container>. Lỗi 502/503 luôn là Application hoặc Transport, không phải Link/Internet."
     },
@@ -28,7 +28,7 @@
       "pdu": "Segment / Datagram",
       "device": "Kernel OS",
       "protocol": "TCP, UDP",
-      "why": "Gắn PORT để phân biệt nhiều service trên cùng 1 máy. TCP = đáng tin (web, ssh). UDP = nhanh (DNS, video call).",
+      "why": "Như số phòng trong tòa nhà — PORT giúp 1 máy chạy nhiều service (web :80, SSH :22). TCP đảm bảo dữ liệu đến đủ và đúng thứ tự. UDP nhanh hơn nhưng không đảm bảo.",
       "whyBreaks": "Nếu không hiểu tầng Transport, khi port bị chặn sẽ không biết tại sao curl fail dù ping OK. Cài nginx nhưng quên mở port 80/443 trong firewall = Transport bị chặn = toàn bộ HTTP traffic chết.",
       "deploymentUse": "Sau khi start nginx trên VPS, luôn kiểm tra: ss -tlnp | grep 80 (service đang listen?) và nc -vz <ip> 80 từ máy client (port mở từ ngoài?). Hai bước này xác nhận Transport layer OK."
     },
@@ -38,7 +38,7 @@
       "pdu": "Packet",
       "device": "Router",
       "protocol": "IP, ICMP",
-      "why": "Định tuyến packet xuyên nhiều mạng bằng địa chỉ IP. Đây là tầng làm nên 'Inter-net' (liên mạng).",
+      "why": "Địa chỉ IP giúp packet 'tìm đường' xuyên qua nhiều mạng — từ máy local đến server ở nước ngoài. Router dựa vào IP để biết chuyển packet đi đâu tiếp.",
       "whyBreaks": "Sai routing table hoặc sai default gateway → packet không ra được internet dù WiFi 'connected'. Nhiều lần 'mạng không vào được' thực ra là default gateway chết hoặc routing table sai — không phải cáp mạng.",
       "deploymentUse": "Khi VPS không ra được internet: ip route (có default route chưa?), ping 8.8.8.8 (Internet layer OK?), ping 8.8.4.4 (không phụ thuộc DNS). Nếu ping IP được nhưng domain không được = DNS fail, không phải Internet layer."
     },
@@ -48,7 +48,7 @@
       "pdu": "Frame / Bits",
       "device": "NIC, switch, cáp, WiFi",
       "protocol": "Ethernet, WiFi 802.11",
-      "why": "Đẩy frame/bit giữa 2 thiết bị cùng LAN (dùng MAC). Cáp đứt / WiFi mất sóng = 3 tầng trên vô nghĩa.",
+      "why": "Tầng 'vật lý' — cáp mạng, WiFi, card mạng. Dùng địa chỉ MAC để gửi dữ liệu giữa 2 máy cùng mạng LAN. Cáp đứt hoặc WiFi mất sóng thì 3 tầng trên đều vô dụng.",
       "whyBreaks": "Link fail = mọi thứ trên vô nghĩa. Trên VPS cloud, Link thường do provider quản lý nhưng vẫn có thể fail do NIC driver, MTU mismatch, hoặc cloud security group block ở L2.",
       "deploymentUse": "ip link show — xem interface có UP không. Nếu state DOWN thì Link chết. Trên AWS/GCP, security group rule chặn ở đây — nhưng error giống như Network Unreachable, không phải Connection Refused."
     }

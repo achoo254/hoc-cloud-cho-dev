@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { BookOpen, Loader2, WifiOff } from 'lucide-react'
 
@@ -28,8 +27,6 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-
-const MotionCommandItem = motion.create(CommandItem)
 import { Badge } from '@/components/ui/badge'
 import { searchLocal } from '@/lib/search-client'
 import {
@@ -54,16 +51,6 @@ interface DisplayResult {
   source: 'server' | 'local'
 }
 
-// ── Animation variants ────────────────────────────────────────────────────────
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 4 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.04, duration: 0.15 },
-  }),
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -202,7 +189,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <CommandDialog open={open} onOpenChange={onOpenChange} shouldFilter={false}>
       <CommandInput
         placeholder="Tìm lab… (vpc, dns, osi…)"
         value={inputValue}
@@ -243,58 +230,54 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
         {/* Results */}
         {displayResults.length > 0 && !isSearching && (
           <CommandGroup heading="Labs">
-            <AnimatePresence initial={false}>
-              {displayResults.map((result, i) => (
-                <MotionCommandItem
-                  key={result.slug}
-                  custom={i}
-                  variants={itemVariants}
-                  initial={reduce ? false : 'hidden'}
-                  animate="visible"
-                  value={result.slug}
-                  onSelect={() => handleSelect(result.slug)}
-                  className="flex flex-col items-start gap-1 py-3 cursor-pointer"
-                >
-                  {/* Title row */}
-                  <div className="flex w-full items-center gap-2">
-                    <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="font-medium text-sm flex-1 truncate">
-                      {result.title}
-                    </span>
-                    {result.source === 'local' && (
+            {displayResults.map((result, i) => (
+              <CommandItem
+                key={result.slug}
+                value={result.slug}
+                onSelect={() => handleSelect(result.slug)}
+                className="flex flex-col items-start gap-1 py-3 cursor-pointer animate-in fade-in slide-in-from-top-1"
+                style={reduce ? undefined : { animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}
+                onClick={() => handleSelect(result.slug)}
+              >
+                {/* Title row */}
+                <div className="flex w-full items-center gap-2">
+                  <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="font-medium text-sm flex-1 truncate">
+                    {result.title}
+                  </span>
+                  {result.source === 'local' && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] h-4 px-1.5 shrink-0 text-muted-foreground"
+                    >
+                      local
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Snippet */}
+                {result.snippet && (
+                  <p className="text-xs text-muted-foreground pl-5 line-clamp-2 leading-relaxed">
+                    {result.snippet}
+                  </p>
+                )}
+
+                {/* Tags */}
+                {result.tags.length > 0 && (
+                  <div className="flex gap-1 pl-5 flex-wrap">
+                    {result.tags.slice(0, 4).map((tag) => (
                       <Badge
-                        variant="outline"
-                        className="text-[10px] h-4 px-1.5 shrink-0 text-muted-foreground"
+                        key={tag}
+                        variant="secondary"
+                        className="text-[10px] h-4 px-1.5"
                       >
-                        local
+                        {tag}
                       </Badge>
-                    )}
+                    ))}
                   </div>
-
-                  {/* Snippet */}
-                  {result.snippet && (
-                    <p className="text-xs text-muted-foreground pl-5 line-clamp-2 leading-relaxed">
-                      {result.snippet}
-                    </p>
-                  )}
-
-                  {/* Tags */}
-                  {result.tags.length > 0 && (
-                    <div className="flex gap-1 pl-5 flex-wrap">
-                      {result.tags.slice(0, 4).map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="text-[10px] h-4 px-1.5"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </MotionCommandItem>
-              ))}
-            </AnimatePresence>
+                )}
+              </CommandItem>
+            ))}
           </CommandGroup>
         )}
       </CommandList>

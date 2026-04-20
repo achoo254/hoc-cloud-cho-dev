@@ -15,56 +15,56 @@
     {
       "term": "Network address",
       "value": "Bit host toàn 0",
-      "why": "Định danh cả subnet. Router dùng để match routing table. Không gán cho host.",
+      "why": "Như số nhà của cả tòa chung cư — đại diện cho toàn bộ subnet. Router dùng địa chỉ này để tìm đường đi. Không gán cho máy cụ thể.",
       "whyBreaks": "Gán network address cho 1 host → ARP conflict, routing rối loạn. Tất cả packet gửi đến network address được coi là gửi cho 'cả subnet' theo nghĩa routing, không phải 1 máy cụ thể.",
       "deploymentUse": "Khi tạo subnet trên AWS VPC hay Docker network, địa chỉ đầu tiên (.0) luôn là network address — không thể gán cho EC2 hay container. AWS còn giữ thêm 4 IP đầu và 1 IP cuối của mỗi subnet."
     },
     {
       "term": "Broadcast address",
       "value": "Bit host toàn 1",
-      "why": "Gửi đến mọi host trong subnet cùng lúc (ARP, DHCP Discover). Không gán cho host.",
+      "why": "Như loa phát thanh tòa nhà — gửi tin đến tất cả máy trong subnet cùng lúc. Dùng khi cần hỏi 'ai có MAC này?' (ARP) hoặc 'có DHCP server không?' (DHCP). Không gán cho máy cụ thể.",
       "whyBreaks": "Broadcast storm: nếu nhiều máy gửi broadcast liên tục → mọi NIC trong subnet phải xử lý → CPU spike đồng loạt. Đây là lý do broadcast domain phải giới hạn, subnet nhỏ giúp khoanh vùng broadcast.",
       "deploymentUse": "Hiểu broadcast giúp giải thích tại sao Docker/K8s mỗi pod/container cần subnet riêng nhỏ — giảm broadcast traffic. VPC cloud thường disable broadcast hoàn toàn, dùng unicast ARP thay thế."
     },
     {
       "term": "Subnet mask",
       "value": "Chuỗi bit 1 phần network, 0 phần host",
-      "why": "Router/host AND mask với IP để trích network part. Xác định 2 IP có cùng subnet không.",
+      "why": "Như khuôn cắt — che phần network, lộ phần host. Máy dùng mask để biết: 'IP kia có cùng mạng với mình không?' Nếu cùng → gửi trực tiếp. Khác → phải đi qua gateway.",
       "whyBreaks": "Sai subnet mask trên host → host nghĩ IP đích ở cùng LAN khi thực ra ở mạng khác (gửi ARP thay vì qua gateway) hoặc ngược lại → toàn bộ traffic drop. Đây là lỗi config hay gặp khi setup VPS thủ công.",
       "deploymentUse": "Khi cấu hình static IP trên VPS: ip addr add 10.0.0.5/24 dev eth0. Số /24 sau là subnet mask. Sai số này = VPS không nói chuyện được với gateway = mất SSH ngay lập tức."
     },
     {
       "term": "Wildcard mask",
       "value": "Đảo bit của subnet mask",
-      "why": "Cisco ACL/OSPF dùng — ngược với subnet mask. 255.255.255.0 ↔ 0.0.0.255.",
+      "why": "Đảo ngược subnet mask: bit 0 thành 1, bit 1 thành 0. Thiết bị Cisco dùng wildcard thay vì subnet mask trong ACL và OSPF. VD: /24 mask là 255.255.255.0 → wildcard là 0.0.0.255.",
       "whyBreaks": "Nhầm subnet mask và wildcard mask trong Cisco ACL → cho phép traffic sai hoặc block traffic đúng. Rất khó debug vì ACL apply tức thì và lỗi này không báo lỗi rõ ràng.",
       "deploymentUse": "Ít gặp trong cloud modern (AWS/GCP dùng CIDR notation), nhưng vẫn gặp khi cấu hình VPN IPsec hoặc tích hợp với thiết bị Cisco của công ty."
     },
     {
       "term": "CIDR /n",
       "value": "n bit network ở đầu",
-      "why": "Thay vì 'subnet class' cứng nhắc, CIDR linh hoạt chia bất kỳ đâu — đó là cách modern internet routing hoạt động.",
+      "why": "Cách viết gọn của subnet mask. /24 nghĩa là 24 bit đầu dành cho network, 8 bit còn lại cho host. Thay thế Class A/B/C cũ kỹ — cho phép chia mạng linh hoạt theo nhu cầu thực tế.",
       "whyBreaks": "Không hiểu CIDR → không thể tự thiết kế VPC subnet, luôn phải nhờ người khác. Khi /n sai (ví dụ /25 thay vì /24) → mạng bị chia đôi mà không biết tại sao 2 máy không ping nhau.",
       "deploymentUse": "Mọi cloud provider dùng CIDR: AWS VPC CIDR, GCP subnet, Azure VNet đều yêu cầu nhập CIDR notation. Cần chọn đúng /n để có đủ IP cho số lượng instance dự kiến, có buffer mở rộng sau."
     },
     {
       "term": "Usable hosts",
       "value": "2^(32−n) − 2",
-      "why": "Trừ 2 vì network + broadcast không gán được. Exception: /31 (point-to-point link) và /32 (1 IP host).",
+      "why": "Số máy thật sự gán được IP trong subnet. Phải trừ 2: địa chỉ đầu (network) và cuối (broadcast) không gán cho máy. VD: /24 có 256 địa chỉ, usable = 254.",
       "whyBreaks": "Tính sai usable hosts → chọn subnet quá nhỏ → hết IP khi scale → phải re-IP toàn bộ hệ thống, cực kỳ tốn công. AWS còn trừ thêm 5 IP reserved mỗi subnet, cần tính vào kế hoạch.",
       "deploymentUse": "Rule of thumb: chọn subnet có ít nhất 2x số host cần thiết hiện tại. Nếu cần 50 server, chọn /25 (126 usable) thay vì /26 (62 usable). Cloud re-subnetting rất đau — phòng từ đầu."
     },
     {
       "term": "Private ranges",
       "value": "10/8, 172.16/12, 192.168/16",
-      "why": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1918\" target=\"_blank\">RFC 1918</a> — chỉ dùng nội bộ, không route được trên internet. Cần NAT để ra ngoài.",
+      "why": "3 dải IP 'nội bộ' ai cũng được dùng — không cần đăng ký. Dùng trong công ty, nhà, Docker, VPC. Muốn ra internet phải qua NAT (đổi thành IP public).",
       "whyBreaks": "Dùng private range trùng với VPN hoặc office network → IP conflict → VPN không kết nối được hoặc traffic bị route nhầm. Docker mặc định dùng 172.17/16 — hay conflict với office 172.16/12.",
       "deploymentUse": "Khi tạo Docker network hoặc VPC, chọn private range ít dùng: 10.0.0.0/8 (16M địa chỉ) là range rộng nhất trong 3 private range của <a href=\"https://datatracker.ietf.org/doc/html/rfc1918#section-3\" target=\"_blank\">RFC 1918 §3</a>. Tránh 192.168.1.0/24 và 172.17.0.0/16 vì hay trùng với office/Docker mặc định."
     },
     {
       "term": "VLSM",
       "value": "Variable Length Subnet Masking",
-      "why": "Chia /24 thành subnet không đều (vd: 1 subnet /26 + 2 subnet /27). Tiết kiệm IP khi nhu cầu phòng ban khác nhau.",
+      "why": "Chia subnet không đều theo nhu cầu. VD: phòng 100 người cần /25 (126 IP), phòng 20 người chỉ cần /27 (30 IP). Tiết kiệm IP thay vì chia đều rồi phí.",
       "whyBreaks": "Không dùng VLSM → phân bổ IP đồng đều → phí IP ở subnet nhu cầu thấp, thiếu IP ở subnet nhu cầu cao. Khi cloud tính phí theo IP allocation, phí IP không cần thiết là tiền thực.",
       "deploymentUse": "Ví dụ thực tế AWS: Public subnet /24 (web servers, nhiều) + Private subnet /24 (app servers) + DB subnet /27 (chỉ 3-5 RDS). VLSM cho phép mỗi tier có đúng lượng IP cần thiết."
     }

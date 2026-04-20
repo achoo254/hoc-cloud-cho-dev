@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type SupportedLang = 'bash' | 'yaml' | 'javascript' | 'typescript' | 'go' | 'json' | 'text'
+type SupportedLang = 'bash' | 'yaml' | 'javascript' | 'typescript' | 'go' | 'json' | 'python' | 'text'
 
 interface CodeBlockProps {
   code: string
@@ -27,7 +27,7 @@ async function getHighlighter() {
       const { createHighlighter } = await import('shiki')
       shikiHighlighter = await createHighlighter({
         themes: ['github-dark'],
-        langs: ['bash', 'yaml', 'javascript', 'typescript', 'go', 'json'],
+        langs: ['bash', 'yaml', 'javascript', 'typescript', 'go', 'json', 'python'],
       })
     })()
   }

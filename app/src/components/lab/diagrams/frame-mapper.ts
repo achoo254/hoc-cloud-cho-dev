@@ -52,7 +52,7 @@ export const TCP_IP_FRAMES: Frame[] = [
       { device: 'client', layer: 3 },
       { device: 'client', layer: 4 },
     ],
-    highlight: { protocol: 'DNS' },
+    highlight: { protocol: 'DNS', device: 'client' },
   },
   {
     stepIdx: 2,
@@ -78,7 +78,7 @@ export const TCP_IP_FRAMES: Frame[] = [
       { device: 'client', layer: 1 },
       { device: 'client', layer: 2 },
     ],
-    highlight: { protocol: 'ARP' },
+    highlight: { protocol: 'ARP', device: 'client' },
   },
   {
     stepIdx: 4,
@@ -112,7 +112,7 @@ export const TCP_IP_FRAMES: Frame[] = [
       { device: 'client', layer: 1 },
       { device: 'client', layer: 4 },
     ],
-    highlight: { protocol: 'ICMP' },
+    highlight: { protocol: 'ICMP', device: 'client' },
   },
   {
     stepIdx: 6,

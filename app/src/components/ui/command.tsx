@@ -32,14 +32,16 @@ Command.displayName = CommandPrimitive.displayName
 
 interface CommandDialogProps extends DialogProps {
   children?: React.ReactNode
+  /** Disable cmdk's built-in filtering when using external search */
+  shouldFilter?: boolean
 }
 
-function CommandDialog({ children, ...props }: CommandDialogProps) {
+function CommandDialog({ children, shouldFilter, ...props }: CommandDialogProps) {
   return (
     <Dialog {...props}>
       {/* On mobile (<640px): full-width, full-height palette. sm+: normal centered dialog. */}
       <DialogContent className="overflow-hidden p-0 shadow-lg w-full max-w-full max-h-full sm:max-w-xl sm:max-h-[85vh] rounded-none sm:rounded-lg top-0 translate-y-0 sm:top-[50%] sm:-translate-y-1/2">
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+        <Command shouldFilter={shouldFilter} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
           {children}
         </Command>
       </DialogContent>
@@ -141,7 +143,7 @@ const CommandItem = React.forwardRef<
     className={cn(
       'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
       'aria-selected:bg-accent aria-selected:text-accent-foreground',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
       className,
     )}
     {...props}
