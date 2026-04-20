@@ -23,6 +23,7 @@ interface WalkthroughFrame {
   description: string
   highlightSubnets: number[]
   showBinary: boolean
+  cidr?: number // CIDR prefix length (e.g., 24, 26, 28)
   binaryHighlight?: { octet: number; bits: [number, number] }
 }
 
@@ -38,57 +39,76 @@ const WALKTHROUGH_FRAMES: WalkthroughFrame[] = [
     title: 'Bắt đầu: /24 network',
     description: '192.168.10.0/24 có 256 địa chỉ (254 usable). Mục tiêu: chia thành 4 subnet.',
     highlightSubnets: [],
-    showBinary: false,
+    showBinary: true,
+    cidr: 24,
   },
   {
     title: 'Bước 1: Tính số bit cần mượn',
     description: 'Cần 4 subnet → mượn 2 bit từ host (2² = 4). /24 + 2 = /26.',
     highlightSubnets: [],
     showBinary: true,
+    cidr: 26,
     binaryHighlight: { octet: 3, bits: [0, 2] },
   },
   {
     title: 'Bước 2: Tính block size',
     description: '/26 có 6 host bits → 2⁶ = 64 địa chỉ/subnet. Block size = 64.',
     highlightSubnets: [0],
-    showBinary: false,
+    showBinary: true,
+    cidr: 26,
   },
   {
     title: 'Bước 3: Subnet 1 (0-63)',
     description: 'Network: .0, Broadcast: .63, Usable: .1 — .62 (62 hosts)',
     highlightSubnets: [0],
-    showBinary: false,
+    showBinary: true,
+    cidr: 26,
   },
   {
     title: 'Bước 4: Subnet 2 (64-127)',
     description: 'Network: .64, Broadcast: .127, Usable: .65 — .126 (62 hosts)',
     highlightSubnets: [0, 1],
-    showBinary: false,
+    showBinary: true,
+    cidr: 26,
   },
   {
     title: 'Bước 5: Subnet 3 (128-191)',
     description: 'Network: .128, Broadcast: .191, Usable: .129 — .190 (62 hosts)',
     highlightSubnets: [0, 1, 2],
-    showBinary: false,
+    showBinary: true,
+    cidr: 26,
   },
   {
     title: 'Bước 6: Subnet 4 (192-255)',
     description: 'Network: .192, Broadcast: .255, Usable: .193 — .254 (62 hosts)',
     highlightSubnets: [0, 1, 2, 3],
-    showBinary: false,
+    showBinary: true,
+    cidr: 26,
   },
   {
     title: 'Hoàn tất: 4 subnet /26',
     description: 'Từ 1 × /24 (254 hosts) → 4 × /26 (62 hosts mỗi subnet). Subnet mask: 255.255.255.192',
     highlightSubnets: [0, 1, 2, 3],
     showBinary: true,
+    cidr: 26,
     binaryHighlight: { octet: 3, bits: [0, 2] },
   },
 ]
 
-function BinaryMaskDisplay({ highlight }: { highlight?: { octet: number; bits: [number, number] } }) {
-  const maskBits = '11111111.11111111.11111111.11000000'
+function generateBinaryMask(cidr: number): string {
+  const bits = '1'.repeat(cidr) + '0'.repeat(32 - cidr)
+  return [bits.slice(0, 8), bits.slice(8, 16), bits.slice(16, 24), bits.slice(24, 32)].join('.')
+}
+
+interface BinaryMaskDisplayProps {
+  cidr: number
+  highlight?: { octet: number; bits: [number, number] }
+}
+
+function BinaryMaskDisplay({ cidr, highlight }: BinaryMaskDisplayProps) {
+  const maskBits = generateBinaryMask(cidr)
   const octets = maskBits.split('.')
+  const hostBits = 32 - cidr
 
   return (
     <div className="font-mono text-xs bg-muted/50 p-2 rounded-lg">
@@ -119,7 +139,7 @@ function BinaryMaskDisplay({ highlight }: { highlight?: { octet: number; bits: [
         ))}
       </div>
       <p className="text-center text-muted-foreground mt-1">
-        /26 mask: 26 bits network (green) + 6 bits host (orange)
+        /{cidr} mask: {cidr} bits network (green) + {hostBits} bits host (orange)
       </p>
     </div>
   )
@@ -267,7 +287,7 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
       />
 
       {currentFrame.showBinary && (
-        <BinaryMaskDisplay highlight={currentFrame.binaryHighlight} />
+        <BinaryMaskDisplay cidr={currentFrame.cidr ?? 26} highlight={currentFrame.binaryHighlight} />
       )}
 
       <SubnetVisualization

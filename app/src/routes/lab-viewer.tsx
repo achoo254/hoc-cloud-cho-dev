@@ -141,15 +141,8 @@ export default function LabViewerPage() {
 
   return (
     <div className="container py-8">
-      <Button variant="ghost" size="sm" asChild className="mb-6">
-        <Link to="/">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Labs
-        </Link>
-      </Button>
-
       {/* Two-column layout on desktop: TOC sidebar + lab content */}
-      <div className="flex gap-8 items-start">
+      <div className="flex gap-8 items-start relative">
         <LabToc />
         <div className="flex-1 min-w-0">
           <LabRenderer lab={state.lab} />

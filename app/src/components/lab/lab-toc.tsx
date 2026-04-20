@@ -130,7 +130,7 @@ export interface LabTocProps {
 export function LabToc({
   entries = DEFAULT_TOC_ENTRIES,
   showBackLink = true,
-  backLinkHref = '/labs',
+  backLinkHref = '/',
   backLinkLabel = 'Back to Labs',
   title = 'On this page',
 }: LabTocProps) {
@@ -142,7 +142,7 @@ export function LabToc({
     <>
       {/* Desktop sticky sidebar — hidden on mobile */}
       <aside
-        className="hidden lg:block sticky top-20 h-fit w-48 shrink-0 self-start"
+        className="hidden lg:block sticky top-[4.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto w-48 shrink-0"
         aria-label="Table of contents"
       >
         {showBackLink && (
