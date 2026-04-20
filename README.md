@@ -1,20 +1,41 @@
 # hoc-cloud-cho-dev
 
-Personal workspace để tự học Cloud/DevOps. Vite+React SPA + Hono API server + SM-2 flashcard.
+Workspace tự học Cloud/DevOps với **interactive animated protocol visualizations**. Mỗi lab có playground bước-từng-bước, animated diagrams và concept cards.
+
+## Labs (8 chủ đề)
+
+| Slug | Chủ đề | Playground nổi bật |
+|------|--------|--------------------|
+| `arp` | Address Resolution Protocol | ARP request/reply animation |
+| `dhcp` | DHCP DORA Process | 4-bước DORA visualizer |
+| `dns` | DNS Hierarchical Resolution | Recursive resolver animation |
+| `http` | HTTP Protocol | 51 animated scenarios |
+| `icmp-ping` | ICMP Ping Request/Reply | RTT + TTL visualizer |
+| `subnet-cidr` | Subnet & CIDR | Binary mask + host calculator |
+| `tcp-ip-packet-journey` | Packet Journey qua OSI layers | Layer encapsulation step-by-step |
+| `tcp-udp` | TCP vs UDP | 3-way handshake + connection comparison |
+
+## Tech Stack
+
+- **Frontend**: Vite 6, React 18, TypeScript, Tailwind CSS 3.4, shadcn/ui (Radix)
+- **Animation**: Framer Motion 11, D3.js 7
+- **Backend**: Hono.js 4.6, Node.js 22+
+- **Database**: SQLite (better-sqlite3, FTS5 full-text search)
+- **Diagrams**: Mermaid, custom SVG/D3 visualizations
+- **Other**: React Query 5, React Router 7, Shiki, MiniSearch
 
 ## Cấu trúc
 
 | Thư mục | Nội dung |
 |---------|----------|
-| `app/` | Vite+React SPA (TypeScript, Tailwind, shadcn/ui) |
-| `server/` | Hono.js: `/api/search` (FTS5) + `/api/progress` + `/sse` reload |
-| `content/` | Lab TypeScript modules (generated từ `fixtures/labs/*.json`) |
-| `fixtures/` | Lab fixture JSON — source of truth cho lab content |
-| `scripts/` | Build scripts (fixtures → TS, server data bundler) |
+| `app/` | Vite+React SPA — components, playgrounds, diagrams |
+| `server/` | Hono.js: `/api/search` (FTS5) + `/api/progress` + `/sse` |
+| `fixtures/labs/` | Lab JSON (schema v3) — source of truth |
+| `content/` | TypeScript modules (generated từ fixtures) |
+| `scripts/` | Build scripts (fixtures → TS, bundler) |
 | `docs/` | Tài liệu dự án |
-| `plans/` | Plan triển khai các thay đổi |
-| `deploy/` | `nginx.conf.example` tham chiếu |
 | `data/` | `hoccloud.db` — SQLite (labs + FTS + progress) |
+| `deploy/` | `nginx.conf.example` tham chiếu |
 
 ## Development
 
@@ -31,36 +52,35 @@ npm run dev:server
 npm run dev:app
 ```
 
-Open http://localhost:5173
+Mở http://localhost:5173
 
-## Building for production
+## Build & Deploy
 
 ```bash
+# Build
 npm run build --prefix app   # FE → app/dist/
 npm run build:server         # BE → dist-server/server.bundle.js (esbuild)
 ```
 
-## Deploy
-
-GitHub Actions workflow `.github/workflows/deploy.yml` tự chạy khi push `master`:
+GitHub Actions (`.github/workflows/deploy.yml`) tự chạy khi push `master`:
 1. Build FE (Vite) + BE (esbuild bundle)
 2. Smoke test `/healthz`
-3. Stage chỉ `app/dist/` + `server.bundle.js` + `node_modules/better-sqlite3`
+3. Stage `app/dist/` + `server.bundle.js` + `node_modules/better-sqlite3`
 4. SCP lên VPS, extract, `pm2 restart`
 
-VPS không cần `package.json`, không `npm ci`. Nginx config tham chiếu ở `deploy/nginx.conf.example`.
+VPS không cần `package.json`, không `npm ci`. Nginx config: `deploy/nginx.conf.example`.
 
 ## Thêm lab mới
 
 1. Tạo fixture JSON trong `fixtures/labs/` (schema v3 — xem `docs/lab-schema-v3.md`)
 2. Validate: `node scripts/validate-lab-fixtures.js`
-3. Generate content modules + indexes: `npm run gen:content`
-4. Xem trong app: `npm run dev:app` (FE tự reload)
-5. Sync vào DB server: `node server/scripts/sync-labs-to-db.js`
+3. Generate content modules: `npm run gen:content`
+4. Sync vào DB: `node server/scripts/sync-labs-to-db.js`
+5. Thêm playground component vào `app/src/components/lab/diagrams/` nếu cần
 
 Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 
-## API (server)
+## API
 
 | Method | Path | Mô tả |
 |--------|------|-------|
@@ -73,12 +93,12 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 ## Cheat-sheet
 
 ```bash
-# Reset progress (browser)
-DevTools → Application → Local Storage → xoá key lab:*
-
-# Sync fixtures → DB (chạy ngầm khi server boot, cũng chạy CLI được)
+# Sync fixtures → DB (tự chạy khi server boot)
 node server/scripts/sync-labs-to-db.js
 
 # Fresh DB (local dev)
 rm data/hoccloud.db && npm run dev:server
+
+# Reset progress (browser)
+DevTools → Application → Local Storage → xoá key lab:*
 ```
