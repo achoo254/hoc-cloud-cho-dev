@@ -16,6 +16,7 @@ interface SubnetBlock {
   network: string
   range: string
   gateway: string
+  startAddr: number
 }
 
 interface WalkthroughFrame {
@@ -27,12 +28,36 @@ interface WalkthroughFrame {
   binaryHighlight?: { octet: number; bits: [number, number] }
 }
 
-const SUBNET_BLOCKS: SubnetBlock[] = [
-  { id: 0, label: 'Subnet 1', network: '192.168.10.0/26', range: '.1 — .62', gateway: '.1' },
-  { id: 1, label: 'Subnet 2', network: '192.168.10.64/26', range: '.65 — .126', gateway: '.65' },
-  { id: 2, label: 'Subnet 3', network: '192.168.10.128/26', range: '.129 — .190', gateway: '.129' },
-  { id: 3, label: 'Subnet 4', network: '192.168.10.192/26', range: '.193 — .254', gateway: '.193' },
-]
+const BASE_CIDR = 24
+
+function generateSubnetBlocks(baseCidr: number, targetCidr: number): SubnetBlock[] {
+  if (targetCidr <= baseCidr) return []
+
+  const subnetCount = Math.pow(2, targetCidr - baseCidr)
+  const blockSize = Math.pow(2, 32 - targetCidr)
+  const subnets: SubnetBlock[] = []
+
+  // Limit display to max 8 subnets for UI clarity
+  const displayCount = Math.min(subnetCount, 8)
+
+  for (let i = 0; i < displayCount; i++) {
+    const startAddr = i * blockSize
+    const endAddr = startAddr + blockSize - 1
+    const usableStart = startAddr + 1
+    const usableEnd = endAddr - 1
+
+    subnets.push({
+      id: i,
+      label: `Subnet ${i + 1}`,
+      network: `192.168.10.${startAddr}/${targetCidr}`,
+      range: `.${usableStart} — .${usableEnd}`,
+      gateway: `.${usableStart}`,
+      startAddr,
+    })
+  }
+
+  return subnets
+}
 
 const WALKTHROUGH_FRAMES: WalkthroughFrame[] = [
   {
@@ -192,14 +217,21 @@ const CANVAS_WIDTH = 600
 const CANVAS_HEIGHT = 120
 
 interface SubnetVisualizationProps {
+  subnets: SubnetBlock[]
   highlightSubnets: number[]
   prefersReducedMotion: boolean
   svgRef: React.RefObject<SVGSVGElement>
 }
 
-function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }: SubnetVisualizationProps) {
-  const barWidth = CANVAS_WIDTH / 4
+function SubnetVisualization({ subnets, highlightSubnets, prefersReducedMotion, svgRef }: SubnetVisualizationProps) {
+  const subnetCount = subnets.length
+  const barWidth = subnetCount > 0 ? CANVAS_WIDTH / subnetCount : CANVAS_WIDTH
   const barHeight = 48
+
+  // Generate address markers based on subnets
+  const markers = subnets.length > 0
+    ? [...subnets.map(s => `.${s.startAddr}`), '.255']
+    : ['.0', '.255']
 
   return (
     <div className="space-y-2">
@@ -212,7 +244,7 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
       >
         <rect x={0} y={0} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="fill-muted/30" />
 
-        {SUBNET_BLOCKS.map((subnet, idx) => {
+        {subnets.map((subnet, idx) => {
           const isHighlighted = highlightSubnets.includes(subnet.id)
           const x = idx * barWidth
           return (
@@ -222,7 +254,7 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
                 y={10}
                 width={barWidth - 2}
                 height={barHeight}
-                fill={SUBNET_FILL_COLORS[idx]}
+                fill={SUBNET_FILL_COLORS[idx % SUBNET_FILL_COLORS.length]}
                 initial={prefersReducedMotion ? false : { opacity: 0.3, scaleY: 0.5 }}
                 animate={{
                   opacity: isHighlighted ? 1 : 0.3,
@@ -232,13 +264,13 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
                 style={{ originY: 1, transformOrigin: `${x + barWidth / 2}px ${10 + barHeight}px` }}
                 rx={4}
               />
-              {isHighlighted && (
+              {isHighlighted && barWidth > 40 && (
                 <text
                   x={x + barWidth / 2}
                   y={38}
                   textAnchor="middle"
                   className="fill-white text-xs font-medium"
-                  style={{ fontSize: '12px' }}
+                  style={{ fontSize: barWidth > 80 ? '12px' : '10px' }}
                 >
                   {subnet.label}
                 </text>
@@ -247,10 +279,10 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
           )
         })}
 
-        {['.0', '.64', '.128', '.192', '.255'].map((label, idx) => (
+        {markers.map((label, idx) => (
           <text
-            key={label}
-            x={idx === 4 ? CANVAS_WIDTH - 10 : idx * (CANVAS_WIDTH / 4) + 5}
+            key={`${label}-${idx}`}
+            x={idx === markers.length - 1 ? CANVAS_WIDTH - 10 : idx * barWidth + 5}
             y={CANVAS_HEIGHT - 8}
             className="fill-muted-foreground"
             style={{ fontSize: '10px' }}
@@ -259,12 +291,12 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
           </text>
         ))}
 
-        {[1, 2, 3].map((idx) => (
+        {subnets.slice(1).map((_, idx) => (
           <line
             key={idx}
-            x1={idx * barWidth}
+            x1={(idx + 1) * barWidth}
             y1={10}
-            x2={idx * barWidth}
+            x2={(idx + 1) * barWidth}
             y2={10 + barHeight}
             stroke="currentColor"
             strokeOpacity={0.3}
@@ -275,7 +307,7 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <AnimatePresence>
-          {SUBNET_BLOCKS.map((subnet, idx) => {
+          {subnets.map((subnet, idx) => {
             const isHighlighted = highlightSubnets.includes(subnet.id)
             if (!isHighlighted) return null
 
@@ -286,9 +318,9 @@ function SubnetVisualization({ highlightSubnets, prefersReducedMotion, svgRef }:
                 animate={{ opacity: 1, scale: 1 }}
                 exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.9 }}
                 className="rounded-lg border-2 p-2 text-xs"
-                style={{ borderColor: `${SUBNET_FILL_COLORS[idx]}50` }}
+                style={{ borderColor: `${SUBNET_FILL_COLORS[idx % SUBNET_FILL_COLORS.length]}50` }}
               >
-                <div className="font-medium" style={{ color: SUBNET_FILL_COLORS[idx] }}>
+                <div className="font-medium" style={{ color: SUBNET_FILL_COLORS[idx % SUBNET_FILL_COLORS.length] }}>
                   {subnet.label}
                 </div>
                 <div className="font-mono text-muted-foreground">{subnet.network}</div>
@@ -321,6 +353,16 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
   const currentFrame = WALKTHROUGH_FRAMES[state.frameIdx]
   const displayCidr = userCidr ?? currentFrame.cidr ?? 26
 
+  // Generate subnets dynamically based on current CIDR
+  const dynamicSubnets = generateSubnetBlocks(BASE_CIDR, displayCidr)
+
+  // Scale highlightSubnets to match dynamic subnet count
+  const maxHighlight = Math.min(
+    currentFrame.highlightSubnets.length > 0 ? Math.max(...currentFrame.highlightSubnets) + 1 : 0,
+    dynamicSubnets.length
+  )
+  const dynamicHighlights = dynamicSubnets.slice(0, maxHighlight).map(s => s.id)
+
   return (
     <div className="space-y-4">
       <NarrationPanel
@@ -340,7 +382,8 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
       )}
 
       <SubnetVisualization
-        highlightSubnets={currentFrame.highlightSubnets}
+        subnets={dynamicSubnets}
+        highlightSubnets={dynamicHighlights}
         prefersReducedMotion={prefersReducedMotion}
         svgRef={svgRef}
       />
