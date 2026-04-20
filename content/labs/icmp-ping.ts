@@ -321,7 +321,11 @@ const lab: LabContent = {
       "why": "Test MTU path discovery — phát hiện lỗi MTU mismatch bằng ping packet size",
       "observeWith": "# Nếu 1400 OK nhưng 1472 fail:\nsudo tcpdump -i any icmp  # Tìm 'ICMP frag needed' — cho biết MTU tối đa của đường\nping -s 1472 -M do 8.8.8.8  # -M do = Don't Fragment bit, fail rõ ràng hơn nếu MTU thấp"
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "IcmpPingPlayground"
+  }
 };
 
 export default lab;

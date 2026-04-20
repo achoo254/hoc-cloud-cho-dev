@@ -385,7 +385,11 @@ const lab: LabContent = {
       "why": "Xem DHCP server đang cấp IP cho những máy nào — thực hành đọc lease database của server",
       "observeWith": "Mỗi lease entry phải có: địa chỉ IP (lease X.X.X.X), MAC (hardware ethernet), binding state (active/free/expired), starts/ends timestamp. Đếm số entry 'binding state active' và so sánh với range pool để biết còn bao nhiêu IP trống."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "DhcpPlayground"
+  }
 };
 
 export default lab;

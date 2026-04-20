@@ -316,5 +316,9 @@
       "cmd": "# Ping với packet size khác nhau\nping -c 3 -s 1400 8.8.8.8   # 1400 bytes\nping -c 3 -s 1450 8.8.8.8   # 1450 bytes\nping -c 3 -s 1472 8.8.8.8   # Max Ethernet (1472 + 28 hdr = 1500)\n\n# Nếu size lớn fail: 'Frag needed' = MTU issue trên đường đi",
       "observeWith": "# Nếu 1400 OK nhưng 1472 fail:\nsudo tcpdump -i any icmp  # Tìm 'ICMP frag needed' — cho biết MTU tối đa của đường\nping -s 1472 -M do 8.8.8.8  # -M do = Don't Fragment bit, fail rõ ràng hơn nếu MTU thấp"
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "IcmpPingPlayground"
+  }
 }

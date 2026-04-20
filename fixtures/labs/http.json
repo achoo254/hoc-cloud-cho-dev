@@ -398,5 +398,9 @@
       "cmd": "# Export TLS session keys\nexport SSLKEYLOGFILE=/tmp/tls-keys.log\ncurl https://httpbin.org/get > /dev/null\ncat /tmp/tls-keys.log | head -5\n\n# Capture đồng thời để mở Wireshark\nexport SSLKEYLOGFILE=/tmp/tls-keys.log\nsudo tcpdump -i any -w /tmp/capture.pcap 'host httpbin.org' &\ncurl https://httpbin.org/get\nsudo pkill tcpdump\n# Mở Wireshark: Edit→Preferences→TLS→Pre-Master-Secret: /tmp/tls-keys.log",
       "observeWith": "cat /tmp/tls-keys.log phải có dòng bắt đầu bằng 'CLIENT_RANDOM ...' — đây là session key. Mở Wireshark với capture.pcap và load key file: filter 'http2' phải thấy HEADERS frame thay vì 'Application Data'. Nếu vẫn thấy 'Application Data' → key file path sai hoặc curl version không hỗ trợ SSLKEYLOGFILE."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "HttpPlayground"
+  }
 }

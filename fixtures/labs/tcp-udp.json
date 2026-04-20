@@ -7,6 +7,10 @@
   "estimated_minutes": 40,
   "content_hash": "2436b3e8322334d86ed5f28ebbbb71b23518aa8d",
   "updated_at": 1776596784,
+  "diagram": {
+    "type": "custom",
+    "component": "TcpUdpPlayground"
+  },
   "tldr": [
     {
       "what": "TCP — Transmission Control Protocol",

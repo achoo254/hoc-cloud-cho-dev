@@ -352,7 +352,11 @@ const lab: LabContent = {
       "why": "Phát hiện dấu hiệu ARP spoofing trong mạng — kỹ năng cần thiết cho bảo mật và audit",
       "observeWith": "# Output của ip neigh: cột 5 là MAC address\n# uniq -d chỉ in ra các MAC xuất hiện 2+ lần\n# arp-scan --localnet: mỗi dòng là 'IP\\tMAC\\tVendor' — sort -k2 để group theo MAC\n# Legitimate: bonding/teaming có thể share MAC → verify với hardware team"
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "ArpPlayground"
+  }
 };
 
 export default lab;

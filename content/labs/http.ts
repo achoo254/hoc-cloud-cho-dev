@@ -403,7 +403,11 @@ const lab: LabContent = {
       "why": "Decrypt HTTPS với SSLKEYLOGFILE — debug khi curl không đủ thông tin, cần xem Wireshark",
       "observeWith": "cat /tmp/tls-keys.log phải có dòng bắt đầu bằng 'CLIENT_RANDOM ...' — đây là session key. Mở Wireshark với capture.pcap và load key file: filter 'http2' phải thấy HEADERS frame thay vì 'Application Data'. Nếu vẫn thấy 'Application Data' → key file path sai hoặc curl version không hỗ trợ SSLKEYLOGFILE."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "HttpPlayground"
+  }
 };
 
 export default lab;

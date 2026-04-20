@@ -384,7 +384,11 @@ const lab: LabContent = {
       "why": "Xem TCP states trong hệ thống — hiểu ESTABLISHED, TIME_WAIT, LISTEN",
       "observeWith": "# Sau khi đóng nc connection: xem TIME-WAIT xuất hiện\n# ss -tn | grep TIME-WAIT — tồn tại ~60s trước khi biến mất\n# Đây chính là nguyên nhân 'Address already in use' khi restart nhanh"
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "TcpUdpPlayground"
+  }
 };
 
 export default lab;
