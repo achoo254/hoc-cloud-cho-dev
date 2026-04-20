@@ -2,7 +2,8 @@
 title: UI Migration — Vite + React + shadcn/ui + Framer Motion
 slug: ui-migrate-vite-react
 date: 2026-04-19
-status: ready-to-deploy
+status: completed
+completedDate: 2026-04-20
 priority: P1
 effort: 10-15d (realistic after red-team)
 branch: master
@@ -68,7 +69,7 @@ Rewrite UI từ vanilla HTML/JS (~3150 LOC, 8 lab HTMLs) sang **Vite + React 18 
 | 4 | Dashboard (stats, due, roadmap, toolbar) ✅ | phase-04 | — |
 | 5 | Search (Command palette + client fallback) + Progress ✅ | phase-05 | — |
 | 6 | Polish (animations, dark mode, responsive, a11y) ✅ | phase-06 | — |
-| 7 | Deploy + cutover (nginx, dual-run, archive labs/) 🟡 ready | phase-07 | — |
+| 7 | Deploy + cutover (nginx, dual-run, archive labs/) ✅ | phase-07 | — |
 
 **Phase 00 là gate:** Không pass go-criteria → abort plan, fall back vanilla refactor.
 
@@ -83,3 +84,22 @@ Rewrite UI từ vanilla HTML/JS (~3150 LOC, 8 lab HTMLs) sang **Vite + React 18 
 ## Risks
 
 Xem chi tiết trong từng phase. Tổng quát: rewrite tốn công → chia nhỏ phase deploy-able; giữ `labs/` cũ làm fallback đến hết Phase 7.
+
+## Completion Summary (2026-04-20)
+
+**All 8 phases completed.** UI migration from vanilla HTML/JS to Vite + React + shadcn/ui is live.
+
+### Deployment verification
+- **Healthz:** `{"status":"ok","db":"connected","uptime":59465}`
+- **Search API:** FTS5 with BM25 ranking + `<mark>` highlighting working
+- **Main page:** 200 OK via Cloudflare, proper cache headers
+- **Bundle size:** Main chunk ~42KB gzip (target <200KB ✓)
+
+### Key changes from original plan
+1. `labs/` completely purged (not archived to `legacy/`)
+2. Deploy scripts replaced by GitHub Actions CI/CD
+3. Server bundled with esbuild → single `server.bundle.js`
+4. PM2 managed via CLI args (no ecosystem.config.cjs deployed)
+
+### Post-cutover TODO
+- [ ] Drop `labs`/`labs_fts` tables after 2 weeks if confirmed unused

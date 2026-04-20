@@ -1,6 +1,6 @@
 # Phase 07 — Deploy + Cutover
 
-**Status:** ready-to-deploy (2026-04-19) · **Effort:** 0.5d · **Priority:** P1 · **Depends on:** phase-01..06
+**Status:** ✅ completed (2026-04-20) · **Effort:** 0.5d · **Priority:** P1 · **Depends on:** phase-01..06
 
 ## Completion notes (local prep)
 
@@ -12,13 +12,13 @@
 
 ## User action required (cutover day)
 
-- [ ] Confirm `pm2` process name (default guess: `hoccloud-server`; cũ: `hoc-cloud-labs`)
-- [ ] Confirm VPS base path (`REMOTE_BASE` env var; default `/var/www/hoccloud`)
-- [ ] Verify `server/ecosystem.config.cjs` trên VPS
-- [ ] `git mv labs/ legacy/labs/ && git commit` + rsync `legacy/` → VPS
-- [ ] Deploy nginx config + run `deploy/remote-deploy.sh`
-- [ ] Smoke test per `docs/migration-260419-vite-react.md`
-- [ ] Sau 2 tuần prod ổn: drop labs/labs_fts tables + remove `legacy/`
+- [x] Confirm `pm2` process name → `hoccloud-server` ✓
+- [x] Confirm VPS base path → `/var/www/hoccloud` ✓
+- [x] Verify `server/ecosystem.config.cjs` → replaced by CLI args in deploy.yml ✓
+- [x] `labs/` purged completely (commit `e90e7cc`) ✓
+- [x] Deploy via GitHub Actions CI/CD ✓
+- [x] Smoke test: healthz OK, search API OK, main page 200 ✓
+- [ ] Sau 2 tuần prod ổn: drop labs/labs_fts tables (if any remain)
 
 ## Goal
 
