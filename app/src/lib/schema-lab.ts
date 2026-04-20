@@ -6,6 +6,20 @@
 
 import { z } from 'zod'
 
+// ── Diagram (optional interactive playground) ─────────────────────────────────
+// RED TEAM #6: Single variant for now; extend to discriminatedUnion when needed.
+
+import { DIAGRAM_REGISTRY_KEYS } from '@/components/lab/diagrams/registry'
+
+const registryKeys = DIAGRAM_REGISTRY_KEYS as [string, ...string[]]
+
+export const DiagramSchema = z.object({
+  type: z.literal('custom'),
+  component: z.enum(registryKeys),
+})
+
+export type DiagramConfig = z.infer<typeof DiagramSchema>
+
 // ── THINK section ─────────────────────────────────────────────────────────────
 
 export const TldrItemSchema = z
@@ -112,6 +126,9 @@ export const LabFixtureSchema = z.object({
   quiz: z.array(QuizItemSchema).min(1),
   flashcards: z.array(FlashcardSchema).min(1),
   try_at_home: z.array(TryAtHomeSchema).min(1),
+
+  // Optional interactive playground config (Phase 01)
+  diagram: DiagramSchema.optional(),
 })
 
 // ── Convenience re-export namespace ──────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 > **[RED TEAM #11] NEW PHASE** — Validate tích hợp D3 + Framer trước khi commit 7 phases. Không có phase này, effort 4-6d (now 3-3.5d) là ảo tưởng vì team (có thể) chưa có prior art.
 
-**Priority:** P0 (prerequisite) | **Effort:** 0.5d | **Status:** pending | **Depends:** none
+**Priority:** P0 (prerequisite) | **Effort:** 0.5d | **Status:** ✅ complete | **Depends:** none
 
 ## Goal
 POC 1 sample frame animated với D3 scale layout + Framer Motion transform — xác nhận 2 thư viện không tranh DOM, bundle size chấp nhận được, HMR work.

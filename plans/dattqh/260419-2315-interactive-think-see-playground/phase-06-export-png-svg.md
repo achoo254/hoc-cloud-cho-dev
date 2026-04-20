@@ -2,7 +2,7 @@
 
 > **[RED TEAM #7] PNG CUT khỏi pilot** — Browser screenshot tool đã giải quyết, PNG export là gold plating zero-learning-value với nhiều edge cases (tainted canvas, Safari toBlob null, CSS vars không resolve, foreignObject bỏ trống, capture non-atomic). Pilot giữ **SVG export tùy chọn** (1 phase, có thể defer). Nếu cắt hoàn toàn → effort -0.5d, acceptance bỏ export criterion.
 
-**Priority:** P3 | **Effort:** 0.3d (SVG-only, confirmed Validation V5) | **Status:** REDUCED | **Depends:** phase-03
+**Priority:** P3 | **Effort:** 0.3d (SVG-only, confirmed Validation V5) | **Status:** ✅ complete | **Depends:** phase-03
 
 ## Goal
 Export current diagram state (current frame) ra PNG hoặc SVG file. No watermark.

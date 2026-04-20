@@ -1,12 +1,14 @@
 /**
  * Top-level lab content renderer.
  * Renders sections in THINK → SEE → SHIP order:
- *   THINK: TLDR table
- *   SEE:   Walkthrough steps (with optional code blocks)
+ *   THINK: TLDR table (or interactive playground on desktop)
+ *   SEE:   Walkthrough steps (or interactive playground on desktop)
  *   SHIP:  Quiz, Flashcards, Try-at-home commands
+ *
+ * Phase 01: Added responsive playground switch (CSS-only, RED TEAM #14)
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, Suspense } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -15,7 +17,15 @@ import { QuizBlock } from '@/components/lab/quiz-block'
 import { FlashcardSM2 } from '@/components/lab/flashcard-sm2'
 import { ProgressBar } from '@/components/lab/progress-bar'
 import { useProgress } from '@/lib/hooks/use-progress'
+import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
+import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
 import type { LabContent, TldrItem, WalkthroughStep, TryAtHome } from '@/lib/schema-lab'
+
+// Feature flag (RED TEAM #12) + query override
+const PLAYGROUND_ENABLED = import.meta.env.VITE_ENABLE_DIAGRAM_PLAYGROUND !== 'false'
+const getTextOverride = () =>
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('textMode') === '1'
 
 interface LabRendererProps {
   lab: LabContent
@@ -50,6 +60,45 @@ function SectionHeading({
         <p className="text-sm text-muted-foreground">{description}</p>
       )}
     </div>
+  )
+}
+
+// ── Playground skeleton (loading state) ───────────────────────────────────────
+
+function PlaygroundSkeleton() {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/30 p-8 animate-pulse">
+      <div className="h-6 w-48 bg-muted rounded mb-4 mx-auto" />
+      <div className="h-40 bg-muted/50 rounded" />
+    </div>
+  )
+}
+
+// ── Playground section (desktop only via CSS) ─────────────────────────────────
+
+function PlaygroundSection({ lab }: { lab: LabContent }) {
+  if (!lab.diagram || lab.diagram.type !== 'custom') return null
+
+  const componentKey = lab.diagram.component as DiagramRegistryKey
+  const DiagramComponent = diagramRegistry[componentKey]
+
+  if (!DiagramComponent) {
+    console.warn(`[LabRenderer] Unknown diagram component: ${componentKey}`)
+    return null
+  }
+
+  return (
+    <PlaygroundErrorBoundary
+      fallback={
+        <div className="text-center py-8 text-muted-foreground">
+          Failed to load interactive playground. Showing text version below.
+        </div>
+      }
+    >
+      <Suspense fallback={<PlaygroundSkeleton />}>
+        <DiagramComponent lab={lab} />
+      </Suspense>
+    </PlaygroundErrorBoundary>
   )
 }
 
@@ -188,6 +237,9 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
     })
   }
 
+  // Check if interactive playground should render (RED TEAM #12, #14)
+  const hasPlayground = PLAYGROUND_ENABLED && !getTextOverride() && lab.diagram?.type === 'custom'
+
   return (
     <article className={cn('max-w-3xl mx-auto space-y-8 py-6 px-4', className)}>
       {/* Header */}
@@ -202,17 +254,37 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       <Separator />
 
-      {/* THINK — anchor for TOC */}
-      <div id="section-think">
-        <TldrSection items={lab.tldr} />
-      </div>
+      {/* THINK + SEE: Playground (desktop) or Text (mobile) — CSS-only switch */}
+      {hasPlayground ? (
+        <>
+          {/* Desktop: Interactive playground replaces THINK + SEE */}
+          <div className="hidden md:block" id="section-playground">
+            <PlaygroundSection lab={lab} />
+          </div>
 
-      <Separator />
-
-      {/* SEE — anchor for TOC */}
-      <div id="section-see">
-        <WalkthroughSection steps={lab.walkthrough} />
-      </div>
+          {/* Mobile: Text fallback for THINK + SEE */}
+          <div className="md:hidden space-y-8">
+            <div id="section-think">
+              <TldrSection items={lab.tldr} />
+            </div>
+            <Separator />
+            <div id="section-see">
+              <WalkthroughSection steps={lab.walkthrough} />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* No playground: always show text THINK + SEE */}
+          <div id="section-think">
+            <TldrSection items={lab.tldr} />
+          </div>
+          <Separator />
+          <div id="section-see">
+            <WalkthroughSection steps={lab.walkthrough} />
+          </div>
+        </>
+      )}
 
       <Separator />
 

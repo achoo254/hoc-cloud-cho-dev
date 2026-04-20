@@ -1,6 +1,6 @@
 # Phase 07 — Polish + a11y + bundle audit
 
-**Priority:** P2 | **Effort:** 0.5d | **Status:** pending | **Depends:** phase-06
+**Priority:** P2 | **Effort:** 0.5d | **Status:** ✅ complete | **Depends:** phase-06
 
 ## Goal
 A11y, keyboard nav, reduced motion, bundle size check, smoke test toàn bộ.

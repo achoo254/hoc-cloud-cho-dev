@@ -1,6 +1,6 @@
 # Phase 01 — Schema extension + component registry + responsive switch
 
-**Priority:** P1 (foundation) | **Effort:** 0.5d | **Status:** pending
+**Priority:** P1 (foundation) | **Effort:** 0.5d | **Status:** ✅ complete
 
 ## Goal
 Scaffold optional `diagram` field trong fixture schema, component registry mapping slug/component-name → React component, responsive switch trong `LabRenderer`.

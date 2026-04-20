@@ -69,6 +69,12 @@ const TryAtHomeSchema = z.object({
   observeWith: z.string().optional(),
 }).passthrough();
 
+// Diagram config — optional interactive playground (Phase 01).
+const DiagramSchema = z.object({
+  type: z.literal('custom'),
+  component: z.string().min(1),
+}).optional();
+
 // Full lab fixture (mirrors dumped JSON shape from dump-lab-fixtures.js).
 export const LabFixtureSchema = z.object({
   id: z.number().int(),
@@ -85,6 +91,9 @@ export const LabFixtureSchema = z.object({
   quiz: z.array(QuizItemSchema).min(1),
   flashcards: z.array(FlashcardSchema).min(1),
   try_at_home: z.array(TryAtHomeSchema).min(1),
+
+  // Optional interactive playground config (Phase 01)
+  diagram: DiagramSchema,
 });
 
 export const LabSchemas = {

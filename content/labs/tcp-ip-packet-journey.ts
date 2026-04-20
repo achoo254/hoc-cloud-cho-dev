@@ -407,7 +407,11 @@ const lab: LabContent = {
       "why": "Xem packet đến/đi bằng tcpdump — công cụ debug mạng level devops",
       "observeWith": "Khi tcpdump đang chạy, mở terminal khác ping example.com. Output sẽ hiển thị 2 dòng mỗi ping: 'echo request' (đi) và 'echo reply' (về). Chỉ thấy request mà không có reply = firewall chặn return traffic."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "TcpIpJourneyPlayground"
+  }
 };
 
 export default lab;

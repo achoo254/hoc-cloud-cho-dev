@@ -1,6 +1,6 @@
 # Phase 03 — Packet Journey story mode (SEE)
 
-**Priority:** P1 | **Effort:** 1.5d | **Status:** pending | **Depends:** phase-02
+**Priority:** P1 | **Effort:** 1.5d | **Status:** ✅ complete | **Depends:** phase-02
 
 ## Goal
 Canvas 2 cột (client ↔ routers ↔ server) với 4 layer slots mỗi device. Timeline scrubber auto-play theo `walkthrough[]`.

@@ -7,6 +7,10 @@
   "estimated_minutes": 40,
   "content_hash": "3ca1b104e8ed29008894dfab27522a58e7263a09",
   "updated_at": 1776596703,
+  "diagram": {
+    "type": "custom",
+    "component": "TcpIpJourneyPlayground"
+  },
   "tldr": [
     {
       "layer": "L4",

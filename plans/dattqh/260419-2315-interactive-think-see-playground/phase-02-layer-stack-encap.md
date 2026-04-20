@@ -1,6 +1,6 @@
 # Phase 02 — Layer-stack encapsulation demo (THINK)
 
-**Priority:** P1 | **Effort:** 1d | **Status:** pending | **Depends:** phase-01
+**Priority:** P1 | **Effort:** 1d | **Status:** ✅ complete | **Depends:** phase-01
 
 ## Goal
 Render 4-layer TCP/IP stack dạng SVG tương tác, kèm drag-to-encapsulate animation. Text TLDR nhúng trong layer cards.

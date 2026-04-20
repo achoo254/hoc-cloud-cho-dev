@@ -2,7 +2,8 @@
 title: Interactive THINK/SEE Playground — tcp-ip-packet-journey pilot
 slug: interactive-think-see-playground
 date: 2026-04-19
-status: pending
+status: completed
+completedAt: 2026-04-20
 priority: P2
 effort: 3-3.5d (spike 0.5d + core 2.5d + SVG export 0.3d; KHÔNG analytics/Playwright suite)
 branch: master
@@ -128,3 +129,19 @@ User reminder: **self-learning repo, không phải product**. Revise:
 - `plan.md` effort: 5-5.5d → 3-3.5d
 - `phase-06`: giữ SVG + DOMPurify
 - `phase-07`: manual smoke + env flag; cắt Playwright + analytics page
+
+## Completion Summary — 2026-04-20
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| phase-00 spike-d3-framer | ✅ complete | D3+Framer POC validated |
+| phase-01 schema-registry-responsive | ✅ complete | DiagramSchema + registry + responsive switch |
+| phase-02 layer-stack-encap | ✅ complete | 4-layer SVG + drag-to-encap |
+| phase-03 journey-story-mode | ✅ complete | Timeline scrubber + autoplay |
+| phase-04 step-mode-scrubber | CUT (v2) | Deferred per RED TEAM #5 |
+| phase-05 sandbox-failure-injection | CUT (v2) | Deferred per RED TEAM #5 |
+| phase-06 export-png-svg | ✅ complete | SVG-only + DOMPurify per RED TEAM #7 |
+| phase-07 polish-a11y | ✅ complete | Keyboard nav, aria-live, reduced-motion, bundle audit |
+
+**Result:** All 6 active phases delivered. Pilot scope (story mode + SVG export + a11y) shipped to `tcp-ip-packet-journey`.
+Next: Self-test pilot lab 2-3x this week; subjective gut check before rolling out remaining 7 labs.

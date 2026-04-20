@@ -11,6 +11,7 @@ const IndexPage       = lazy(() => import('./routes/index'))
 const LabViewerPage   = lazy(() => import('./routes/lab-viewer'))
 const SearchPage      = lazy(() => import('./routes/search'))
 const DevPlayground   = lazy(() => import('./routes/dev-playground'))
+const SpikePlayground = lazy(() => import('./routes/spike-playground'))
 const NotFoundPage    = lazy(() => import('./routes/not-found'))
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: 'lab/:slug',      element: <LabViewerPage /> },
       { path: 'search',         element: <SearchPage /> },
       { path: 'dev/playground', element: <DevPlayground /> },
+      { path: 'dev/spike',      element: <SpikePlayground /> },
       { path: '*',              element: <NotFoundPage /> },
     ],
   },
