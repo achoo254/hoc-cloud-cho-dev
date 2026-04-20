@@ -32,7 +32,7 @@ export interface TocEntry {
 }
 
 export const DEFAULT_TOC_ENTRIES: TocEntry[] = [
-  { id: 'section-think',      label: 'TL;DR',        phase: 'THINK' },
+  { id: 'section-think',      label: 'Tổng quan',    phase: 'THINK' },
   { id: 'section-see',        label: 'Walkthrough',  phase: 'SEE'   },
   { id: 'section-quiz',       label: 'Quiz',         phase: 'SHIP'  },
   { id: 'section-flashcards', label: 'Flashcards',   phase: 'SHIP'  },

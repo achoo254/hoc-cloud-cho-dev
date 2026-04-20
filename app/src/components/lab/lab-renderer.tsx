@@ -109,8 +109,8 @@ function TldrSection({ items }: { items: TldrItem[] }) {
     <section className="space-y-4">
       <SectionHeading
         phase="THINK"
-        title="TL;DR"
-        description="Core concepts — why they matter & what breaks when they fail."
+        title="Tổng quan"
+        description="Khái niệm cốt lõi — tại sao quan trọng & hậu quả khi lỗi."
       />
       <div className="space-y-3">
         {items.map((item, idx) => (
