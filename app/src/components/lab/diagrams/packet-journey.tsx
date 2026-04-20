@@ -149,7 +149,14 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
         className="p-4 rounded-lg bg-muted/50 border border-border"
         aria-live="polite"
       >
-        <p className="font-medium">{currentFrame?.narration.what}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium">{currentFrame?.narration.what}</p>
+          {currentFrame?.isNarrationOnly && (
+            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/20 text-amber-500">
+              Summary
+            </span>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           {currentFrame?.narration.why}
         </p>
@@ -164,6 +171,20 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
           className="w-full max-w-[600px] mx-auto border border-border rounded-lg bg-background"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
         >
+          {/* Arrow marker definition */}
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="10"
+              markerHeight="7"
+              refX="9"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" className="fill-emerald-500" />
+            </marker>
+          </defs>
+
           {/* Connection lines */}
           {DEVICES.slice(0, -1).map((device, i) => (
             <line
@@ -200,41 +221,115 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
               >
                 {device.label}
               </text>
-              {/* Layer indicators */}
+              {/* Layer indicator — dynamic based on packet position */}
               <text
                 x={device.x}
                 y={DEVICE_Y + 50}
                 textAnchor="middle"
-                className="fill-muted-foreground text-[10px]"
+                className={cn(
+                  'text-[10px] transition-colors',
+                  packetPos?.device === device.id
+                    ? 'fill-emerald-500 font-medium'
+                    : 'fill-muted-foreground'
+                )}
               >
-                L1-L4
+                {packetPos?.device === device.id ? `L${packetPos.layer}` : '—'}
               </text>
             </g>
           ))}
 
+          {/* Direction arrow — from packet to target device */}
+          {packetDevice && currentFrame?.highlight?.device && !currentFrame?.isNarrationOnly && (() => {
+            const targetDevice = DEVICES.find(d => d.id === currentFrame.highlight?.device)
+            if (!targetDevice || targetDevice.id === packetPos?.device) return null
+            const startX = packetDevice.x
+            const endX = targetDevice.x
+            const arrowY = DEVICE_Y - 60
+            return (
+              <motion.line
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 0.7 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
+                x1={startX}
+                y1={arrowY}
+                x2={endX - (endX > startX ? 15 : -15)}
+                y2={arrowY}
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                className="stroke-emerald-500"
+                markerEnd="url(#arrowhead)"
+              />
+            )
+          })()}
+
           {/* Animated packet */}
           {packetDevice && !currentFrame?.isNarrationOnly && (
             <motion.g
-              animate={{
-                x: packetDevice.x,
-                y: DEVICE_Y - 45,
-              }}
+              initial={{ x: packetDevice.x, y: DEVICE_Y - 45 }}
+              animate={{ x: packetDevice.x, y: DEVICE_Y - 45 }}
               transition={{
                 duration: prefersReducedMotion ? 0 : (state.isPlaying ? 0.5 : 0),
                 ease: 'easeInOut',
               }}
             >
-              <circle r={12} className="fill-emerald-500" />
+              {/* Tooltip on hover */}
+              <title>
+                {currentFrame?.highlight?.protocol ?? 'Packet'}: {currentFrame?.narration.what}
+              </title>
+              <circle r={14} className="fill-emerald-500 cursor-help" />
               <text
                 y={4}
                 textAnchor="middle"
-                className="fill-white text-[8px] font-bold"
+                className="fill-white text-[8px] font-bold pointer-events-none"
               >
-                PKT
+                {currentFrame?.highlight?.protocol ?? 'PKT'}
               </text>
             </motion.g>
           )}
+
+          {/* Summary state — when narration only */}
+          {currentFrame?.isNarrationOnly && (
+            <g>
+              <text
+                x={CANVAS_WIDTH / 2}
+                y={DEVICE_Y - 50}
+                textAnchor="middle"
+                className="fill-amber-500 text-sm font-medium"
+              >
+                ✓ Flow hoàn tất
+              </text>
+              <text
+                x={CANVAS_WIDTH / 2}
+                y={DEVICE_Y - 30}
+                textAnchor="middle"
+                className="fill-muted-foreground text-[10px]"
+              >
+                Xem lại các bước bằng timeline bên dưới
+              </text>
+            </g>
+          )}
         </svg>
+
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-full bg-emerald-500" />
+            Packet
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-full border-2 border-primary bg-primary/30" />
+            Target
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-emerald-500">L4</span>
+            Layer hiện tại
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-emerald-500">→</span>
+            Hướng di chuyển
+          </span>
+        </div>
       </div>
 
       {/* Timeline scrubber */}
