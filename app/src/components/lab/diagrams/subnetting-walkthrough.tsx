@@ -135,6 +135,26 @@ function cidrToDecimalMask(cidr: number): string {
   ].join('.')
 }
 
+function generateDynamicNarration(baseCidr: number, targetCidr: number): { title: string; description: string } {
+  if (targetCidr <= baseCidr) {
+    return {
+      title: `Chưa chia subnet`,
+      description: `Chọn CIDR > /${baseCidr} để bắt đầu chia subnet.`,
+    }
+  }
+
+  const subnetCount = Math.pow(2, targetCidr - baseCidr)
+  const hostBits = 32 - targetCidr
+  const hostsPerSubnet = Math.pow(2, hostBits) - 2
+  const decimalMask = cidrToDecimalMask(targetCidr)
+  const bitsBorrowed = targetCidr - baseCidr
+
+  return {
+    title: `/${baseCidr} → ${subnetCount} subnet /${targetCidr}`,
+    description: `Mượn ${bitsBorrowed} bit từ host → ${subnetCount} subnet × ${hostsPerSubnet} hosts. Subnet mask: ${decimalMask}`,
+  }
+}
+
 interface BinaryMaskDisplayProps {
   cidr: number
   editable?: boolean
@@ -363,12 +383,17 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
   )
   const dynamicHighlights = dynamicSubnets.slice(0, maxHighlight).map(s => s.id)
 
+  // Use dynamic narration when user has changed CIDR, otherwise use frame content
+  const narration = userCidr !== null
+    ? generateDynamicNarration(BASE_CIDR, displayCidr)
+    : { title: currentFrame.title, description: currentFrame.description }
+
   return (
     <div className="space-y-4">
       <NarrationPanel
         content={{
-          what: currentFrame.title,
-          why: currentFrame.description,
+          what: narration.title,
+          why: narration.description,
         }}
       />
 
