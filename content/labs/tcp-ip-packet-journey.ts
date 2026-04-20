@@ -14,14 +14,14 @@ const lab: LabContent = {
   "updated_at": 1776596703,
   "tldr": [
     {
-      "why": "Chỗ dev viết code. Lỗi ở đây là 400/500/Bad Request — KHÔNG phải lỗi mạng.",
+      "why": "Tầng dev tương tác trực tiếp qua API/protocol. Lỗi 400/500/Bad Request = Application fail, KHÔNG phải lỗi mạng.",
       "whyBreaks": "Nhầm lỗi Application thành lỗi mạng → debug sai hướng hàng giờ. Lỗi 502 Bad Gateway là Application layer fail, không phải cáp mạng vấn đề. Nếu thiếu hiểu biết tầng này, sẽ restart server vô ích thay vì check log nginx/app.",
       "deploymentUse": "Khi VPS deploy xong, check log application trước: journalctl -u nginx, docker logs <container>. Lỗi 502/503 luôn là Application hoặc Transport, không phải Link/Internet.",
       "layer": "L4",
       "name": "Application",
       "pdu": "Message",
       "device": "Process (nginx, curl, ping...)",
-      "protocol": "HTTP, DNS, SSH, TLS, ICMP-user"
+      "protocol": "HTTP, DNS, SSH, TLS, FTP"
     },
     {
       "why": "Gắn PORT để phân biệt nhiều service trên cùng 1 máy. TCP = đáng tin (web, ssh). UDP = nhanh (DNS, video call).",
@@ -44,14 +44,14 @@ const lab: LabContent = {
       "protocol": "IP, ICMP"
     },
     {
-      "why": "Đẩy bit từ máy này sang máy bên cạnh (cùng LAN). Cáp đứt / WiFi mất sóng = 3 tầng trên vô nghĩa.",
+      "why": "Đẩy frame/bit giữa 2 thiết bị cùng LAN (dùng MAC). Cáp đứt / WiFi mất sóng = 3 tầng trên vô nghĩa.",
       "whyBreaks": "Link fail = mọi thứ trên vô nghĩa. Trên VPS cloud, Link thường do provider quản lý nhưng vẫn có thể fail do NIC driver, MTU mismatch, hoặc cloud security group block ở L2.",
       "deploymentUse": "ip link show — xem interface có UP không. Nếu state DOWN thì Link chết. Trên AWS/GCP, security group rule chặn ở đây — nhưng error giống như Network Unreachable, không phải Connection Refused.",
       "layer": "L1",
       "name": "Link",
       "pdu": "Frame / Bits",
       "device": "NIC, switch, cáp, WiFi",
-      "protocol": "Ethernet, WiFi 802.11, ARP"
+      "protocol": "Ethernet, WiFi 802.11"
     }
   ],
   "walkthrough": [
