@@ -4,7 +4,7 @@
  * Uses shared walkthrough components for consistency.
  */
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useReducedMotion } from '@/lib/hooks/use-reduced-motion'
@@ -100,18 +100,50 @@ function generateBinaryMask(cidr: number): string {
   return [bits.slice(0, 8), bits.slice(8, 16), bits.slice(16, 24), bits.slice(24, 32)].join('.')
 }
 
+function cidrToDecimalMask(cidr: number): string {
+  const mask = (0xffffffff << (32 - cidr)) >>> 0
+  return [
+    (mask >>> 24) & 0xff,
+    (mask >>> 16) & 0xff,
+    (mask >>> 8) & 0xff,
+    mask & 0xff,
+  ].join('.')
+}
+
 interface BinaryMaskDisplayProps {
   cidr: number
+  editable?: boolean
+  onCidrChange?: (cidr: number) => void
   highlight?: { octet: number; bits: [number, number] }
 }
 
-function BinaryMaskDisplay({ cidr, highlight }: BinaryMaskDisplayProps) {
+function BinaryMaskDisplay({ cidr, editable = false, onCidrChange, highlight }: BinaryMaskDisplayProps) {
   const maskBits = generateBinaryMask(cidr)
   const octets = maskBits.split('.')
   const hostBits = 32 - cidr
+  const decimalMask = cidrToDecimalMask(cidr)
+  const totalHosts = Math.pow(2, hostBits)
+  const usableHosts = Math.max(0, totalHosts - 2)
 
   return (
-    <div className="font-mono text-xs bg-muted/50 p-2 rounded-lg">
+    <div className="font-mono text-xs bg-muted/50 p-3 rounded-lg space-y-3">
+      {editable && (
+        <div className="flex items-center justify-center gap-3">
+          <label className="text-muted-foreground">CIDR:</label>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold">/{cidr}</span>
+            <input
+              type="range"
+              min={8}
+              max={30}
+              value={cidr}
+              onChange={(e) => onCidrChange?.(Number(e.target.value))}
+              className="w-32 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-center gap-1">
         {octets.map((octet, octetIdx) => (
           <div key={octetIdx} className="flex">
@@ -138,9 +170,19 @@ function BinaryMaskDisplay({ cidr, highlight }: BinaryMaskDisplayProps) {
           </div>
         ))}
       </div>
-      <p className="text-center text-muted-foreground mt-1">
-        /{cidr} mask: {cidr} bits network (green) + {hostBits} bits host (orange)
-      </p>
+
+      <div className="text-center space-y-1">
+        <p className="text-muted-foreground">
+          /{cidr} = {cidr} bits network (green) + {hostBits} bits host (orange)
+        </p>
+        {editable && (
+          <p className="text-muted-foreground">
+            Subnet mask: <span className="text-foreground font-medium">{decimalMask}</span>
+            {' · '}
+            Hosts: <span className="text-foreground font-medium">{usableHosts.toLocaleString()}</span> usable
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -268,6 +310,7 @@ interface SubnettingWalkthroughProps {
 export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWalkthroughProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const prefersReducedMotion = useReducedMotion()
+  const [userCidr, setUserCidr] = useState<number | null>(null)
 
   const { state, dispatch, totalFrames } = useWalkthroughState({
     totalFrames: WALKTHROUGH_FRAMES.length,
@@ -276,6 +319,7 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
   })
 
   const currentFrame = WALKTHROUGH_FRAMES[state.frameIdx]
+  const displayCidr = userCidr ?? currentFrame.cidr ?? 26
 
   return (
     <div className="space-y-4">
@@ -287,7 +331,12 @@ export function SubnettingWalkthrough({ labSlug = 'subnet-cidr' }: SubnettingWal
       />
 
       {currentFrame.showBinary && (
-        <BinaryMaskDisplay cidr={currentFrame.cidr ?? 26} highlight={currentFrame.binaryHighlight} />
+        <BinaryMaskDisplay
+          cidr={displayCidr}
+          editable={true}
+          onCidrChange={setUserCidr}
+          highlight={currentFrame.binaryHighlight}
+        />
       )}
 
       <SubnetVisualization
