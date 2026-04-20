@@ -18,6 +18,11 @@ export const diagramRegistry = {
       default: m.TcpIpJourneyPlayground,
     }))
   ),
+  IPv4Playground: lazy(() =>
+    import('./ipv4-playground').then((m) => ({
+      default: m.IPv4Playground,
+    }))
+  ),
 } as const satisfies Record<string, React.LazyExoticComponent<DiagramComponent>>
 
 export type DiagramRegistryKey = keyof typeof diagramRegistry

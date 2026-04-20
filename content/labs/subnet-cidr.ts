@@ -382,7 +382,11 @@ const lab: LabContent = {
       "why": "Xem bit binary IP bằng Python — hiểu mask AND hoạt động ra sao",
       "observeWith": "Output: network_address broadcast_address total_addresses. Thử thay /26 thành /27 và /25 — xem network/broadcast thay đổi thế nào. strict=False cho phép IP bất kỳ trong subnet, không chỉ network address."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "IPv4Playground"
+  }
 };
 
 export default lab;

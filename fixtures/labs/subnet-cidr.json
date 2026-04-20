@@ -7,6 +7,10 @@
   "estimated_minutes": 50,
   "content_hash": "fc4cbef5f191e9412c6182d04140bb75b95944a4",
   "updated_at": 1776596734,
+  "diagram": {
+    "type": "custom",
+    "component": "IPv4Playground"
+  },
   "tldr": [
     {
       "term": "Network address",

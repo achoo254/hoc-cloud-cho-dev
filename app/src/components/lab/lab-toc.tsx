@@ -4,12 +4,13 @@
  * Desktop (lg+): sticky sidebar, always visible.
  * Mobile (<lg): hidden; open via Sheet trigger button.
  *
- * TOC entries: THINK, SEE, SHIP/Quiz, SHIP/Flashcards, SHIP/Commands.
+ * Accepts custom entries via props or uses default entries.
  * Active section highlighted via IntersectionObserver on section elements.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen } from 'lucide-react'
+import { ArrowLeft, BookOpen } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,27 +21,32 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
-// ── TOC entries ───────────────────────────────────────────────────────────────
+// ── TOC types & defaults ──────────────────────────────────────────────────────
 
-interface TocEntry {
+export type TocPhase = 'THINK' | 'SEE' | 'SHIP'
+
+export interface TocEntry {
   id: string
   label: string
-  phase: 'THINK' | 'SEE' | 'SHIP'
+  phase: TocPhase
 }
 
-export const LAB_TOC_ENTRIES: TocEntry[] = [
-  { id: 'section-think',      label: 'TL;DR',       phase: 'THINK' },
+export const DEFAULT_TOC_ENTRIES: TocEntry[] = [
+  { id: 'section-think',      label: 'TL;DR',        phase: 'THINK' },
   { id: 'section-see',        label: 'Walkthrough',  phase: 'SEE'   },
   { id: 'section-quiz',       label: 'Quiz',         phase: 'SHIP'  },
   { id: 'section-flashcards', label: 'Flashcards',   phase: 'SHIP'  },
   { id: 'section-commands',   label: 'Commands',     phase: 'SHIP'  },
 ]
 
-const PHASE_DOT: Record<TocEntry['phase'], string> = {
+export const PHASE_DOT_COLORS: Record<TocPhase, string> = {
   THINK: 'bg-violet-500',
   SEE:   'bg-blue-500',
   SHIP:  'bg-emerald-500',
 }
+
+// For backwards compatibility
+export const LAB_TOC_ENTRIES = DEFAULT_TOC_ENTRIES
 
 // ── Hook: active section via IntersectionObserver ─────────────────────────────
 
@@ -79,11 +85,17 @@ function useActiveSection(ids: string[]): string {
 
 // ── TocList ───────────────────────────────────────────────────────────────────
 
-function TocList({ activeId, onSelect }: { activeId: string; onSelect?: () => void }) {
+interface TocListProps {
+  entries: TocEntry[]
+  activeId: string
+  onSelect?: () => void
+}
+
+function TocList({ entries, activeId, onSelect }: TocListProps) {
   return (
     <nav aria-label="Lab sections">
       <ul className="space-y-1">
-        {LAB_TOC_ENTRIES.map((entry) => (
+        {entries.map((entry) => (
           <li key={entry.id}>
             <a
               href={`#${entry.id}`}
@@ -95,7 +107,7 @@ function TocList({ activeId, onSelect }: { activeId: string; onSelect?: () => vo
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
             >
-              <span className={cn('h-2 w-2 rounded-full shrink-0', PHASE_DOT[entry.phase])} />
+              <span className={cn('h-2 w-2 rounded-full shrink-0', PHASE_DOT_COLORS[entry.phase])} />
               {entry.label}
             </a>
           </li>
@@ -107,8 +119,22 @@ function TocList({ activeId, onSelect }: { activeId: string; onSelect?: () => vo
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function LabToc() {
-  const ids = LAB_TOC_ENTRIES.map((e) => e.id)
+export interface LabTocProps {
+  entries?: TocEntry[]
+  showBackLink?: boolean
+  backLinkHref?: string
+  backLinkLabel?: string
+  title?: string
+}
+
+export function LabToc({
+  entries = DEFAULT_TOC_ENTRIES,
+  showBackLink = true,
+  backLinkHref = '/labs',
+  backLinkLabel = 'Back to Labs',
+  title = 'On this page',
+}: LabTocProps) {
+  const ids = entries.map((e) => e.id)
   const activeId = useActiveSection(ids)
   const [sheetOpen, setSheetOpen] = useState(false)
 
@@ -119,10 +145,19 @@ export function LabToc() {
         className="hidden lg:block sticky top-20 h-fit w-48 shrink-0 self-start"
         aria-label="Table of contents"
       >
+        {showBackLink && (
+          <Link
+            to={backLinkHref}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {backLinkLabel}
+          </Link>
+        )}
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          On this page
+          {title}
         </p>
-        <TocList activeId={activeId} />
+        <TocList entries={entries} activeId={activeId} />
       </aside>
 
       {/* Mobile TOC trigger — visible only below lg */}
@@ -138,8 +173,18 @@ export function LabToc() {
             <SheetHeader>
               <SheetTitle className="text-sm">Lab Contents</SheetTitle>
             </SheetHeader>
+            {showBackLink && (
+              <Link
+                to={backLinkHref}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mt-4 transition-colors"
+                onClick={() => setSheetOpen(false)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {backLinkLabel}
+              </Link>
+            )}
             <div className="mt-4">
-              <TocList activeId={activeId} onSelect={() => setSheetOpen(false)} />
+              <TocList entries={entries} activeId={activeId} onSelect={() => setSheetOpen(false)} />
             </div>
           </SheetContent>
         </Sheet>
