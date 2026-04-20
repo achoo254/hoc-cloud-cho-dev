@@ -423,7 +423,11 @@ const lab: LabContent = {
       "why": "Reverse lookup — xem PTR record của IP, quan trọng để debug email deliverability",
       "observeWith": "PTR record hợp lệ sẽ trả về hostname trong ANSWER SECTION. Nếu thấy NXDOMAIN hoặc hostname generic của hosting (ví dụ compute.amazonaws.com) → cần cấu hình rDNS trong control panel VPS để email không bị reject."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "DnsPlayground"
+  }
 };
 
 export default lab;

@@ -418,5 +418,9 @@
       "cmd": "# PTR của IP\ndig -x 8.8.8.8\n\n# Xem PTR của IP server\nMY_IP=$(curl -s https://ipinfo.io/ip)\ndig -x $MY_IP",
       "observeWith": "PTR record hợp lệ sẽ trả về hostname trong ANSWER SECTION. Nếu thấy NXDOMAIN hoặc hostname generic của hosting (ví dụ compute.amazonaws.com) → cần cấu hình rDNS trong control panel VPS để email không bị reject."
     }
-  ]
+  ],
+  "diagram": {
+    "type": "custom",
+    "component": "DnsPlayground"
+  }
 }

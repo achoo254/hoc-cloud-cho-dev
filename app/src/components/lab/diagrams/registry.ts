@@ -23,6 +23,36 @@ export const diagramRegistry = {
       default: m.IPv4Playground,
     }))
   ),
+  TcpUdpPlayground: lazy(() =>
+    import('./tcp-udp-playground').then((m) => ({
+      default: m.TcpUdpPlayground,
+    }))
+  ),
+  IcmpPingPlayground: lazy(() =>
+    import('./icmp-ping-playground').then((m) => ({
+      default: m.IcmpPingPlayground,
+    }))
+  ),
+  DhcpPlayground: lazy(() =>
+    import('./dhcp-playground').then((m) => ({
+      default: m.DhcpPlayground,
+    }))
+  ),
+  ArpPlayground: lazy(() =>
+    import('./arp-playground').then((m) => ({
+      default: m.ArpPlayground,
+    }))
+  ),
+  HttpPlayground: lazy(() =>
+    import('./http-playground').then((m) => ({
+      default: m.HttpPlayground,
+    }))
+  ),
+  DnsPlayground: lazy(() =>
+    import('./dns-playground').then((m) => ({
+      default: m.DnsPlayground,
+    }))
+  ),
 } as const satisfies Record<string, React.LazyExoticComponent<DiagramComponent>>
 
 export type DiagramRegistryKey = keyof typeof diagramRegistry
