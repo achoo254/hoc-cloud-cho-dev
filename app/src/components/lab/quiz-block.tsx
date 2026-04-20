@@ -124,7 +124,10 @@ export function QuizBlock({ items, onScore, className }: QuizBlockProps) {
           transition={{ duration: reduce ? 0 : 0.18 }}
           className="rounded-xl border border-border bg-card p-5 space-y-4"
         >
-          <p className="font-medium leading-relaxed">{question.q}</p>
+          <p
+            className="font-medium leading-relaxed [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm"
+            dangerouslySetInnerHTML={{ __html: question.q }}
+          />
 
           <div className="space-y-2">
             {question.options.map((opt, idx) => {
@@ -177,9 +180,9 @@ export function QuizBlock({ items, onScore, className }: QuizBlockProps) {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 mt-1">
+                <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 mt-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs">
                   <span className="font-medium text-foreground">Why: </span>
-                  {question.whyCorrect}
+                  <span dangerouslySetInnerHTML={{ __html: question.whyCorrect }} />
                 </p>
               </motion.div>
             )}

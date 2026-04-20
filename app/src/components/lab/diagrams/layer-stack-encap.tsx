@@ -131,9 +131,9 @@ export function LayerStackEncap({ tldr }: LayerStackEncapProps) {
               key={layerKey}
               layout
               className={cn(
-                'rounded-xl border-2 p-4 transition-colors cursor-pointer',
+                'rounded-xl p-4 transition-colors cursor-pointer',
                 colors.bg,
-                isActive ? colors.border : 'border-transparent',
+                isActive && cn('border-2', colors.border),
                 isNext && 'ring-2 ring-primary/50 ring-offset-2 ring-offset-background'
               )}
               onClick={() => toggleExpand(layerKey)}
