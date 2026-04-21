@@ -30,23 +30,35 @@ jobs:
         working-directory: app
 
       - name: Extract Firebase Web config → VITE_* env
-        # Paste full firebaseConfig JSON from Firebase Console into the
+        # Paste the full firebaseConfig from Firebase Console into the
         # `FIREBASE_WEB_CONFIG` Actions Variable (Settings → Secrets and variables
-        # → Actions → Variables). Values are public (bundled into client JS).
+        # → Actions → Variables). Both JS object and JSON formats are accepted.
+        # Values are public (bundled into client JS).
         env:
           FIREBASE_WEB_CONFIG: ${{ vars.FIREBASE_WEB_CONFIG }}
         run: |
-          set -e
-          if [ -z "$FIREBASE_WEB_CONFIG" ]; then
-            echo "::error::FIREBASE_WEB_CONFIG variable is empty"
+          set -euo pipefail
+          if [ -z "${FIREBASE_WEB_CONFIG:-}" ]; then
+            echo "::error::FIREBASE_WEB_CONFIG variable is empty (set it in Settings → Secrets and variables → Actions → Variables)"
             exit 1
           fi
-          {
-            echo "VITE_FIREBASE_API_KEY=$(jq -r .apiKey <<<"$FIREBASE_WEB_CONFIG")"
-            echo "VITE_FIREBASE_AUTH_DOMAIN=$(jq -r .authDomain <<<"$FIREBASE_WEB_CONFIG")"
-            echo "VITE_FIREBASE_PROJECT_ID=$(jq -r .projectId <<<"$FIREBASE_WEB_CONFIG")"
-            echo "VITE_FIREBASE_APP_ID=$(jq -r .appId <<<"$FIREBASE_WEB_CONFIG")"
-          } >> "$GITHUB_ENV"
+          # Use node to parse — accepts both JSON and JS object literal syntax
+          eval "$(FIREBASE_WEB_CONFIG="$FIREBASE_WEB_CONFIG" node -e '
+            const raw = process.env.FIREBASE_WEB_CONFIG.trim();
+            const cfg = (0, eval)("(" + raw + ")");
+            const required = ["apiKey", "authDomain", "projectId", "appId"];
+            for (const k of required) {
+              if (!cfg[k]) { console.error("Missing field: " + k); process.exit(1); }
+            }
+            const out = [
+              ["VITE_FIREBASE_API_KEY",     cfg.apiKey],
+              ["VITE_FIREBASE_AUTH_DOMAIN", cfg.authDomain],
+              ["VITE_FIREBASE_PROJECT_ID",  cfg.projectId],
+              ["VITE_FIREBASE_APP_ID",      cfg.appId],
+            ];
+            for (const [k, v] of out) console.log(`echo "${k}=${v}" >> "$GITHUB_ENV"`);
+          ')"
+          echo "Firebase Web config extracted ($(grep -c ^VITE_FIREBASE_ "$GITHUB_ENV") vars)"
 
       - name: Build FE bundle (Vite → app/dist)
         run: npm run build
