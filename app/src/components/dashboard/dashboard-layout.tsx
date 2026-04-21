@@ -8,10 +8,13 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { getProgress, type ProgressEntry, type ProgressResponse } from '@/lib/api'
 import { getIndex } from '@/lib/content-loader'
+import { useAuth } from '@/contexts/auth-context'
 import { StatsSection } from './stats-section'
 import { DueSection } from './due-section'
 import { RoadmapSection } from './roadmap-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
+import { LeaderboardSection } from './leaderboard-section'
+import { GuestDashboardLayout } from './guest-dashboard-layout'
 
 // ── Static data (build-time import, no network) ───────────────────────────────
 
@@ -34,6 +37,8 @@ function ErrorBanner({ message }: { message: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function DashboardLayout() {
+  const { user, isLoading: authLoading } = useAuth()
+
   // Fetch server-side progress — stale 60s, error is non-fatal
   const {
     data: progressData,
@@ -44,7 +49,18 @@ export function DashboardLayout() {
     queryFn: getProgress,
     staleTime: 60_000,
     retry: 1,
+    enabled: !!user,
   })
+
+  // Wait for auth to resolve before deciding which layout
+  if (authLoading) {
+    return null
+  }
+
+  // Show guest layout if not logged in
+  if (!user) {
+    return <GuestDashboardLayout />
+  }
 
   const progressEntries: ProgressEntry[] = progressData?.progress ?? []
 
@@ -75,6 +91,9 @@ export function DashboardLayout() {
             progressEntries={progressEntries}
           />
         </div>
+
+        {/* Leaderboard — full width */}
+        <LeaderboardSection />
 
         {/* Lab catalog — full width */}
         <LabCatalogGrid

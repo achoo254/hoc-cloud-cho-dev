@@ -50,9 +50,10 @@ interface TimelineNodeProps {
   completedCount: number
   index: number
   isLast: boolean
+  showProgress: boolean
 }
 
-function TimelineNode({ mod, labCount, completedCount, index, isLast }: TimelineNodeProps) {
+function TimelineNode({ mod, labCount, completedCount, index, isLast, showProgress }: TimelineNodeProps) {
   const ref = useRef<HTMLLIElement>(null)
   const inView = useInView(ref, { once: true, margin: '-60px 0px' })
   const reduce = useReducedMotionPreference()
@@ -102,12 +103,12 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
             {mod.name}
           </span>
 
-          {isDone && (
+          {showProgress && isDone && (
             <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
               Done
             </Badge>
           )}
-          {isActive && !isDone && (
+          {showProgress && isActive && !isDone && (
             <Badge variant="default" className="text-xs">
               Active
             </Badge>
@@ -122,13 +123,13 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" aria-hidden="true" />
           <span>{mod.duration}</span>
-          {!mod.placeholder && labCount > 0 && (
+          {showProgress && !mod.placeholder && labCount > 0 && (
             <span>· {completedCount}/{labCount} labs</span>
           )}
         </div>
 
         {/* Progress bar */}
-        {isActive && !isDone && labCount > 0 && (
+        {showProgress && isActive && !isDone && labCount > 0 && (
           <div
             className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-muted overflow-hidden"
             role="progressbar"
@@ -155,11 +156,12 @@ function TimelineNode({ mod, labCount, completedCount, index, isLast }: Timeline
 interface RoadmapSectionProps {
   labsIndex: LabIndexEntry[]
   progressEntries: ProgressEntry[]
+  showProgress?: boolean
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function RoadmapSection({ labsIndex, progressEntries }: RoadmapSectionProps) {
+export function RoadmapSection({ labsIndex, progressEntries, showProgress = true }: RoadmapSectionProps) {
   // Build per-module counts from labs index + progress
   const completedSlugs = new Set(
     progressEntries.filter((p) => p.completed_at).map((p) => p.lab_slug),
@@ -189,6 +191,7 @@ export function RoadmapSection({ labsIndex, progressEntries }: RoadmapSectionPro
               completedCount={completedCount}
               index={i}
               isLast={i === ROADMAP_MODULES.length - 1}
+              showProgress={showProgress}
             />
           )
         })}

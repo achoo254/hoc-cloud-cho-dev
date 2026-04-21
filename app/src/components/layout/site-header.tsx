@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/use-theme'
 import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
+import { LoginButton } from '@/components/auth/login-button'
 
 export function SiteHeader() {
   const { theme, toggleTheme } = useTheme()
@@ -86,6 +87,8 @@ export function SiteHeader() {
               )}
             </AnimatePresence>
           </Button>
+
+          <LoginButton />
         </div>
       </div>
     </header>

@@ -32,6 +32,9 @@ const { broadcastReload, sseStream, addClient } = await import('./lib/sse-reload
 const { syncLabsToDb } = await import('./scripts/sync-labs-to-db.js');
 const { searchRoutes } = await import('./api/search-routes.js');
 const { progressRoutes } = await import('./api/progress-routes.js');
+const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
+const { authRoutes } = await import('./auth/github-oauth.js');
+const { sessionMiddleware } = await import('./auth/session-middleware.js');
 
 // Sync labs → DB on boot (idempotent).
 try { syncLabsToDb(); } catch (err) { console.error('[sync-labs] boot failed:', err.message); }
@@ -40,6 +43,7 @@ const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cspMiddleware);
+app.use('*', sessionMiddleware);
 
 // Health check.
 app.get('/healthz', (c) => {
@@ -94,11 +98,26 @@ if (DEV) {
   console.log('[hoc-cloud-labs] dev live-reload watching server/');
 }
 
+// Auth routes (OAuth flow)
+app.route('/', authRoutes);
+
 // API routes (nginx serves SPA + static assets from app/dist).
 app.route('/', searchRoutes);
 app.route('/', progressRoutes);
+app.route('/', leaderboardRoutes);
 
 app.notFound((c) => c.text('Not Found', 404));
+
+// Session cleanup: delete expired sessions every hour
+const cleanupSessions = () => {
+  const now = Math.floor(Date.now() / 1000);
+  const result = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
+  if (result.changes > 0) {
+    console.log(`[session-cleanup] deleted ${result.changes} expired sessions`);
+  }
+};
+cleanupSessions();
+setInterval(cleanupSessions, 60 * 60 * 1000);
 
 const port = Number(process.env.PORT) || 8387;
 

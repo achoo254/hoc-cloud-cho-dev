@@ -13,6 +13,48 @@
   },
   "tldr": [
     {
+      "term": "IP Class A",
+      "value": "1.0.0.0 – 126.255.255.255 (octet đầu: 1–126)",
+      "why": "Nhận biết Class A: octet đầu từ 1–126. Network ID chỉ 8 bit đầu (1 octet), còn lại 24 bit cho host → mỗi mạng Class A chứa ~16 triệu host. Dành cho tổ chức cực lớn (ISP, chính phủ).",
+      "whyBreaks": "Nhầm 127.x.x.x là Class A → cấu hình sai. 127.0.0.0/8 là loopback (localhost), không phải Class A thông thường. Ngoài ra, cấp nguyên /8 cho 1 tổ chức = lãng phí IP → đây là lý do CIDR ra đời thay thế classful.",
+      "deploymentUse": "Ngày nay hiếm ai được cấp nguyên Class A. Tuy nhiên vẫn cần nhận biết: 10.0.0.0/8 (private Class A) rất phổ biến trong VPC AWS/GCP. Khi thấy IP 10.x.x.x, biết ngay đó là private range Class A."
+    },
+    {
+      "term": "IP Class B",
+      "value": "128.0.0.0 – 191.255.255.255 (octet đầu: 128–191)",
+      "why": "Nhận biết Class B: octet đầu từ 128–191. Network ID 16 bit đầu (2 octet), host 16 bit → mỗi mạng Class B chứa ~65,000 host. Dành cho tổ chức vừa (đại học, công ty lớn).",
+      "whyBreaks": "Nhầm 172.16.x.x – 172.31.x.x là public Class B → expose internal service ra internet. Dải 172.16.0.0/12 là private theo RFC 1918, không route trên internet. Kiểm tra kỹ trước khi mở firewall.",
+      "deploymentUse": "172.16.0.0/12 (private Class B) hay dùng cho VPN, office network. Docker default 172.17.0.0/16 cũng nằm trong range này → dễ conflict với office VPN. Khi thiết kế network, tránh overlap với các range phổ biến."
+    },
+    {
+      "term": "IP Class C",
+      "value": "192.0.0.0 – 223.255.255.255 (octet đầu: 192–223)",
+      "why": "Nhận biết Class C: octet đầu từ 192–223. Network ID 24 bit đầu (3 octet), host chỉ 8 bit → mỗi mạng Class C chứa 254 host. Dành cho tổ chức nhỏ, phổ biến nhất.",
+      "whyBreaks": "Nghĩ Class C = /24 luôn → không hiểu VLSM. Class C chỉ là range địa chỉ, có thể chia nhỏ hơn /24 (như /26, /28) hoặc gộp lớn hơn (/23, /22). Đừng nhầm lẫn classful với CIDR.",
+      "deploymentUse": "192.168.0.0/16 (private Class C) là range mặc định của router home/SMB. Khi dev test local, hay dùng 192.168.1.x. Trên cloud, tránh dùng 192.168.1.0/24 vì dễ conflict với home network khi VPN."
+    },
+    {
+      "term": "IP Class D & E",
+      "value": "D: 224–239 (multicast), E: 240–255 (reserved)",
+      "why": "Class D (224.0.0.0 – 239.255.255.255) dành cho multicast — gửi 1 packet tới nhiều host đăng ký nhận (video streaming, routing protocol OSPF). Class E (240.0.0.0 – 255.255.255.255) reserved cho nghiên cứu.",
+      "whyBreaks": "Gán IP Class D/E cho host → network không hoạt động. Đây là các địa chỉ đặc biệt, không dùng cho unicast thông thường. Nếu thấy IP 224.x.x.x trong config → sai hoàn toàn.",
+      "deploymentUse": "Multicast dùng trong nội bộ datacenter (VXLAN, PIM). Ít khi dev cần cấu hình trực tiếp. Biết để nhận diện khi debug tcpdump: thấy traffic tới 224.0.0.x là multicast protocol, không phải attack."
+    },
+    {
+      "term": "Private vs Public IP",
+      "value": "Private: nội bộ, không route internet. Public: toàn cầu, unique.",
+      "why": "Private IP (10/8, 172.16/12, 192.168/16) dùng trong LAN/VPC — ai cũng có thể dùng, không cần đăng ký. Public IP unique toàn cầu, phải thuê từ ISP/cloud. Máy private muốn ra internet phải qua NAT.",
+      "whyBreaks": "Expose private IP ra internet (firewall rule sai) → không ai ngoài LAN truy cập được vì private IP không route trên internet. Ngược lại, dùng public IP cho internal service → tốn tiền + security risk.",
+      "deploymentUse": "AWS/GCP: EC2/VM có private IP (10.x.x.x) + có thể gắn public IP (Elastic IP). Traffic giữa EC2 trong VPC dùng private IP (free, low latency). Traffic ra internet dùng public IP (có phí, qua NAT Gateway)."
+    },
+    {
+      "term": "NAT (Network Address Translation)",
+      "value": "Đổi IP nguồn từ private → public khi ra internet",
+      "why": "NAT cho phép nhiều máy private dùng chung 1 public IP để ra internet. Router/firewall thay đổi source IP trong packet header. Khi reply về, NAT đổi ngược destination IP để gửi đúng máy gốc.",
+      "whyBreaks": "Không hiểu NAT → không debug được 'tại sao server thấy IP khác với IP máy tôi'. Khi bạn curl từ laptop, server log ghi IP của NAT gateway (router nhà/công ty), không phải IP laptop. Kiểm tra bằng ipinfo.io.",
+      "deploymentUse": "AWS NAT Gateway cho private subnet ra internet. Giá ~$0.045/GB data processed. Kubernetes LoadBalancer dùng SNAT để pod reply đúng client. Docker port mapping (-p 80:3000) cũng là dạng NAT (DNAT)."
+    },
+    {
       "term": "Network address",
       "value": "Bit host toàn 0",
       "why": "Như số nhà của cả tòa chung cư — đại diện cho toàn bộ subnet. Router dùng địa chỉ này để tìm đường đi. Không gán cho máy cụ thể.",

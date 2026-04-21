@@ -14,6 +14,16 @@ const lab: LabContent = {
   "updated_at": 1776596703,
   "tldr": [
     {
+      "why": "OSI là mô hình tham chiếu chuẩn ISO với 7 tầng: Physical → Data Link → Network → Transport → Session → Presentation → Application. TCP/IP gộp lại còn 4 tầng thực dụng: Link (Physical+Data Link) → Internet (Network) → Transport → Application (Session+Presentation+Application). Thực tế dùng TCP/IP, nhưng OSI hữu ích để phân tích chi tiết.",
+      "whyBreaks": "Nhầm tầng giữa 2 mô hình gây hiểu sai tài liệu. Vendor nói 'Layer 7 firewall' (OSI) = Application layer. Nhưng TCP/IP gọi Application là L4. Đọc docs Cisco/AWS mà không biết họ dùng OSI sẽ map sai tầng khi debug.",
+      "deploymentUse": "Mapping: OSI L1-2 → TCP/IP Link | OSI L3 → TCP/IP Internet | OSI L4 → TCP/IP Transport | OSI L5-7 → TCP/IP Application. OSI ra đời như chuẩn ISO, TCP/IP ra đời từ ARPANET thực nghiệm. TCP/IP thắng vì đã production trước khi OSI hoàn thiện.",
+      "layer": "Comparison",
+      "name": "OSI 7 layers vs TCP/IP 4 layers",
+      "pdu": "—",
+      "device": "—",
+      "protocol": "—"
+    },
+    {
       "why": "Nơi application 'nói chuyện' — HTTP request, gửi email, query DNS. Lỗi 400/500/502 không phải lỗi mạng — là app hoặc server có vấn đề.",
       "whyBreaks": "Nhầm lỗi Application thành lỗi mạng → debug sai hướng hàng giờ. Lỗi 502 Bad Gateway là Application layer fail, không phải cáp mạng vấn đề. Nếu thiếu hiểu biết tầng này, sẽ restart server vô ích thay vì check log nginx/app.",
       "deploymentUse": "Khi VPS deploy xong, check log application trước: journalctl -u nginx, docker logs <container>. Lỗi 502/503 luôn là Application hoặc Transport, không phải Link/Internet.",

@@ -32,6 +32,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// ── Auth types ──────────────────────────────────────────────────────────────
+
+export interface User {
+  githubId: number
+  username: string
+  avatarUrl: string
+}
+
+export async function getMe(): Promise<{ user: User | null }> {
+  const res = await fetch('/api/me')
+  if (!res.ok) return { user: null }
+  return res.json()
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/auth/logout', { method: 'POST' })
+}
+
+// ── Leaderboard types ───────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number
+  githubId: number
+  username: string
+  avatarUrl: string
+  completedCount: number
+  avgScore: number | null
+  lastActive: number
+}
+
+export async function getLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[] }> {
+  const res = await fetch('/api/leaderboard')
+  if (!res.ok) return { leaderboard: [] }
+  return res.json()
+}
+
 // ── Lab types (mirrors server schema v3) ────────────────────────────────────
 
 export interface Lab {

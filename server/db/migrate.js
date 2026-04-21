@@ -28,3 +28,18 @@ for (const { name, sql } of migrations) {
     throw err;
   }
 }
+
+// Post-migration: add user_id column to progress if missing (SQLite ALTER TABLE limitation)
+const cols = db.pragma('table_info(progress)');
+const hasUserId = cols.some((c) => c.name === 'user_id');
+if (!hasUserId) {
+  db.exec('ALTER TABLE progress ADD COLUMN user_id INTEGER');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_progress_user_id ON progress(user_id)');
+  console.log('[migrate] added user_id column to progress');
+}
+
+// Unique constraint for authenticated users to prevent duplicates across devices
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_progress_user_lab
+  ON progress(user_id, lab_slug) WHERE user_id IS NOT NULL
+`);

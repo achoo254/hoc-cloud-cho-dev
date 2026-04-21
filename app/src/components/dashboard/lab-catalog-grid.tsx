@@ -154,6 +154,7 @@ interface LabCatalogGridProps {
   labsIndex: LabIndexEntry[]
   progressEntries: ProgressEntry[]
   isLoading: boolean
+  showProgress?: boolean
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export function LabCatalogGrid({
   labsIndex,
   progressEntries,
   isLoading,
+  showProgress = true,
 }: LabCatalogGridProps) {
   const reduce = useReducedMotionPreference()
   const filtered = sortByCurriculum(labsIndex)
@@ -208,7 +210,7 @@ export function LabCatalogGrid({
             <LabCard
               key={lab.slug}
               lab={lab}
-              status={labStatus(lab.slug, progressEntries)}
+              status={showProgress ? labStatus(lab.slug, progressEntries) : 'new'}
             />
           ))}
         </motion.div>

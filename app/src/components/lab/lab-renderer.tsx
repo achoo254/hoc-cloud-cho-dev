@@ -1,11 +1,10 @@
 /**
  * Top-level lab content renderer.
- * Renders sections in THINK → SEE → SHIP order:
- *   THINK: TLDR table (or interactive playground on desktop)
- *   SEE:   Walkthrough steps (or interactive playground on desktop)
+ * Renders sections in THINK → SEE → SHIP order (all visible on all devices):
+ *   PLAYGROUND: Interactive diagram (if available)
+ *   THINK: TLDR table
+ *   SEE:   Walkthrough steps
  *   SHIP:  Quiz, Flashcards, Try-at-home commands
- *
- * Phase 01: Added responsive playground switch (CSS-only, RED TEAM #14)
  */
 
 import { useEffect, useRef, Suspense } from 'react'
@@ -39,14 +38,15 @@ function SectionHeading({
   title,
   description,
 }: {
-  phase: 'THINK' | 'SEE' | 'SHIP'
+  phase: 'THINK' | 'SEE' | 'SHIP' | 'OUTPUT'
   title: string
   description?: string
 }) {
   const phaseColors: Record<typeof phase, string> = {
-    THINK: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
-    SEE:   'bg-blue-500/15 text-blue-600 dark:text-blue-400',
-    SHIP:  'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+    THINK:  'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+    SEE:    'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+    SHIP:   'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+    OUTPUT: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   }
   return (
     <div className="space-y-1">
@@ -155,8 +155,8 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
     <section className="space-y-4">
       <SectionHeading
         phase="SEE"
-        title="Walkthrough"
-        description="Step-by-step — observe exactly what happens."
+        title="Hướng dẫn từng bước"
+        description="Quan sát chính xác những gì xảy ra."
       />
       <ol className="space-y-4">
         {steps.map((step, idx) => (
@@ -189,29 +189,25 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
 
 function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
   return (
-    <section className="space-y-4">
-      <SectionHeading
-        phase="SHIP"
-        title="Try at Home"
-        description="Commands you can run right now."
-      />
-      <div className="space-y-3">
-        {items.map((item, idx) => (
-          <div key={idx} className="space-y-1.5">
-            <CodeBlock code={item.cmd} lang="bash" />
-            <p className="text-sm text-muted-foreground px-1">
-              <span className="font-medium text-foreground">Why: </span>
-              {item.why}
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+        Thực hành tại nhà
+      </h3>
+      {items.map((item, idx) => (
+        <div key={idx} className="space-y-1.5">
+          <CodeBlock code={item.cmd} lang="bash" />
+          <p className="text-sm text-muted-foreground px-1">
+            <span className="font-medium text-foreground">Tại sao: </span>
+            {item.why}
+          </p>
+          {item.observeWith && (
+            <p className="text-xs text-muted-foreground px-1 italic">
+              Quan sát với: {item.observeWith}
             </p>
-            {item.observeWith && (
-              <p className="text-xs text-muted-foreground px-1 italic">
-                Observe with: {item.observeWith}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -254,58 +250,47 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       <Separator />
 
-      {/* THINK + SEE: Playground (desktop) or Text (mobile) — CSS-only switch */}
-      {hasPlayground ? (
-        <>
-          {/* Desktop: Interactive playground replaces THINK + SEE */}
-          <div className="hidden md:block" id="section-playground">
-            <PlaygroundSection lab={lab} />
-          </div>
-
-          {/* Mobile: Text fallback for THINK + SEE */}
-          <div className="md:hidden space-y-8">
-            <div id="section-think">
-              <TldrSection items={lab.tldr} />
-            </div>
-            <Separator />
-            <div id="section-see">
-              <WalkthroughSection steps={lab.walkthrough} />
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          {/* No playground: always show text THINK + SEE */}
-          <div id="section-think">
-            <TldrSection items={lab.tldr} />
-          </div>
-          <Separator />
-          <div id="section-see">
-            <WalkthroughSection steps={lab.walkthrough} />
-          </div>
-        </>
+      {/* Interactive Playground (if available) */}
+      {hasPlayground && (
+        <div id="section-playground">
+          <PlaygroundSection lab={lab} />
+        </div>
       )}
+
+      {hasPlayground && <Separator />}
+
+      {/* THINK: TLDR section — always visible on all devices */}
+      <div id="section-think">
+        <TldrSection items={lab.tldr} />
+      </div>
+
+      <Separator />
+
+      {/* SEE: Walkthrough section — always visible on all devices */}
+      <div id="section-see">
+        <WalkthroughSection steps={lab.walkthrough} />
+      </div>
 
       <Separator />
 
       {/* SHIP — anchored sub-sections for TOC */}
       <section className="space-y-8">
         <SectionHeading
-          phase="SHIP"
-          title="Practice"
-          description="Quiz, flashcards, and hands-on commands."
+          phase="OUTPUT"
+          title="Thực hành"
+          description="Quiz, flashcards, và lệnh thực hành."
         />
 
         <div id="section-quiz" className="space-y-2">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Quiz
+            Trắc nghiệm
           </h3>
           <QuizBlock items={lab.quiz} onScore={handleQuizScore} />
         </div>
 
         <div id="section-flashcards" className="space-y-2">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Flashcards
+            Thẻ ghi nhớ
           </h3>
           <FlashcardSM2
             cards={lab.flashcards}

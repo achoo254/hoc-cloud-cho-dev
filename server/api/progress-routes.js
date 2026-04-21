@@ -1,7 +1,8 @@
-// GET/POST /api/progress — anonymous multi-device progress tracking via cookie UUID.
+// GET/POST /api/progress — progress tracking for logged users + anonymous UUID fallback.
 import { Hono } from 'hono';
 import db from '../db/sqlite-client.js';
 import { anonUuidMiddleware } from '../lib/anon-uuid-cookie.js';
+import { requireAuth } from '../auth/require-auth.js';
 
 const selectForUser = db.prepare(`
   SELECT lab_slug, opened_at, completed_at, quiz_score, last_updated
@@ -9,13 +10,19 @@ const selectForUser = db.prepare(`
 `);
 
 const upsert = db.prepare(`
-  INSERT INTO progress (user_uuid, lab_slug, opened_at, completed_at, quiz_score, last_updated)
-  VALUES (@user_uuid, @lab_slug, @opened_at, @completed_at, @quiz_score, strftime('%s','now'))
+  INSERT INTO progress (user_id, user_uuid, lab_slug, opened_at, completed_at, quiz_score, last_updated)
+  VALUES (@user_id, @user_uuid, @lab_slug, @opened_at, @completed_at, @quiz_score, strftime('%s','now'))
   ON CONFLICT(user_uuid, lab_slug) DO UPDATE SET
-    opened_at    = COALESCE(excluded.opened_at,    progress.opened_at),
+    user_id      = COALESCE(excluded.user_id, progress.user_id),
+    opened_at    = COALESCE(excluded.opened_at, progress.opened_at),
     completed_at = COALESCE(excluded.completed_at, progress.completed_at),
-    quiz_score   = COALESCE(excluded.quiz_score,   progress.quiz_score),
+    quiz_score   = COALESCE(excluded.quiz_score, progress.quiz_score),
     last_updated = strftime('%s','now')
+`);
+
+const selectForUserId = db.prepare(`
+  SELECT lab_slug, opened_at, completed_at, quiz_score, last_updated
+  FROM progress WHERE user_id = ? ORDER BY last_updated DESC
 `);
 
 const SLUG_RE = /^[a-z0-9-]{1,64}$/i;
@@ -23,12 +30,31 @@ const SLUG_RE = /^[a-z0-9-]{1,64}$/i;
 export const progressRoutes = new Hono()
   .use('/api/progress', anonUuidMiddleware)
   .use('/api/progress/*', anonUuidMiddleware)
+  .get('/api/me', (c) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ user: null });
+    }
+    return c.json({
+      user: {
+        githubId: user.githubId,
+        username: user.username,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  })
   .get('/api/progress', (c) => {
+    const user = c.get('user');
+    if (user) {
+      const rows = selectForUserId.all(user.id);
+      return c.json({ progress: rows });
+    }
     const uuid = c.get('userUuid');
     const rows = selectForUser.all(uuid);
-    return c.json({ uuid, progress: rows });
+    return c.json({ progress: rows });
   })
-  .post('/api/progress', async (c) => {
+  .post('/api/progress', requireAuth, async (c) => {
+    const user = c.get('user');
     const uuid = c.get('userUuid');
     let body;
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid_json' }, 400); }
@@ -36,6 +62,7 @@ export const progressRoutes = new Hono()
       return c.json({ error: 'invalid_lab_slug' }, 400);
     }
     upsert.run({
+      user_id: user.id,
       user_uuid: uuid,
       lab_slug: body.lab_slug,
       opened_at: Number.isFinite(body.opened_at) ? body.opened_at : null,
@@ -44,16 +71,19 @@ export const progressRoutes = new Hono()
     });
     return c.json({ ok: true });
   })
-  .post('/api/progress/migrate', async (c) => {
+  .post('/api/progress/migrate', requireAuth, async (c) => {
+    const user = c.get('user');
     const uuid = c.get('userUuid');
     let body;
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid_json' }, 400); }
     if (!Array.isArray(body?.items)) return c.json({ error: 'items_required' }, 400);
+    if (body.items.length > 200) return c.json({ error: 'too_many_items' }, 400);
     let imported = 0;
     const tx = db.transaction((items) => {
       for (const it of items) {
         if (!SLUG_RE.test(String(it.lab_slug || ''))) continue;
         upsert.run({
+          user_id: user.id,
           user_uuid: uuid,
           lab_slug: it.lab_slug,
           opened_at: Number.isFinite(it.opened_at) ? it.opened_at : null,
