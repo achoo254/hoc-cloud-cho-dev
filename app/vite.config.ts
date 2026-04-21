@@ -71,6 +71,10 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         ws: false,
       },
+      '/auth': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+      },
       '/healthz': {
         target: HONO_SERVER,
         changeOrigin: true,
@@ -91,6 +95,10 @@ export default defineConfig(({ mode }) => ({
         target: HONO_SERVER,
         changeOrigin: true,
         ws: false,
+      },
+      '/auth': {
+        target: HONO_SERVER,
+        changeOrigin: true,
       },
       '/healthz': {
         target: HONO_SERVER,
