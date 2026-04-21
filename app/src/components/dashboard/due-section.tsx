@@ -7,7 +7,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { BookOpen, Sparkles, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Sparkles, CheckCircle2, Inbox } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -80,32 +80,54 @@ export function DueSection({ progressEntries, isLoading }: DueSectionProps) {
         )}
       </div>
 
-      {/* Empty states */}
+      {/* Empty state — no flashcards tracked yet */}
       {dueItems.length === 0 && totalNew === 0 && (
-        <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            <CheckCircle2
-              className="h-8 w-8 mx-auto mb-2 text-emerald-500"
-              aria-hidden="true"
-            />
-            <p className="font-medium">Hết thẻ cần ôn!</p>
-            <p className="mt-1 text-xs">
-              Mở một lab bất kỳ để tạo flashcard mới.
-            </p>
+        <Card className="relative overflow-hidden">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-emerald-500/[0.06] to-transparent"
+            aria-hidden="true"
+          />
+          <CardContent className="relative flex items-start gap-4 py-6">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+              <Inbox className="h-5 w-5 text-emerald-500" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Hôm nay không có thẻ cần ôn</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Hoàn thành quiz trong bất kỳ lab nào để tự động sinh flashcard. SM-2 sẽ nhắc đúng lúc sắp quên.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" aria-hidden="true" />
+                  0 thẻ due
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5">
+                  <Sparkles className="h-3 w-3 text-sky-500" aria-hidden="true" />
+                  0 thẻ mới
+                </span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* New cards available but nothing due */}
       {dueItems.length === 0 && totalNew > 0 && (
-        <Card>
-          <CardContent className="py-6 text-center text-sm text-muted-foreground">
-            <Sparkles
-              className="h-7 w-7 mx-auto mb-2 text-blue-500"
-              aria-hidden="true"
-            />
-            <p className="font-medium">Không có thẻ due.</p>
-            <p className="mt-1 text-xs">{totalNew} thẻ mới sẵn sàng học.</p>
+        <Card className="relative overflow-hidden">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-sky-500/[0.06] to-transparent"
+            aria-hidden="true"
+          />
+          <CardContent className="relative flex items-start gap-4 py-6">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
+              <Sparkles className="h-5 w-5 text-sky-500" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Không có thẻ đến hạn</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {totalNew} thẻ mới đang chờ — bắt đầu học để đưa vào chu kỳ ôn tập.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}

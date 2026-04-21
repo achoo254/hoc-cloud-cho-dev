@@ -167,14 +167,14 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
               </span>
             </div>
             <div className="flex-1 space-y-2 min-w-0">
-              <p className="font-medium text-sm">{step.what}</p>
-              <p className="text-sm text-muted-foreground">{step.why}</p>
+              <p className="font-medium text-sm" dangerouslySetInnerHTML={{ __html: step.what }} />
+              <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: step.why }} />
               {step.code && (
                 <CodeBlock code={step.code} lang="bash" />
               )}
               {step.observeWith && (
                 <p className="text-xs text-muted-foreground italic">
-                  Observe with: {step.observeWith}
+                  Observe with: <span dangerouslySetInnerHTML={{ __html: step.observeWith }} />
                 </p>
               )}
             </div>
@@ -198,11 +198,11 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
           <CodeBlock code={item.cmd} lang="bash" />
           <p className="text-sm text-muted-foreground px-1">
             <span className="font-medium text-foreground">Tại sao: </span>
-            {item.why}
+            <span dangerouslySetInnerHTML={{ __html: item.why }} />
           </p>
           {item.observeWith && (
             <p className="text-xs text-muted-foreground px-1 italic">
-              Quan sát với: {item.observeWith}
+              Quan sát với: <span dangerouslySetInnerHTML={{ __html: item.observeWith }} />
             </p>
           )}
         </div>
@@ -259,12 +259,15 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       {hasPlayground && <Separator />}
 
-      {/* THINK: TLDR section — always visible on all devices */}
-      <div id="section-think">
-        <TldrSection items={lab.tldr} />
-      </div>
-
-      <Separator />
+      {/* THINK: TLDR section — ẩn khi playground đã render TLDR (Concept Cards / LayerStack) */}
+      {!hasPlayground && (
+        <>
+          <div id="section-think">
+            <TldrSection items={lab.tldr} />
+          </div>
+          <Separator />
+        </>
+      )}
 
       {/* SEE: Walkthrough section — always visible on all devices */}
       <div id="section-see">

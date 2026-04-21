@@ -1,5 +1,6 @@
 import { getIndex } from '@/lib/content-loader'
-import { LoginCtaCard } from './login-cta-card'
+import { ProgressPreviewCard } from './progress-preview-card'
+import { SpacedRepetitionPreviewCard } from './spaced-repetition-preview-card'
 import { RoadmapSection } from './roadmap-section'
 import { LeaderboardSection } from './leaderboard-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
@@ -11,18 +12,12 @@ export function GuestDashboardLayout() {
     <div className="min-h-screen">
       <div className="container py-8 space-y-12">
 
-        {/* CTA thay cho Stats */}
-        <LoginCtaCard
-          title="Theo dõi tiến độ học"
-          description="Đăng nhập để xem heatmap, streak và thống kê học tập"
-        />
+        {/* Feature preview thay cho Stats */}
+        <ProgressPreviewCard />
 
-        {/* Two-column: CTA + Roadmap (no progress) */}
+        {/* Two-column: preview + Roadmap (no progress) */}
         <div className="grid gap-8 md:grid-cols-2">
-          <LoginCtaCard
-            title="Ôn tập thông minh"
-            description="Đăng nhập để nhận nhắc nhở ôn bài theo spaced repetition"
-          />
+          <SpacedRepetitionPreviewCard />
           <RoadmapSection
             labsIndex={ALL_LABS}
             progressEntries={[]}
