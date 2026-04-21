@@ -1,41 +1,84 @@
 # Deployment Guide
 
+Production: **https://hoc-cloud.inetdev.io.vn/**
+
+## Architecture
+
+- **Static FE**: `app/dist/` served bởi Nginx
+- **API**: Hono.js bundle (`server.bundle.js`) chạy qua PM2
+- **Nginx**: reverse proxy `/api/*`, `/auth/*`, `/sse/*` → Node; serve everything else as static
+- **CI/CD**: GitHub Actions (`.github/workflows/deploy.yml`) deploy khi push `master`
+
 ## Build
 
 ```bash
-# From repo root — generates content then builds app
-cd app && npm run build
-# Equivalent: npm run gen:content (root) → tsc --noEmit → vite build
+# Frontend
+npm run build --prefix app   # → app/dist/
+
+# Backend (esbuild single bundle)
+npm run build:server         # → dist-server/server.bundle.js
 ```
 
-Output: `app/dist/`
+FE build chạy `npm run gen:content` (root) → `tsc --noEmit` → `vite build`.
 
 ## Environment Variables
 
+### Frontend (build-time, `VITE_*` prefix)
+
 | Variable | Default | Description |
 |---|---|---|
-| `VITE_ENABLE_DIAGRAM_PLAYGROUND` | `true` (enabled) | Set to `"false"` to disable interactive playground and fall back to text-only THINK/SEE sections for all labs. |
+| `VITE_ENABLE_DIAGRAM_PLAYGROUND` | `true` | Set `"false"` để disable playground, fallback text-only. |
+| `VITE_FIREBASE_CONFIG` | — | **Required.** Firebase client config (JSON hoặc JS object literal). CI accept cả 2 định dạng; fail-fast nếu thiếu field bắt buộc. |
 
-### Disabling the playground
+Runtime override: append `?textMode=1` lên lab URL → ép text mode bất kể build flag.
 
-```env
-VITE_ENABLE_DIAGRAM_PLAYGROUND=false
-```
+### Backend (runtime)
 
-Useful when: deploying to low-powered environments, disabling during A/B tests, or emergency rollback of a broken diagram component without a full redeploy.
+| Variable | Description |
+|---|---|
+| `NODE_ENV` | **Phải là `production`** khi chạy via PM2 (set trong `ecosystem.config.cjs`). |
+| `PORT` | Default `8387`. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account JSON cho firebase-admin (verify ID token, set session cookie). |
+| `SESSION_COOKIE_SECRET` | HMAC secret cho session cookie. |
+| `DATABASE_PATH` | Default `data/hoccloud.db`. |
 
-The flag is evaluated at build time via `import.meta.env`. An additional runtime escape hatch exists: append `?textMode=1` to any lab URL to force text mode regardless of the build flag.
+## CI/CD Flow (`.github/workflows/deploy.yml`)
+
+1. Checkout + `npm ci` (root + `app/`)
+2. Inject `VITE_FIREBASE_CONFIG` từ GitHub Secrets
+3. `npm run build --prefix app` + `npm run build:server`
+4. Smoke test: spawn node server với bundle, curl `/healthz`
+5. Tar: `app/dist/` + `dist-server/server.bundle.js` + `node_modules/better-sqlite3` + `server/db/migrations`
+6. SCP lên VPS, extract vào release folder
+7. `pm2 startOrRestart ecosystem.config.cjs --env production`
+
+VPS **không cần** `package.json` hoặc `npm ci` — chỉ cần `node` + `pm2` + native `better-sqlite3` đã build sẵn.
+
+## Nginx
+
+Xem `deploy/nginx.conf.example`:
+
+- Static: `root app/dist/; try_files $uri /index.html;` (SPA fallback)
+- `location /api/ { proxy_pass http://127.0.0.1:8387; }`
+- `location /auth/ { proxy_pass http://127.0.0.1:8387; }` (OAuth callback)
+- `location /sse/` cần `proxy_buffering off;` + `proxy_read_timeout 1h;`
 
 ## Dev Server
 
 ```bash
-cd app
-npm run dev
+npm run dev:server   # Hono :8387 (--watch)
+npm run dev:app      # Vite :5173 (proxy /api, /auth → :8387)
 ```
 
 ## Typecheck
 
 ```bash
-cd app
-npm run typecheck   # tsc --noEmit
+npm run typecheck --prefix app   # tsc --noEmit
 ```
+
+## Troubleshooting
+
+- **Firebase config missing fields**: CI fail-fast với tên field thiếu. Kiểm tra `VITE_FIREBASE_CONFIG` secret.
+- **PM2 chạy sai NODE_ENV**: script deploy export `NODE_ENV=production` trước `pm2 start/restart` (commit `b9cdb41`).
+- **OAuth redirect lỗi**: Nginx phải proxy `/auth/*` — xem commit `e136584`.
+- **`better-sqlite3` ABI mismatch**: rebuild native module trên VPS cùng Node version với CI.
