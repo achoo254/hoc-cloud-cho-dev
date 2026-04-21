@@ -11,9 +11,11 @@ const DEV = process.env.NODE_ENV !== 'production';
 
 // Lightweight .env loader. Precedence: .env.${NODE_ENV} overrides .env.
 // Values already in process.env win (so CLI vars still override files).
+// In production (bundled), use cwd (PM2 --cwd). In dev, use projectRoot.
 const envMode = process.env.NODE_ENV || 'development';
+const envBase = DEV ? projectRoot : process.cwd();
 for (const file of [`.env.${envMode}`, '.env']) {
-  const p = resolve(projectRoot, file);
+  const p = resolve(envBase, file);
   if (!existsSync(p)) continue;
   for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
