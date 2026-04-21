@@ -15,6 +15,8 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 function LeaderboardRow({ entry, isCurrentUser }: { entry: LeaderboardEntry; isCurrentUser: boolean }) {
+  const name = entry.displayName ?? 'Anonymous'
+  const initial = name[0]?.toUpperCase() ?? '?'
   return (
     <div
       className={cn(
@@ -24,11 +26,11 @@ function LeaderboardRow({ entry, isCurrentUser }: { entry: LeaderboardEntry; isC
     >
       <RankBadge rank={entry.rank} />
       <Avatar className="h-8 w-8">
-        <AvatarImage src={entry.avatarUrl} alt={entry.username} />
-        <AvatarFallback>{entry.username[0].toUpperCase()}</AvatarFallback>
+        <AvatarImage src={entry.photoUrl ?? undefined} alt={name} />
+        <AvatarFallback>{initial}</AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
-        <p className="font-medium truncate">{entry.username}</p>
+        <p className="font-medium truncate">{name}</p>
       </div>
       <div className="text-right text-sm">
         <p className="font-semibold">{entry.completedCount} labs</p>
@@ -84,9 +86,9 @@ export function LeaderboardSection() {
           <div className="space-y-1">
             {leaderboard.map((entry) => (
               <LeaderboardRow
-                key={entry.githubId}
+                key={entry.firebaseUid}
                 entry={entry}
-                isCurrentUser={user?.githubId === entry.githubId}
+                isCurrentUser={user?.firebaseUid === entry.firebaseUid}
               />
             ))}
           </div>

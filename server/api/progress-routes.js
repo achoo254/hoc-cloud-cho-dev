@@ -37,9 +37,10 @@ export const progressRoutes = new Hono()
     }
     return c.json({
       user: {
-        githubId: user.githubId,
-        username: user.username,
-        avatarUrl: user.avatarUrl,
+        firebaseUid: user.firebaseUid,
+        email: user.email,
+        displayName: user.displayName,
+        photoUrl: user.photoUrl,
       },
     });
   })

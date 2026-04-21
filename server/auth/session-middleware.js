@@ -15,7 +15,7 @@ const parseCookies = (header) => {
 };
 
 const selectSession = db.prepare(`
-  SELECT u.id, u.github_id, u.username, u.avatar_url, s.expires_at
+  SELECT u.id, u.firebase_uid, u.email, u.display_name, u.photo_url, s.expires_at
   FROM sessions s
   JOIN users u ON u.id = s.user_id
   WHERE s.token_hash = ?
@@ -36,9 +36,10 @@ export const sessionMiddleware = async (c, next) => {
       if (row.expires_at > now) {
         c.set('user', {
           id: row.id,
-          githubId: row.github_id,
-          username: row.username,
-          avatarUrl: row.avatar_url,
+          firebaseUid: row.firebase_uid,
+          email: row.email,
+          displayName: row.display_name,
+          photoUrl: row.photo_url,
         });
       } else {
         deleteExpired.run(hash);

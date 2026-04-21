@@ -35,7 +35,7 @@ const { syncLabsToDb } = await import('./scripts/sync-labs-to-db.js');
 const { searchRoutes } = await import('./api/search-routes.js');
 const { progressRoutes } = await import('./api/progress-routes.js');
 const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
-const { authRoutes } = await import('./auth/github-oauth.js');
+const { authRoutes } = await import('./auth/firebase-auth.js');
 const { sessionMiddleware } = await import('./auth/session-middleware.js');
 
 // Sync labs → DB on boot (idempotent).

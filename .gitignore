@@ -19,3 +19,4 @@ backup-pre-kill-theory-260419.sql
 app/src/generated/*.json
 server/generated/
 dist-server/
+hoc-cloud-cho-dev-firebase-adminsdk-fbsvc-f941803336.json

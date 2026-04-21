@@ -35,9 +35,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // ── Auth types ──────────────────────────────────────────────────────────────
 
 export interface User {
-  githubId: number
-  username: string
-  avatarUrl: string
+  firebaseUid: string
+  email: string | null
+  displayName: string | null
+  photoUrl: string | null
 }
 
 export async function getMe(): Promise<{ user: User | null }> {
@@ -54,9 +55,9 @@ export async function logout(): Promise<void> {
 
 export interface LeaderboardEntry {
   rank: number
-  githubId: number
-  username: string
-  avatarUrl: string
+  firebaseUid: string
+  displayName: string | null
+  photoUrl: string | null
   completedCount: number
   avgScore: number | null
   lastActive: number
