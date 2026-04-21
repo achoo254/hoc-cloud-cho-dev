@@ -7,7 +7,7 @@
  * and a 404 card if the slug is not found.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LabRenderer } from '@/components/lab/lab-renderer'
 import { LabToc } from '@/components/lab/lab-toc'
+import { SearchHighlightChip } from '@/components/search/search-highlight-chip'
 import { getLab } from '@/lib/content-loader'
+import { useQueryHighlight } from '@/lib/hooks/use-query-highlight'
 import type { LabContent } from '@/lib/schema-lab'
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
@@ -72,6 +74,16 @@ type LoadState =
   | { status: 'found'; lab: LabContent }
   | { status: 'not-found' }
   | { status: 'error'; message: string }
+
+function LabContent({ lab }: { lab: LabContent }) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  useQueryHighlight(contentRef)
+  return (
+    <div ref={contentRef} className="flex-1 min-w-0">
+      <LabRenderer lab={lab} />
+    </div>
+  )
+}
 
 export default function LabViewerPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -141,12 +153,11 @@ export default function LabViewerPage() {
 
   return (
     <div className="container py-8">
+      <SearchHighlightChip />
       {/* Two-column layout on desktop: TOC sidebar + lab content */}
       <div className="flex gap-8 items-start relative">
         <LabToc />
-        <div className="flex-1 min-w-0">
-          <LabRenderer lab={state.lab} />
-        </div>
+        <LabContent lab={state.lab} />
       </div>
     </div>
   )

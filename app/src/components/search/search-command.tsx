@@ -63,6 +63,35 @@ function useDebounce<T>(value: T, ms: number): T {
   return debounced
 }
 
+// Escape regex metacharacters in user input
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Split `text` by query tokens (whitespace-separated, case-insensitive),
+ * wrapping matches in <mark>. Returns React fragments keyed by index.
+ */
+function highlight(text: string, query: string): React.ReactNode {
+  const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2)
+  if (tokens.length === 0) return text
+  const splitPattern = new RegExp(`(${tokens.map(escapeRegex).join('|')})`, 'gi')
+  const matchPattern = new RegExp(`^(?:${tokens.map(escapeRegex).join('|')})$`, 'i')
+  const parts = text.split(splitPattern)
+  return parts.map((part, i) =>
+    matchPattern.test(part) ? (
+      <mark
+        key={i}
+        className="bg-yellow-200/70 dark:bg-yellow-400/30 text-foreground rounded px-0.5"
+      >
+        {part}
+      </mark>
+    ) : (
+      <span key={i}>{part}</span>
+    ),
+  )
+}
+
 function mergeResults(
   serverResults: SearchResult[],
   localResults: LocalSearchResult[],
@@ -170,9 +199,13 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   const handleSelect = useCallback(
     (slug: string) => {
       onOpenChange(false)
-      navigate(`/lab/${slug}`)
+      const trimmed = query.trim()
+      const target = trimmed.length >= 2
+        ? `/lab/${slug}?q=${encodeURIComponent(trimmed)}`
+        : `/lab/${slug}`
+      navigate(target)
     },
-    [navigate, onOpenChange],
+    [navigate, onOpenChange, query],
   )
 
   // Reset input when dialog closes
@@ -243,7 +276,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                 <div className="flex w-full items-center gap-2">
                   <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="font-medium text-sm flex-1 truncate">
-                    {result.title}
+                    {highlight(result.title, query)}
                   </span>
                   {result.source === 'local' && (
                     <Badge
@@ -258,7 +291,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                 {/* Snippet */}
                 {result.snippet && (
                   <p className="text-xs text-muted-foreground pl-5 line-clamp-2 leading-relaxed">
-                    {result.snippet}
+                    {highlight(result.snippet, query)}
                   </p>
                 )}
 

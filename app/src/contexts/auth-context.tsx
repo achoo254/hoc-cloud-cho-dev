@@ -1,11 +1,13 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  onAuthStateChanged,
   signOut,
   type AuthError,
+  type User as FirebaseUser,
 } from 'firebase/auth'
 import { getFirebaseAuth, googleProvider } from '@/lib/firebase'
 import { getMe, logout as apiLogout, type User } from '@/lib/api'
@@ -38,6 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
   })
 
+  const hasBackendUser = !!data?.user
+  const [fbUser, setFbUser] = useState<FirebaseUser | null>(null)
+  const [fbReady, setFbReady] = useState(false)
+
   useEffect(() => {
     const auth = getFirebaseAuth()
     getRedirectResult(auth)
@@ -51,7 +57,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.error('[auth] redirect result failed:', err)
       })
+
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setFbUser(u)
+      setFbReady(true)
+    })
+    return () => unsub()
   }, [queryClient])
+
+  // Firebase persists auth locally — if Firebase has a user but backend session
+  // is missing (cookie expired/cleared), re-exchange idToken to restore session.
+  useEffect(() => {
+    if (!fbReady || isLoading) return
+    if (!fbUser || hasBackendUser) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const idToken = await fbUser.getIdToken()
+        if (cancelled) return
+        await exchangeIdToken(idToken)
+        queryClient.invalidateQueries({ queryKey: ['me'] })
+        queryClient.invalidateQueries({ queryKey: ['progress'] })
+      } catch (err) {
+        console.error('[auth] token exchange on state change failed:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [fbReady, isLoading, fbUser, hasBackendUser, queryClient])
 
   const login = async () => {
     const auth = getFirebaseAuth()

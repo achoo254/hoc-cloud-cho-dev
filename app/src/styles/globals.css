@@ -58,3 +58,26 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Search result highlight — applied by useQueryHighlight hook when URL has ?q= */
+mark.query-highlight {
+  background-color: rgb(254 240 138 / 0.7); /* yellow-200/70 */
+  color: inherit;
+  padding: 0 0.125rem;
+  border-radius: 0.25rem;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.dark mark.query-highlight {
+  background-color: rgb(250 204 21 / 0.3); /* yellow-400/30 */
+}
+@media (prefers-reduced-motion: no-preference) {
+  mark.query-highlight:first-of-type {
+    animation: query-highlight-pulse 1.2s ease-out 1;
+  }
+}
+@keyframes query-highlight-pulse {
+  0%   { box-shadow: 0 0 0 0 rgb(250 204 21 / 0.6); }
+  70%  { box-shadow: 0 0 0 8px rgb(250 204 21 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(250 204 21 / 0); }
+}
