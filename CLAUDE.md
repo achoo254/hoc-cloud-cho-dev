@@ -4,29 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+Package manager: **pnpm@10.30.3** (pinned via `packageManager` field). Root + `app/` are separate projects (NOT a pnpm workspace) — cần install riêng hai nơi. Lockfile chuẩn: `pnpm-lock.yaml` (KHÔNG dùng `package-lock.json`).
+
 ```bash
-# Install dependencies (both root and app)
-npm install && npm install --prefix app
+# Install dependencies (root + app are separate installs)
+pnpm install && pnpm --dir app install
 
 # Development (run both in parallel terminals)
-npm run dev:server    # Hono API on :8387
-npm run dev:app       # Vite on :5173 (proxies /api → :8387)
+pnpm run dev:server          # Hono API on :8387
+pnpm --dir app run dev       # Vite on :5173 (proxies /api → :8387)
 
 # Type checking
-npm run typecheck --prefix app
+pnpm --dir app run typecheck
 
 # Build
-npm run build --prefix app   # FE → app/dist/
-npm run build:server         # BE → dist-server/server.bundle.js
+pnpm --dir app run build     # FE → app/dist/
+pnpm run build:server        # BE → dist-server/server.bundle.js
 
 # Validate lab fixtures against schema
 node scripts/validate-lab-fixtures.js
 
 # Regenerate content modules from fixtures
-npm run gen:content
+pnpm run gen:content
 
 # Sync labs to SQLite DB
-npm run sync-labs
+pnpm run sync-labs
 ```
 
 ## Architecture

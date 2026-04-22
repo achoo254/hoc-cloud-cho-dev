@@ -40,17 +40,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm PHẢI setup trước setup-node để cache='pnpm' nhận được binary.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+          run_install: false
+
       - name: Setup Node 22 (match VPS)
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            app/pnpm-lock.yaml
 
       - name: Install root deps
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install app deps
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         working-directory: app
 
       - name: Extract Firebase Web config → VITE_* env
@@ -85,11 +95,11 @@ jobs:
           echo "Firebase Web config extracted ($(grep -c ^VITE_FIREBASE_ "$GITHUB_ENV") vars)"
 
       - name: Build FE bundle (Vite → app/dist)
-        run: npm run build
+        run: pnpm run build
         working-directory: app
 
       - name: Build BE bundle (esbuild → dist-server/server.bundle.js)
-        run: npm run build:server
+        run: pnpm run build:server
 
       - name: Smoke test BE bundle (boot + /healthz)
         # Dùng services: mongodb + meilisearch tự spin up trong runner — không phụ
