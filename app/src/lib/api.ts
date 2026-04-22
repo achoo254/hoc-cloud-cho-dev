@@ -82,14 +82,27 @@ export interface Lab {
 
 export interface ProgressEntry {
   lab_slug: string
-  opened_at: string | null
-  completed_at: string | null
+  /** Unix seconds — first time the lab was opened (set once on insert) */
+  opened_at: number | null
+  /** Unix seconds — earliest completion mark (quiz-full or flashcards-mastered) */
+  completed_at: number | null
   quiz_score: number | null
+  /** Unix seconds — mongoose auto-updated timestamp of latest write */
   last_updated?: number | null
 }
 
 export interface ProgressResponse {
   progress: ProgressEntry[]
+}
+
+/**
+ * Upsert payload — BE controls `opened_at` via $setOnInsert, so FE never sends it.
+ * `completed_at` is Unix seconds; BE applies $min so earliest wins.
+ */
+export interface ProgressUpsertPayload {
+  lab_slug: string
+  completed_at?: number | null
+  quiz_score?: number | null
 }
 
 // Re-export server search result type so callers get the real BE shape
@@ -102,7 +115,7 @@ export type { SearchResult } from '@/lib/schema-search'
 export const getProgress = () => request<ProgressResponse>('/api/progress')
 
 /** POST /api/progress — upsert one entry */
-export const upsertProgress = (entry: Omit<ProgressEntry, 'opened_at'> & { opened_at?: string }) =>
+export const upsertProgress = (entry: ProgressUpsertPayload) =>
   request<{ ok: boolean }>('/api/progress', {
     method: 'POST',
     body: JSON.stringify(entry),

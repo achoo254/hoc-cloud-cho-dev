@@ -17,6 +17,12 @@ import {
   type ProgressResponse,
 } from '@/lib/api'
 
+/** Patch accepted by update() — BE owns opened_at, so FE only sends the rest. */
+export type ProgressPatch = {
+  completed_at?: number | null
+  quiz_score?: number | null
+}
+
 // ── Query key ─────────────────────────────────────────────────────────────────
 
 export const PROGRESS_QUERY_KEY = ['progress'] as const
@@ -30,7 +36,7 @@ export interface UseProgressReturn {
   entry: ProgressEntry | null
   isLoading: boolean
   /** Upsert a progress entry; lab_slug is auto-injected when labSlug is given */
-  update: (patch: Omit<ProgressEntry, 'lab_slug'>) => void
+  update: (patch: ProgressPatch) => void
   isUpdating: boolean
 }
 
@@ -54,13 +60,12 @@ export function useProgress(labSlug?: string): UseProgressReturn {
     // Dedupe concurrent mutations for the same lab
     mutationKey: labSlug ? ['progress', labSlug] : ['progress'],
 
-    mutationFn: (patch: Omit<ProgressEntry, 'lab_slug'>) => {
+    mutationFn: (patch: ProgressPatch) => {
       if (!labSlug) return Promise.resolve({ ok: true })
       return upsertProgress({
         lab_slug: labSlug,
         completed_at: patch.completed_at,
         quiz_score: patch.quiz_score,
-        opened_at: patch.opened_at ?? undefined,
       })
     },
 
@@ -71,15 +76,22 @@ export function useProgress(labSlug?: string): UseProgressReturn {
       await queryClient.cancelQueries({ queryKey: PROGRESS_QUERY_KEY })
       const previous = queryClient.getQueryData<ProgressResponse>(PROGRESS_QUERY_KEY)
 
+      const nowSec = Math.floor(Date.now() / 1000)
+
       queryClient.setQueryData<ProgressResponse>(PROGRESS_QUERY_KEY, (old) => {
         if (!old) return old
         const filtered = old.progress.filter((p) => p.lab_slug !== labSlug)
-        // Merge with existing entry so we never lose previously saved fields
         const existing = old.progress.find((p) => p.lab_slug === labSlug)
+
+        // Mirror BE semantics: opened_at is set once on insert; completed_at
+        // uses $min so earliest wins; quiz_score always replaces.
         const updated: ProgressEntry = {
           lab_slug: labSlug,
-          opened_at: patch.opened_at ?? existing?.opened_at ?? null,
-          completed_at: patch.completed_at ?? existing?.completed_at ?? null,
+          opened_at: existing?.opened_at ?? nowSec,
+          completed_at:
+            patch.completed_at != null
+              ? Math.min(existing?.completed_at ?? patch.completed_at, patch.completed_at)
+              : existing?.completed_at ?? null,
           quiz_score: patch.quiz_score ?? existing?.quiz_score ?? null,
         }
         return { ...old, progress: [...filtered, updated] }

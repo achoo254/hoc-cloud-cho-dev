@@ -116,18 +116,13 @@ export function computeStreak(progressEntries: ProgressEntry[]): number {
 
 // ── Completed count ───────────────────────────────────────────────────────────
 
-const QUIZ_PASS_THRESHOLD = 0.8
-
 /**
- * Count labs where quiz_score >= threshold (default 0.8 = 80%).
+ * Count labs marked complete. `completed_at` is the single source of truth:
+ * set by the server (via $min) when quiz is full-scored OR flashcards fully
+ * mastered — avoids FE needing per-lab quiz length to re-derive.
  */
-export function computeCompleted(
-  progressEntries: ProgressEntry[],
-  threshold = QUIZ_PASS_THRESHOLD,
-): number {
-  return progressEntries.filter(
-    (p) => p.quiz_score !== null && p.quiz_score >= threshold,
-  ).length
+export function computeCompleted(progressEntries: ProgressEntry[]): number {
+  return progressEntries.filter((p) => p.completed_at != null).length
 }
 
 // ── SM-2 due items ────────────────────────────────────────────────────────────

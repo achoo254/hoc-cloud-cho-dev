@@ -52,18 +52,27 @@ export const progressRoutes = new Hono()
       return c.json({ error: 'invalid_lab_slug' }, 400);
     }
 
-    const update = {
-      ...(body.opened_at != null && Number.isFinite(body.opened_at) && body.opened_at > 0
-          ? { openedAt: new Date(body.opened_at * 1000) } : {}),
-      ...(body.completed_at != null && Number.isFinite(body.completed_at) && body.completed_at > 0
-          ? { completedAt: new Date(body.completed_at * 1000) } : {}),
+    // Conditional $set (quizScore only — completedAt goes through $min below so
+    // earliest completion wins across quiz/flashcard races)
+    const setOps = {
       ...(body.quiz_score != null && Number.isFinite(body.quiz_score)
           ? { quizScore: Math.max(0, Math.min(100, Math.floor(body.quiz_score))) } : {}),
     };
 
+    const completedAt =
+      body.completed_at != null && Number.isFinite(body.completed_at) && body.completed_at > 0
+        ? new Date(body.completed_at * 1000)
+        : null;
+
+    const updateDoc = {
+      $setOnInsert: { userId: user._id, labSlug: body.lab_slug, openedAt: new Date() },
+      ...(Object.keys(setOps).length > 0 ? { $set: setOps } : {}),
+      ...(completedAt ? { $min: { completedAt } } : {}),
+    };
+
     await Progress.findOneAndUpdate(
       { userId: user._id, labSlug: body.lab_slug },
-      { $set: update, $setOnInsert: { userId: user._id, labSlug: body.lab_slug } },
+      updateDoc,
       { upsert: true }
     );
 
@@ -86,18 +95,32 @@ export const progressRoutes = new Hono()
     for (const it of body.items) {
       if (!SLUG_RE.test(String(it.lab_slug || ''))) continue;
 
+      const openedAt = Number.isFinite(it.opened_at) ? new Date(it.opened_at * 1000) : null;
+      const completedAt = Number.isFinite(it.completed_at) ? new Date(it.completed_at * 1000) : null;
+
+      const updateDoc = {
+        $set: {
+          userId: user._id,
+          ...(Number.isFinite(it.quiz_score)
+            ? { quizScore: Math.max(0, Math.min(100, it.quiz_score | 0)) }
+            : {}),
+        },
+        $setOnInsert: { userUuid: uuid, labSlug: it.lab_slug },
+        // $min preserves earliest timestamps across merges
+        ...(openedAt || completedAt
+          ? {
+              $min: {
+                ...(openedAt ? { openedAt } : {}),
+                ...(completedAt ? { completedAt } : {}),
+              },
+            }
+          : {}),
+      };
+
       bulkOps.push({
         updateOne: {
           filter: { userUuid: uuid, labSlug: it.lab_slug },
-          update: {
-            $set: {
-              userId: user._id,
-              ...(Number.isFinite(it.opened_at) && { openedAt: new Date(it.opened_at * 1000) }),
-              ...(Number.isFinite(it.completed_at) && { completedAt: new Date(it.completed_at * 1000) }),
-              ...(Number.isFinite(it.quiz_score) && { quizScore: Math.max(0, Math.min(100, it.quiz_score | 0)) }),
-            },
-            $setOnInsert: { userUuid: uuid, labSlug: it.lab_slug },
-          },
+          update: updateDoc,
           upsert: true,
         },
       });

@@ -216,19 +216,19 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
 export function LabRenderer({ lab, className }: LabRendererProps) {
   const { update } = useProgress(lab.slug)
 
-  // Fire opened_at once per mount — useRef guard prevents double-fire in StrictMode
+  // Mark opened once per mount — BE applies $setOnInsert so later calls are no-ops
+  // for openedAt. StrictMode guard via ref avoids the duplicate write in dev.
   const openedRef = useRef(false)
   useEffect(() => {
     if (openedRef.current) return
     openedRef.current = true
-    update({ opened_at: new Date().toISOString(), completed_at: null, quiz_score: null })
+    update({ completed_at: null, quiz_score: null })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function handleQuizScore(score: number) {
     update({
-      opened_at: new Date().toISOString(),
-      completed_at: score === lab.quiz.length ? new Date().toISOString() : null,
+      completed_at: score === lab.quiz.length ? Math.floor(Date.now() / 1000) : null,
       quiz_score: score,
     })
   }
@@ -300,8 +300,7 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
             labSlug={lab.slug}
             onAllMastered={() => {
               update({
-                opened_at: null,
-                completed_at: new Date().toISOString(),
+                completed_at: Math.floor(Date.now() / 1000),
                 quiz_score: null,
               })
             }}
