@@ -1,7 +1,7 @@
 # Phase 02: Lab-specific Containers
 
 **Priority:** P1  
-**Status:** Pending  
+**Status:** Partial (2026-04-22) — ARP topology + orchestrator done; 5 remaining labs pending  
 **Effort:** 2 weeks  
 **Dependencies:** Phase 01 complete
 
@@ -121,6 +121,8 @@ Create specialized Docker images for each lab type with pre-configured network t
 
 ## Implementation Steps
 
+> **tmux convention:** every user-facing lab image MUST install `tmux` and ship `/etc/tmux.conf` (see phase-01). The backend attaches via `tmux new-session -A -s lab` + `tmux attach-session -d -t lab` so WS reconnect restores state and a second tab kicks the first. PID 1 must be long-running and non-interactive — use `sleep infinity`, NOT `bash`.
+
 ### Step 1: ARP Lab Image
 
 **File: `docker/lab-arp/Dockerfile`**
@@ -132,7 +134,10 @@ RUN apk add --no-cache \
     iputils \
     tcpdump \
     arping \
-    bash
+    bash \
+    tmux
+
+COPY docker/tmux.conf /etc/tmux.conf
 
 RUN adduser -D -s /bin/bash labuser
 USER labuser
@@ -142,7 +147,8 @@ WORKDIR /home/labuser
 COPY --chown=labuser:labuser motd.txt /etc/motd
 RUN echo 'cat /etc/motd' >> ~/.bashrc
 
-ENTRYPOINT ["/bin/bash"]
+# Keep container alive; sessions spawn via `docker exec tmux attach ...`
+CMD ["sleep", "infinity"]
 ```
 
 **File: `docker/lab-arp/docker-compose.yml`**
@@ -209,7 +215,9 @@ ENTRYPOINT ["dnsmasq", "-d", "--log-dhcp"]
 ```dockerfile
 FROM alpine:3.19
 
-RUN apk add --no-cache dhclient bash iproute2 tcpdump
+RUN apk add --no-cache dhclient bash iproute2 tcpdump tmux
+
+COPY docker/tmux.conf /etc/tmux.conf
 
 RUN adduser -D -s /bin/bash labuser
 USER labuser
@@ -218,8 +226,10 @@ WORKDIR /home/labuser
 COPY --chown=labuser:labuser motd-dhcp.txt /etc/motd
 RUN echo 'cat /etc/motd' >> ~/.bashrc
 
-ENTRYPOINT ["/bin/bash"]
+CMD ["sleep", "infinity"]
 ```
+
+*(Dockerfile.server runs dnsmasq as PID 1 — no shell session, no tmux needed.)*
 
 ### Step 3: Lab Orchestrator
 
@@ -315,17 +325,17 @@ async onClose() {
 
 ## Todo List
 
-- [ ] Create docker/lab-arp/ directory and files
+- [x] Create docker/lab-arp/ directory and files (Dockerfile, compose, motd)
 - [ ] Create docker/lab-dhcp/ directory and files
 - [ ] Create docker/lab-dns/ directory and files
 - [ ] Create docker/lab-http/ directory and files
 - [ ] Create docker/lab-icmp/ directory and files
 - [ ] Create docker/lab-tcp/ directory and files
-- [ ] Build all images locally
-- [ ] Implement lab-orchestrator.js
-- [ ] Update terminal-routes.js for multi-container
+- [ ] Build all images locally (only lab-terminal:v1 + lab-arp bases exist so far)
+- [x] Implement lab-orchestrator.js (topology registry in `LAB_TOPOLOGIES`)
+- [x] Update terminal-routes.js for multi-container (via session-manager → hasTopology fallback)
 - [ ] Test each lab scenario manually
-- [ ] Create MOTD files with instructions per lab
+- [x] Create MOTD files with instructions per lab (arp only)
 - [ ] Push images to registry (or build on VPS)
 - [ ] Deploy and test on VPS
 

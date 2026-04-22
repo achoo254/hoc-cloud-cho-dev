@@ -1,7 +1,7 @@
 # Phase 04: Security Hardening
 
 **Priority:** P1  
-**Status:** Pending  
+**Status:** Code complete (2026-04-22) — in-app layers wired; nginx WS rate-limit + seccomp profile still TODO before prod  
 **Effort:** 1 week  
 **Dependencies:** Phase 03 complete
 
@@ -207,7 +207,7 @@ setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
 
 **File: `server/terminal/abuse-detector.js`**
 ```javascript
-import db from '../db/sqlite-client.js';
+import { TerminalAuditLog } from '../db/models/terminal-audit-log-model.js';
 
 const SUSPICIOUS_PATTERNS = [
   /curl.*\|.*sh/i,           // Pipe curl to shell
@@ -277,13 +277,14 @@ class AbuseDetector {
   }
 
   logAbuse(sessionId, type, details) {
-    const now = Math.floor(Date.now() / 1000);
     console.warn(`[ABUSE] session=${sessionId} type=${type} details=${details}`);
-    
-    db.prepare(`
-      INSERT INTO terminal_audit_log (session_id, event_type, details, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run(sessionId, `abuse:${type}`, details, now);
+
+    // Fire-and-forget: surface errors but don't block detection path.
+    TerminalAuditLog.create({
+      sessionId,
+      eventType: `abuse:${type}`,
+      details,
+    }).catch(err => console.error('[abuse-detector] audit insert failed:', err.message));
   }
 }
 
@@ -292,55 +293,57 @@ export const abuseDetector = new AbuseDetector();
 
 ### Step 4: Audit Logger
 
+**File: `server/db/models/terminal-audit-log-model.js`** (new Mongoose model)
+```javascript
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
+
+const terminalAuditLogSchema = new Schema({
+  sessionId: { type: String, required: true, index: true },
+  eventType: { type: String, required: true, index: true },
+  details: { type: String, default: null },
+}, { timestamps: { createdAt: 'createdAt', updatedAt: false } });
+
+// Optional TTL: auto-purge audit entries older than 90 days (tune per policy)
+terminalAuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });
+
+export const TerminalAuditLog = mongoose.model('TerminalAuditLog', terminalAuditLogSchema);
+```
+
 **File: `server/terminal/audit-logger.js`**
 ```javascript
-import db from '../db/sqlite-client.js';
-
-// Migration for audit log table
-export const AUDIT_MIGRATION = `
-CREATE TABLE IF NOT EXISTS terminal_audit_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  event_type TEXT NOT NULL,
-  details TEXT,
-  created_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_audit_session ON terminal_audit_log(session_id);
-CREATE INDEX IF NOT EXISTS idx_audit_type ON terminal_audit_log(event_type);
-`;
+import { TerminalAuditLog } from '../db/models/terminal-audit-log-model.js';
 
 class AuditLogger {
-  log(sessionId, eventType, details = null) {
-    const now = Math.floor(Date.now() / 1000);
-    db.prepare(`
-      INSERT INTO terminal_audit_log (session_id, event_type, details, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run(sessionId, eventType, details, now);
+  async log(sessionId, eventType, details = null) {
+    try {
+      await TerminalAuditLog.create({ sessionId, eventType, details });
+    } catch (err) {
+      console.error('[audit-logger] insert failed:', err.message);
+    }
   }
 
   logConnect(sessionId, userId, labSlug, ip) {
-    this.log(sessionId, 'connect', JSON.stringify({ userId, labSlug, ip }));
+    return this.log(sessionId, 'connect', JSON.stringify({ userId, labSlug, ip }));
   }
 
   logDisconnect(sessionId, reason) {
-    this.log(sessionId, 'disconnect', reason);
+    return this.log(sessionId, 'disconnect', reason);
   }
 
   logCommand(sessionId, command) {
     // Truncate long commands
     const truncated = command.length > 500 ? command.slice(0, 500) + '...' : command;
-    this.log(sessionId, 'command', truncated);
+    return this.log(sessionId, 'command', truncated);
   }
 
   getRecentActivity(hours = 24) {
-    const cutoff = Math.floor(Date.now() / 1000) - (hours * 3600);
-    return db.prepare(`
-      SELECT * FROM terminal_audit_log 
-      WHERE created_at > ? 
-      ORDER BY created_at DESC 
-      LIMIT 1000
-    `).all(cutoff);
+    const cutoff = new Date(Date.now() - hours * 3600 * 1000);
+    return TerminalAuditLog
+      .find({ createdAt: { $gt: cutoff } })
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .lean();
   }
 }
 
@@ -431,14 +434,14 @@ app.get('/ws/terminal/:labSlug', upgradeWebSocket(async (c) => {
 
 ## Todo List
 
-- [ ] Create container-security.js with hardened config
-- [ ] Create rate-limiter.js
-- [ ] Create abuse-detector.js
-- [ ] Create audit-logger.js with migration
-- [ ] Run audit log migration
-- [ ] Update docker-compose files with security options
-- [ ] Update terminal-routes.js with all security layers
-- [ ] Update nginx.conf with WS rate limiting
+- [x] ~~container-security.js~~ → merged directly into `server/lib/docker-manager.js::BASE_SECURITY`
+- [~] ~~rate-limiter.js~~ — **removed per owner 2026-04-22**, not needed yet; re-add khi có abuse thực tế
+- [x] Create abuse-detector.js (line-buffered command inspection + CPU spike detection)
+- [x] Create audit-logger.js + Mongoose model (`terminal-audit-log-model.js` with 90d TTL)
+- [x] ~~Run audit log migration~~ N/A — Mongoose auto-creates indexes
+- [x] Update docker-compose files with security options (lab-arp has cap_drop ALL, no-new-privileges, mem/cpu/pids limits, internal network)
+- [x] Update terminal-routes.js with security layers (audit logger, abuse detector, CPU heartbeat — rate limit skipped)
+- [x] Update nginx.conf for WS upgrade + Cloudflare real IP (rate-limit directive bỏ theo quyết định owner)
 - [ ] Test rate limiting with concurrent connections
 - [ ] Test abuse detection with suspicious commands
 - [ ] Verify container isolation (no internet, no host access)

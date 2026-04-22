@@ -4,9 +4,38 @@
 # Setup steps:
 #   1. Copy to /etc/nginx/conf.d/hoc-cloud.conf
 #   2. Run: nginx -t
-#   3. Run: certbot --nginx -d hoc-cloud.inetdev.io.vn
-#      (Certbot will auto-inject SSL server block + HTTP->HTTPS redirect)
-#   4. sudo systemctl reload nginx
+#   3. sudo systemctl reload nginx
+#
+# TLS is terminated by Cloudflare (orange-cloud proxied). Origin stays on :80.
+# Refresh Cloudflare IP list periodically: https://www.cloudflare.com/ips/
+# `set_real_ip_from` blocks below cần được update khi CF xuất ranges mới.
+
+# --- Cloudflare origin: rewrite $remote_addr thành client IP thật ---
+# Phải đặt ở http context (file này được include vào http {}).
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/32;
+set_real_ip_from 2803:f800::/32;
+set_real_ip_from 2405:b500::/32;
+set_real_ip_from 2405:8100::/32;
+set_real_ip_from 2a06:98c0::/29;
+set_real_ip_from 2c0f:f248::/32;
+real_ip_header     CF-Connecting-IP;
+real_ip_recursive  on;
 
 server {
     listen 80;
@@ -45,6 +74,28 @@ server {
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto $scheme;
         proxy_read_timeout 30s;
+    }
+
+    # --- WebSocket: terminal (/ws/terminal/:labSlug) ---
+    # Cloudflare free/pro đóng WS sau ~100s idle — client-side keepalive
+    # trong web-terminal.tsx gửi zero-byte frame mỗi 60s để giữ connection.
+    location /ws/ {
+        proxy_pass         http://127.0.0.1:8387;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+
+        # Byte-by-byte flush cho xterm; WS không dùng buffering/cache.
+        proxy_buffering    off;
+        proxy_cache        off;
+
+        # tmux session kéo dài; cap ở idle-timeout server-side (30 phút).
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     # --- SSE endpoint — buffering MUST be off for EventSource to work ---
@@ -99,5 +150,7 @@ server {
     }
 }
 
-# NOTE: After running certbot, it will append an HTTPS (443) server block here.
-# The HTTP block above will be replaced with an HTTP->HTTPS redirect automatically.
+# NOTE: Cloudflare proxied (orange-cloud) → TLS kết thúc tại edge.
+# Nếu sau này đổi sang direct/grey-cloud, chạy:
+#   certbot --nginx -d hoc-cloud.inetdev.io.vn
+# để certbot tự thêm block :443 + redirect HTTP→HTTPS.

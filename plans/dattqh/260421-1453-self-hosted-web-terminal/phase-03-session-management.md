@@ -1,7 +1,7 @@
 # Phase 03: Session Management
 
 **Priority:** P1  
-**Status:** Pending  
+**Status:** Code complete (2026-04-22) — MongoDB-backed session/audit models landed; cleanup cron wired in server.js  
 **Effort:** 1 week  
 **Dependencies:** Phase 02 complete
 
@@ -17,7 +17,7 @@ Implement robust session lifecycle: timeout idle sessions, cleanup orphaned cont
 - F3: Queue overflow with position feedback
 - F4: Heartbeat/ping to detect stale connections
 - F5: Graceful cleanup on server restart
-- F6: Session metadata stored in SQLite
+- F6: Session metadata stored in MongoDB (`terminalsessions` collection)
 
 ### Non-Functional
 - NF1: Cleanup runs every 60s
@@ -37,29 +37,36 @@ Implement robust session lifecycle: timeout idle sessions, cleanup orphaned cont
 │         │                │                   │                  │
 │         ▼                ▼                   ▼                  │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    SQLite: terminal_sessions             │   │
-│  │  id | user_id | lab_slug | container | status | last_active │
+│  │              MongoDB: terminalsessions collection        │   │
+│  │  _id | userId | labSlug | containerName | status | lastActiveAt │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Database Schema
+## Database Schema (MongoDB / Mongoose)
 
-```sql
-CREATE TABLE terminal_sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT,                    -- nullable for guests
-  lab_slug TEXT NOT NULL,
-  project_name TEXT,               -- docker-compose project
-  container_name TEXT,
-  status TEXT DEFAULT 'queued',    -- queued | active | idle | terminated
-  created_at INTEGER NOT NULL,
-  last_active_at INTEGER NOT NULL,
-  terminated_at INTEGER
-);
+```js
+// server/db/models/terminal-session-model.js
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
 
-CREATE INDEX idx_sessions_status ON terminal_sessions(status);
-CREATE INDEX idx_sessions_user ON terminal_sessions(user_id);
+const terminalSessionSchema = new Schema({
+  _id: { type: String },               // session UUID (client-provided)
+  userId: { type: String, default: null, index: true }, // nullable for guests
+  labSlug: { type: String, required: true },
+  projectName: { type: String, default: null },          // docker-compose project
+  containerName: { type: String, default: null },
+  status: {
+    type: String,
+    enum: ['queued', 'active', 'idle', 'terminated'],
+    default: 'queued',
+    index: true,
+  },
+  lastActiveAt: { type: Date, required: true, index: true },
+  terminatedAt: { type: Date, default: null },
+}, { timestamps: { createdAt: 'createdAt', updatedAt: false }, _id: false });
+
+export const TerminalSession = mongoose.model('TerminalSession', terminalSessionSchema);
 ```
 
 ## Related Code Files
@@ -68,7 +75,7 @@ CREATE INDEX idx_sessions_user ON terminal_sessions(user_id);
 | File | Purpose |
 |------|---------|
 | `server/terminal/session-manager.js` | Session lifecycle management |
-| `server/db/migrations/003-terminal-sessions.sql` | DB schema |
+| `server/db/models/terminal-session-model.js` | Mongoose model for terminal sessions |
 | `server/terminal/cleanup-cron.js` | Periodic cleanup job |
 
 ### Modify
@@ -80,32 +87,17 @@ CREATE INDEX idx_sessions_user ON terminal_sessions(user_id);
 
 ## Implementation Steps
 
-### Step 1: Database Migration
+### Step 1: Mongoose Model
 
-**File: `server/db/migrations/003-terminal-sessions.sql`**
-```sql
-CREATE TABLE IF NOT EXISTS terminal_sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT,
-  lab_slug TEXT NOT NULL,
-  project_name TEXT,
-  container_name TEXT,
-  status TEXT DEFAULT 'queued' CHECK(status IN ('queued','active','idle','terminated')),
-  created_at INTEGER NOT NULL,
-  last_active_at INTEGER NOT NULL,
-  terminated_at INTEGER
-);
+**File: `server/db/models/terminal-session-model.js`** — see schema block above. Mongoose auto-creates indexes on `status`, `userId`, `lastActiveAt` via `index: true`. No manual migration needed (collection auto-created on first write).
 
-CREATE INDEX IF NOT EXISTS idx_sessions_status ON terminal_sessions(status);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON terminal_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_active ON terminal_sessions(last_active_at);
-```
+Register the model export in `server/db/models/index.js` alongside existing models.
 
 ### Step 2: Session Manager
 
 **File: `server/terminal/session-manager.js`**
 ```javascript
-import db from '../db/sqlite-client.js';
+import { TerminalSession } from '../db/models/terminal-session-model.js';
 import { startLabEnvironment, stopLabEnvironment } from '../lib/lab-orchestrator.js';
 
 const MAX_CONCURRENT = 5;
@@ -118,10 +110,8 @@ class SessionManager {
     this.activeSessions = new Map();
   }
 
-  getActiveCount() {
-    return db.prepare(
-      "SELECT COUNT(*) as count FROM terminal_sessions WHERE status = 'active'"
-    ).get().count;
+  async getActiveCount() {
+    return TerminalSession.countDocuments({ status: 'active' });
   }
 
   getQueuePosition(sessionId) {
@@ -130,15 +120,18 @@ class SessionManager {
   }
 
   async requestSession(sessionId, userId, labSlug) {
-    const now = Math.floor(Date.now() / 1000);
-    
-    db.prepare(`
-      INSERT INTO terminal_sessions (id, user_id, lab_slug, status, created_at, last_active_at)
-      VALUES (?, ?, ?, 'queued', ?, ?)
-    `).run(sessionId, userId, labSlug, now, now);
+    const now = new Date();
 
-    const activeCount = this.getActiveCount();
-    
+    await TerminalSession.create({
+      _id: sessionId,
+      userId: userId ?? null,
+      labSlug,
+      status: 'queued',
+      lastActiveAt: now,
+    });
+
+    const activeCount = await this.getActiveCount();
+
     if (activeCount < MAX_CONCURRENT) {
       return this.activateSession(sessionId, labSlug);
     } else {
@@ -149,55 +142,56 @@ class SessionManager {
   }
 
   async activateSession(sessionId, labSlug) {
-    const now = Math.floor(Date.now() / 1000);
-    
     const { projectName, mainContainer } = await startLabEnvironment(labSlug, sessionId);
-    
-    db.prepare(`
-      UPDATE terminal_sessions 
-      SET status = 'active', project_name = ?, container_name = ?, last_active_at = ?
-      WHERE id = ?
-    `).run(projectName, mainContainer, now, sessionId);
+
+    await TerminalSession.updateOne(
+      { _id: sessionId },
+      {
+        $set: {
+          status: 'active',
+          projectName,
+          containerName: mainContainer,
+          lastActiveAt: new Date(),
+        },
+      }
+    );
 
     this.activeSessions.set(sessionId, { projectName, mainContainer, labSlug });
-    
+
     return { projectName, mainContainer };
   }
 
-  touchSession(sessionId) {
-    const now = Math.floor(Date.now() / 1000);
-    db.prepare(
-      "UPDATE terminal_sessions SET last_active_at = ? WHERE id = ?"
-    ).run(now, sessionId);
+  async touchSession(sessionId) {
+    await TerminalSession.updateOne(
+      { _id: sessionId },
+      { $set: { lastActiveAt: new Date() } }
+    );
   }
 
   async terminateSession(sessionId) {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
-    const now = Math.floor(Date.now() / 1000);
-    
     try {
       await stopLabEnvironment(session.projectName);
     } catch (e) {
       console.error(`[session] cleanup failed for ${sessionId}:`, e.message);
     }
 
-    db.prepare(`
-      UPDATE terminal_sessions 
-      SET status = 'terminated', terminated_at = ?
-      WHERE id = ?
-    `).run(now, sessionId);
+    await TerminalSession.updateOne(
+      { _id: sessionId },
+      { $set: { status: 'terminated', terminatedAt: new Date() } }
+    );
 
     this.activeSessions.delete(sessionId);
-    
+
     // Process queue
     this.processQueue();
   }
 
   async processQueue() {
     if (this.waitQueue.length === 0) return;
-    if (this.getActiveCount() >= MAX_CONCURRENT) return;
+    if ((await this.getActiveCount()) >= MAX_CONCURRENT) return;
 
     const next = this.waitQueue.shift();
     try {
@@ -209,16 +203,16 @@ class SessionManager {
   }
 
   async cleanupIdleSessions() {
-    const cutoff = Math.floor((Date.now() - IDLE_TIMEOUT_MS) / 1000);
-    
-    const idleSessions = db.prepare(`
-      SELECT id, project_name FROM terminal_sessions 
-      WHERE status = 'active' AND last_active_at < ?
-    `).all(cutoff);
+    const cutoff = new Date(Date.now() - IDLE_TIMEOUT_MS);
+
+    const idleSessions = await TerminalSession.find(
+      { status: 'active', lastActiveAt: { $lt: cutoff } },
+      { _id: 1, projectName: 1 }
+    ).lean();
 
     for (const session of idleSessions) {
-      console.log(`[cleanup] terminating idle session: ${session.id}`);
-      await this.terminateSession(session.id);
+      console.log(`[cleanup] terminating idle session: ${session._id}`);
+      await this.terminateSession(session._id);
     }
 
     return idleSessions.length;
@@ -382,14 +376,14 @@ ws.onmessage = (e) => {
 
 ## Todo List
 
-- [ ] Create migration 003-terminal-sessions.sql
-- [ ] Run migration on dev DB
-- [ ] Implement session-manager.js
-- [ ] Implement cleanup-cron.js
-- [ ] Update terminal-routes.js with session manager
-- [ ] Add cleanup cron start to server.js
-- [ ] Update WebTerminal.tsx with queue UI
-- [ ] Test concurrent session limit
+- [x] ~~Migration 003-terminal-sessions.sql~~ → Mongoose models instead (`terminal-session-model.js`, `terminal-audit-log-model.js`)
+- [x] ~~Run migration on dev DB~~ N/A — Mongoose auto-creates indexes on first write
+- [x] Implement session-manager.js
+- [x] Implement cleanup-cron.js
+- [x] Update terminal-routes.js with session manager
+- [x] Add cleanup cron start to server.js (toggled by `TERMINAL_CLEANUP_DISABLED=1`)
+- [x] Update WebTerminal.tsx with queue UI
+- [ ] Test concurrent session limit (needs live mongo + VPS)
 - [ ] Test idle timeout cleanup
 - [ ] Test orphaned container cleanup
 - [ ] Load test with multiple browsers
