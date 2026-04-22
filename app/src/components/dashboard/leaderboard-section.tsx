@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Trophy, Medal, Award, Sparkles, UserRound } from 'lucide-react'
 import { getLeaderboard, type LeaderboardEntry } from '@/lib/api'
-import { useAuth } from '@/contexts/auth-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -105,7 +104,6 @@ function LeaderboardSkeleton() {
 }
 
 export function LeaderboardSection() {
-  const { user } = useAuth()
   const { data, isLoading } = useQuery({
     queryKey: ['leaderboard'],
     queryFn: getLeaderboard,
@@ -131,9 +129,9 @@ export function LeaderboardSection() {
           <div className="space-y-1">
             {leaderboard.map((entry) => (
               <LeaderboardRow
-                key={entry.firebaseUid}
+                key={entry.odid}
                 entry={entry}
-                isCurrentUser={user?.firebaseUid === entry.firebaseUid}
+                isCurrentUser={false}
               />
             ))}
           </div>

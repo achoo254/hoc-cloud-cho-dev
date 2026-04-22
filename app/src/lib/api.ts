@@ -55,7 +55,7 @@ export async function logout(): Promise<void> {
 
 export interface LeaderboardEntry {
   rank: number
-  firebaseUid: string
+  odid: string
   displayName: string | null
   photoUrl: string | null
   completedCount: number
@@ -85,10 +85,10 @@ export interface ProgressEntry {
   opened_at: string | null
   completed_at: string | null
   quiz_score: number | null
+  last_updated?: number | null
 }
 
 export interface ProgressResponse {
-  uuid: string
   progress: ProgressEntry[]
 }
 

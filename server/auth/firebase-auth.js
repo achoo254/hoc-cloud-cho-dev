@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { randomBytes, createHash } from 'node:crypto';
-import db from '../db/sqlite-client.js';
+import { User, Session, Progress } from '../db/models/index.js';
 import { getFirebaseAuth } from './firebase-admin.js';
 
 const app = new Hono();
-const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 
 const sha256 = (str) => createHash('sha256').update(str).digest('hex');
 
@@ -26,7 +26,6 @@ const setCookie = (c, name, value, maxAge) => {
   c.header('Set-Cookie', parts.join('; '), { append: true });
 };
 
-// Rate limiter (in-memory) — 10 requests/min/IP
 const rateLimitMap = new Map();
 const RATE_LIMIT = 10;
 const RATE_WINDOW = 60 * 1000;
@@ -60,7 +59,6 @@ setInterval(() => {
 
 app.use('/auth/*', rateLimit);
 
-// POST /auth/firebase/session — exchange Firebase ID token for session cookie
 app.post('/auth/firebase/session', async (c) => {
   let body;
   try { body = await c.req.json(); } catch { body = {}; }
@@ -80,52 +78,40 @@ app.post('/auth/firebase/session', async (c) => {
   const { uid, email, name, picture } = decoded;
   const cookies = parseCookies(c.req.header('cookie'));
   const anonUuid = cookies.hcl_uid;
-  const mergeWindowStart = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+
+  const user = await User.findOneAndUpdate(
+    { firebaseUid: uid },
+    { $set: { email: email ?? null, displayName: name ?? null, photoUrl: picture ?? null } },
+    { upsert: true, new: true }
+  );
+
+  if (anonUuid) {
+    const mergeWindowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await Progress.updateMany(
+      { userUuid: anonUuid, userId: null, lastUpdated: { $gte: mergeWindowStart } },
+      { $set: { userId: user._id } }
+    ).catch(err => console.warn('[auth] Progress merge partial failure:', err.message));
+  }
 
   const sessionToken = randomBytes(32).toString('hex');
   const tokenHash = sha256(sessionToken);
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE;
-
-  const tx = db.transaction(() => {
-    db.prepare(`
-      INSERT INTO users (firebase_uid, email, display_name, photo_url)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(firebase_uid) DO UPDATE SET
-        email = excluded.email,
-        display_name = excluded.display_name,
-        photo_url = excluded.photo_url
-    `).run(uid, email ?? null, name ?? null, picture ?? null);
-
-    const user = db.prepare('SELECT id FROM users WHERE firebase_uid = ?').get(uid);
-
-    if (anonUuid) {
-      db.prepare(`
-        UPDATE progress SET user_id = ?
-        WHERE user_uuid = ? AND user_id IS NULL AND last_updated > ?
-      `).run(user.id, anonUuid, mergeWindowStart);
-    }
-
-    db.prepare(`
-      INSERT INTO sessions (token_hash, user_id, expires_at)
-      VALUES (?, ?, ?)
-    `).run(tokenHash, user.id, expiresAt);
-
-    return user;
+  await Session.create({
+    tokenHash,
+    userId: user._id,
+    expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000),
   });
-  tx();
 
   setCookie(c, 'sid', sessionToken, SESSION_MAX_AGE);
   return c.json({ ok: true });
 });
 
-// POST /auth/logout — clear session
-app.post('/auth/logout', (c) => {
+app.post('/auth/logout', async (c) => {
   const cookies = parseCookies(c.req.header('cookie'));
   const sid = cookies.sid;
 
   if (sid) {
     const hash = sha256(sid);
-    db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash);
+    await Session.deleteOne({ tokenHash: hash });
   }
 
   setCookie(c, 'sid', '', 0);

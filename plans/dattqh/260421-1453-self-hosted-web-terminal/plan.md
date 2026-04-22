@@ -7,7 +7,8 @@ effort: 5 weeks (10-12 weeks calendar with weekends-only)
 branch: feat/web-terminal
 tags: [terminal, docker, websocket, hands-on, learning]
 created: 2026-04-21
-blockedBy: []
+blockedBy:
+  - 260422-0803-sqlite-to-mongodb-meilisearch
 blocks: []
 relatedReports:
   - plans/dattqh/reports/brainstorm-260421-1453-self-hosted-web-terminal-learning.md

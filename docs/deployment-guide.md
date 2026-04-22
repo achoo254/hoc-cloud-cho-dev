@@ -40,7 +40,9 @@ Runtime override: append `?textMode=1` lên lab URL → ép text mode bất kể
 | `PORT` | Default `8387`. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account JSON cho firebase-admin (verify ID token, set session cookie). |
 | `SESSION_COOKIE_SECRET` | HMAC secret cho session cookie. |
-| `DATABASE_PATH` | Default `data/hoccloud.db`. |
+| `MONGODB_URI` | **Required.** MongoDB connection string (e.g. `mongodb://localhost:27017/hoccloud`). |
+| `MEILISEARCH_HOST` | **Required.** Meilisearch base URL (e.g. `http://localhost:7700`). |
+| `MEILISEARCH_API_KEY` | Meilisearch master/admin API key. |
 
 ## CI/CD Flow (`.github/workflows/deploy.yml`)
 
@@ -48,11 +50,11 @@ Runtime override: append `?textMode=1` lên lab URL → ép text mode bất kể
 2. Inject `VITE_FIREBASE_CONFIG` từ GitHub Secrets
 3. `npm run build --prefix app` + `npm run build:server`
 4. Smoke test: spawn node server với bundle, curl `/healthz`
-5. Tar: `app/dist/` + `dist-server/server.bundle.js` + `node_modules/better-sqlite3` + `server/db/migrations`
+5. Tar: `app/dist/` + `dist-server/server.bundle.js`
 6. SCP lên VPS, extract vào release folder
 7. `pm2 startOrRestart ecosystem.config.cjs --env production`
 
-VPS **không cần** `package.json` hoặc `npm ci` — chỉ cần `node` + `pm2` + native `better-sqlite3` đã build sẵn.
+VPS **không cần** `package.json` hoặc `npm ci` — chỉ cần `node` + `pm2`. MongoDB và Meilisearch chạy như external services (self-hosted hoặc managed), cần set đủ env vars `MONGODB_URI`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` trước khi start PM2.
 
 ## Nginx
 
@@ -81,4 +83,5 @@ npm run typecheck --prefix app   # tsc --noEmit
 - **Firebase config missing fields**: CI fail-fast với tên field thiếu. Kiểm tra `VITE_FIREBASE_CONFIG` secret.
 - **PM2 chạy sai NODE_ENV**: script deploy export `NODE_ENV=production` trước `pm2 start/restart` (commit `b9cdb41`).
 - **OAuth redirect lỗi**: Nginx phải proxy `/auth/*` — xem commit `e136584`.
-- **`better-sqlite3` ABI mismatch**: rebuild native module trên VPS cùng Node version với CI.
+- **MongoDB connection refused**: Đảm bảo `MONGODB_URI` đúng và MongoDB service đang chạy trước khi PM2 start.
+- **Meilisearch unavailable**: Search API trả về lỗi; client-side MiniSearch fallback (`search-index.json`) vẫn hoạt động. Kiểm tra `MEILISEARCH_HOST` + `MEILISEARCH_API_KEY`.

@@ -32,10 +32,9 @@ Production: **https://hoc-cloud.inetdev.io.vn/**
 │       │           │ firebase-admin              │               │
 │       ▼           ▼ verifyIdToken               ▼               │
 │  ┌─────────────────────┐          ┌──────────────────────────┐  │
-│  │  better-sqlite3     │          │   Firebase Auth (Google) │  │
-│  │  data/hoccloud.db   │          │   (external IdP)         │  │
-│  │  + FTS5 virtual     │          └──────────────────────────┘  │
-│  │    tables           │                                        │
+│  │  MongoDB (mongoose) │          │   Firebase Auth (Google) │  │
+│  │  + Meilisearch      │          │   (external IdP)         │  │
+│  │  (full-text search) │          └──────────────────────────┘  │
 │  └─────────────────────┘                                        │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -48,12 +47,11 @@ fixtures/labs/*.json   ── source of truth (schema v3, Zod-validated)
         ├─── scripts/fixtures-to-ts.mjs ──→ content/*.ts
         ├─── scripts/generate-labs-index.mjs ──→ app/src/generated/labs-index.ts
         ├─── scripts/generate-search-index.mjs ──→ app/src/generated/search-index.json
-        └─── server/scripts/sync-labs-to-db.js ──→ data/hoccloud.db
-                                                    ├─ labs (rowid table)
-                                                    └─ labs_fts (FTS5 virtual)
+        └─── server/scripts/sync-labs-to-db.js ──→ MongoDB (labs collection)
+                                                    + Meilisearch (search index)
 ```
 
-Lab JSON = single source of truth. TypeScript modules, search index, SQLite rows = derived artifacts regenerated via `npm run gen:content` + `npm run sync-labs`.
+Lab JSON = single source of truth. TypeScript modules, search index, MongoDB documents = derived artifacts regenerated via `npm run gen:content` + `npm run sync-labs`.
 
 ## Request Flows
 
@@ -85,8 +83,7 @@ Subsequent requests include cookie → session-middleware attaches ctx.user
 ```
 GET /api/search?q=subnet
   → search-routes.js
-  → SELECT ... FROM labs_fts WHERE labs_fts MATCH ?
-    ORDER BY bm25(labs_fts)
+  → Meilisearch query (typo-tolerant, ranked)
   → return [{ slug, title, snippet_with_<mark>_highlights }]
 ```
 
@@ -150,9 +147,9 @@ push master → GitHub Actions
   → inject VITE_FIREBASE_CONFIG
   → build FE (vite) + BE (esbuild single bundle)
   → smoke test /healthz
-  → tar: dist/ + server.bundle.js + better-sqlite3 native + migrations
+  → tar: dist/ + server.bundle.js
   → SCP to VPS release folder
   → pm2 startOrRestart ecosystem.config.cjs --env production
 ```
 
-VPS minimal runtime: `node` + `pm2` + pre-built `better-sqlite3` native addon. No `npm ci` on VPS.
+VPS minimal runtime: `node` + `pm2`. MongoDB + Meilisearch run as external services (self-hosted or managed). No native addon required.

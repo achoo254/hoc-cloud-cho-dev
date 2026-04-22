@@ -11,7 +11,7 @@ hoc-cloud-cho-dev/
 ├── fixtures/labs/        # Lab JSON — source of truth (schema v3)
 ├── content/              # Generated TS modules
 ├── scripts/              # Build scripts (fixtures → TS, schema validate)
-├── data/hoccloud.db      # SQLite (labs + FTS5 + progress + users)
+├── data/                 # (legacy SQLite removed — data now in MongoDB)
 ├── deploy/               # nginx.conf.example, ecosystem.config
 └── docs/                 # Project documentation
 ```
@@ -62,7 +62,7 @@ app/src/
 server/
 ├── server.js               # Hono app entry, middleware chain
 ├── api/
-│   ├── search-routes.js    # GET /api/search (FTS5, bm25 + <mark>)
+│   ├── search-routes.js    # GET /api/search (Meilisearch + <mark> highlights)
 │   ├── progress-routes.js  # GET/POST /api/progress
 │   └── leaderboard-routes.js
 ├── auth/
@@ -70,7 +70,7 @@ server/
 │   ├── firebase-auth.js    # POST /auth/session, /auth/logout
 │   └── session-middleware.js  # HttpOnly cookie verification
 ├── db/
-│   └── migrations/         # 001-init, 002-progress, 003-firebase-auth
+│   └── mongoose-models/    # MongoDB models (labs, progress, users)
 ├── lib/
 │   └── csp-middleware.js   # Content Security Policy
 ├── scripts/
@@ -83,10 +83,10 @@ server/
 ```
 fixtures/labs/*.json
   ├─→ npm run gen:content  → app/src/generated/ + content/*.ts
-  └─→ npm run sync-labs    → data/hoccloud.db (labs + FTS5)
+  └─→ npm run sync-labs    → MongoDB (labs collection) + Meilisearch (search index)
 ```
 
-Lab JSON = source of truth. Generated TS modules + SQLite = derived artifacts.
+Lab JSON = source of truth. Generated TS modules + MongoDB documents = derived artifacts.
 
 ## Key Patterns
 
@@ -110,7 +110,8 @@ Lab JSON = source of truth. Generated TS modules + SQLite = derived artifacts.
 | Package | Purpose |
 |---|---|
 | `hono` + `@hono/node-server` | HTTP framework |
-| `better-sqlite3` | Sync SQLite driver with FTS5 |
+| `mongoose` | MongoDB ODM |
+| `meilisearch` | Full-text search client |
 | `firebase-admin` / `firebase` | Server-side + client-side auth |
 | `framer-motion` | All DOM/SVG animation |
 | `d3-scale`, `d3-shape` | Math only (no DOM touch) |

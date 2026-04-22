@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import db from '../db/sqlite-client.js';
+import { Session } from '../db/models/index.js';
 
 const sha256 = (str) => createHash('sha256').update(str).digest('hex');
 
@@ -14,35 +14,26 @@ const parseCookies = (header) => {
   return out;
 };
 
-const selectSession = db.prepare(`
-  SELECT u.id, u.firebase_uid, u.email, u.display_name, u.photo_url, s.expires_at
-  FROM sessions s
-  JOIN users u ON u.id = s.user_id
-  WHERE s.token_hash = ?
-`);
-
-const deleteExpired = db.prepare('DELETE FROM sessions WHERE token_hash = ?');
-
 export const sessionMiddleware = async (c, next) => {
   const cookies = parseCookies(c.req.header('cookie'));
   const sid = cookies.sid;
 
   if (sid) {
     const hash = sha256(sid);
-    const row = selectSession.get(hash);
+    const session = await Session.findOne({ tokenHash: hash })
+      .populate('userId')
+      .lean();
 
-    if (row) {
-      const now = Math.floor(Date.now() / 1000);
-      if (row.expires_at > now) {
+    if (session && session.expiresAt > new Date()) {
+      const user = session.userId;
+      if (user) {
         c.set('user', {
-          id: row.id,
-          firebaseUid: row.firebase_uid,
-          email: row.email,
-          displayName: row.display_name,
-          photoUrl: row.photo_url,
+          _id: user._id,
+          firebaseUid: user.firebaseUid,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoUrl,
         });
-      } else {
-        deleteExpired.run(hash);
       }
     }
   }

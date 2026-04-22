@@ -1,21 +1,18 @@
 /**
  * Zod schema for /api/search response.
- * Server returns { results: SearchResult[] } where each row comes from
- * SQLite FTS5 JOIN labs (slug, module, title, file_path, preview, rank).
+ * Server returns { results: SearchResult[] } from Meilisearch index.
  */
 
 import { z } from 'zod'
 
-// ── Server search result (FTS5) ───────────────────────────────────────────────
+// ── Server search result (Meilisearch) ────────────────────────────────────────
 
 export const SearchResultSchema = z.object({
   slug: z.string(),
   title: z.string(),
   module: z.string().optional(),
-  file_path: z.string().optional(),
   /** HTML snippet with <mark> highlights */
   preview: z.string().optional(),
-  rank: z.number().optional(),
 })
 
 export const SearchResponseSchema = z.object({
