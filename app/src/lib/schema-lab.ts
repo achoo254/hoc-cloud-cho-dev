@@ -128,6 +128,16 @@ export const LabFixtureSchema = z.object({
 
   // Optional interactive playground config (Phase 01)
   diagram: DiagramSchema.optional(),
+
+  // Optional web-terminal section (xterm.js + /ws/terminal/:labSlug). Renders
+  // alongside diagram playground when both present. Shape kept extensible via
+  // passthrough so future fields (custom image, env) don't require schema bump.
+  terminal: z
+    .object({
+      enabled: z.literal(true),
+    })
+    .passthrough()
+    .optional(),
 })
 
 // ── Convenience re-export namespace ──────────────────────────────────────────

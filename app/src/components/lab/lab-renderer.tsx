@@ -18,6 +18,7 @@ import { ProgressBar } from '@/components/lab/progress-bar'
 import { useProgress } from '@/lib/hooks/use-progress'
 import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
 import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
+import { WebTerminal } from '@/components/lab/web-terminal'
 import type { LabContent, TldrItem, WalkthroughStep, TryAtHome } from '@/lib/schema-lab'
 
 // Feature flag (RED TEAM #12) + query override
@@ -99,6 +100,21 @@ function PlaygroundSection({ lab }: { lab: LabContent }) {
         <DiagramComponent lab={lab} />
       </Suspense>
     </PlaygroundErrorBoundary>
+  )
+}
+
+// ── Terminal section (optional, via lab.terminal.enabled) ────────────────────
+
+function TerminalSection({ lab }: { lab: LabContent }) {
+  return (
+    <section className="space-y-4">
+      <SectionHeading
+        phase="SEE"
+        title="Terminal thực hành"
+        description="Shell tmux chạy trong container lab — gõ lệnh và quan sát trực tiếp."
+      />
+      <WebTerminal lab={lab} />
+    </section>
   )
 }
 
@@ -235,6 +251,7 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
   // Check if interactive playground should render (RED TEAM #12, #14)
   const hasPlayground = PLAYGROUND_ENABLED && !getTextOverride() && lab.diagram?.type === 'custom'
+  const hasTerminal = lab.terminal?.enabled === true
 
   return (
     <article className={cn('max-w-3xl mx-auto space-y-8 py-6 px-4', className)}>
@@ -258,6 +275,16 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
       )}
 
       {hasPlayground && <Separator />}
+
+      {/* Terminal — optional interactive shell, renders alongside playground */}
+      {hasTerminal && (
+        <>
+          <div id="section-terminal">
+            <TerminalSection lab={lab} />
+          </div>
+          <Separator />
+        </>
+      )}
 
       {/* THINK: TLDR section — ẩn khi playground đã render TLDR (Concept Cards / LayerStack) */}
       {!hasPlayground && (

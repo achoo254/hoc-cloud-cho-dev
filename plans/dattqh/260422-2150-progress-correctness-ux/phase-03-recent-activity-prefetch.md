@@ -13,7 +13,9 @@ effort: 2-3 ngày
 ## Context Links
 
 - [plan.md](./plan.md) · [phase-02](./phase-02-ux-feedback.md)
-- Files: `server/api/progress-routes.js`, `server/db/models/progress-model.js`, `app/src/components/home/recent-activity-section.tsx` (new), `app/src/routes/*` hoặc `App.tsx` router config, `app/src/lib/api.ts`
+- Files: `server/db/models/progress-model.js`, `app/src/components/dashboard/recent-activity-section.tsx` (new), `app/src/components/dashboard/dashboard-layout.tsx` (mount point), `app/src/App.tsx` (router loaders), `app/src/routes/lab-viewer.tsx` (loader), `app/src/routes/index.tsx` (loader)
+- **Stack đã verified:** react-router-dom ^7.2.0, `createBrowserRouter` đã dùng → thêm `loader` per route là clean
+- **DueSection đã tồn tại** (`components/dashboard/due-section.tsx` — SM2 due cards). RecentActivitySection khác cấp độ: "lab mở gần nhất nhưng chưa completed". Đặt RecentActivity **phía trên** DueSection trong dashboard layout.
 
 ## Tasks
 
@@ -32,8 +34,8 @@ effort: 2-3 ngày
 
 ### F7 — RecentActivitySection dashboard
 
-- **Route:** home `/` (dashboard). Check `app/src/App.tsx` / routes để biết component chính hiện tại.
-- **New component:** `app/src/components/home/recent-activity-section.tsx`
+- **Route:** `/` → `routes/index.tsx` → `<DashboardLayout />` (`components/dashboard/dashboard-layout.tsx`)
+- **New component:** `app/src/components/dashboard/recent-activity-section.tsx`
 - **Data:** dùng `useProgress()` sẵn có (không cần endpoint mới) — slice 5 entry đầu (đã sort desc bởi BE)
   - Nếu payload lớn (>100 entry), add `/api/progress/recent?limit=5` endpoint sau — không phải phase này
 - **UI:**
@@ -52,15 +54,20 @@ effort: 2-3 ngày
 
 ### F10 — Prefetch /api/progress trong route loader
 
-- **Stack:** project dùng React Router? Check `App.tsx` / `main.tsx`
-- **Strategy:**
-  - Nếu dùng React Router v6.4+ data router: `loader: () => queryClient.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: getProgress })`
-  - Nếu chưa có data router: wrap mỗi lab route component với `<Await>` hoặc prefetch trong top-level layout `useEffect` (less ideal)
-  - **Recommended:** chuyển lab route sang `createBrowserRouter` pattern nếu chưa
-- **Scope phase này:** chỉ prefetch cho route lab (`/lab/:slug`) và dashboard (`/`), không đụng route khác
+- **Verified:** `App.tsx` đã dùng `createBrowserRouter` (react-router-dom ^7.2.0). Chỉ cần thêm `loader` per route — KHÔNG cần refactor.
+- **Challenge:** `queryClient` hiện khởi tạo trong `main.tsx` và chỉ expose qua Provider. Loader chạy ngoài React tree → 2 option:
+  1. Export `queryClient` thành singleton (`app/src/lib/query-client.ts`) và import cả ở `main.tsx` lẫn `App.tsx`
+  2. Loader trả plain fetch, để component vẫn dùng React Query (nhưng mất dedupe)
+- **Chọn option 1** (sạch, dùng cho cả loader và Provider):
+  ```ts
+  // app/src/lib/query-client.ts
+  export const queryClient = new QueryClient({ defaultOptions: {...} })
+  ```
+  Loader: `loader: () => queryClient.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: getProgress })`
+- **Scope phase này:** chỉ prefetch cho lab `/lab/:slug` và dashboard `/`, không đụng route khác
 - **Acceptance:**
-  - Chrome Network: vào `/lab/vpc-basics` → request `/api/progress` start ngay khi click link, không chờ component mount
-  - Stepper không flash skeleton 300ms đầu
+  - Chrome Network: click link lab → request `/api/progress` khởi phát đồng thời với chunk JS, không chờ `useQuery` mount
+  - Stepper không flash skeleton 300ms đầu tiên
 
 ## Implementation order
 
@@ -74,11 +81,11 @@ effort: 2-3 ngày
 - [ ] Restart server, verify `db.progresses.getIndexes()` có index mới
 - [ ] Smoke perf: query recent activity < 10ms với 1000 doc
 - [ ] Create `deriveResumeAnchor()` util + unit test inline
-- [ ] Create `recent-activity-section.tsx`
-- [ ] Mount trong home dashboard component
-- [ ] Kiểm tra routing stack hiện tại; document trong plan update nếu cần refactor lớn
-- [ ] Setup data router loader cho lab + dashboard (nếu đã dùng v6.4+)
-- [ ] Verify prefetch qua Network tab
+- [ ] Create `components/dashboard/recent-activity-section.tsx`
+- [ ] Mount trong `dashboard-layout.tsx` trước `<DueSection>` (heading: "Tiếp tục học")
+- [ ] Export `queryClient` singleton tại `app/src/lib/query-client.ts`, refactor `main.tsx` import từ đó
+- [ ] Add `loader` cho route `/` và `/lab/:slug` trong `App.tsx` dùng `queryClient.ensureQueryData(PROGRESS_QUERY_KEY)`
+- [ ] Verify prefetch qua Network tab (request start cùng với chunk JS)
 
 ## Design notes (anti-slop)
 
@@ -88,8 +95,9 @@ effort: 2-3 ngày
 
 ## Risk
 
-- Router refactor có thể chạm nhiều file (sidebar links, back button) — giữ URL schema không đổi để giảm blast radius
-- Nếu router hiện không phải data router → F10 defer sang phase riêng, commit B4+F7 trước
+- Router đã là data router v7 → F10 low-risk, không cần defer
+- Export queryClient singleton đòi đổi `main.tsx` — 1 file, 3 dòng, trivial
+- DueSection chồng lấn về "việc tiếp theo" (SM2 spaced rep). Khi thêm RecentActivitySection, cân nhắc gộp/tách rõ ràng bằng heading khác nhau ("Tiếp tục học" vs "Ôn tập hôm nay")
 
 ## Success criteria
 

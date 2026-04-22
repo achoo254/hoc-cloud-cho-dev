@@ -355,6 +355,9 @@ const lab: LabContent = {
   "diagram": {
     "type": "custom",
     "component": "ArpPlayground"
+  },
+  "terminal": {
+    "enabled": true
   }
 };
 

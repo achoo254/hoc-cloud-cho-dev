@@ -93,6 +93,12 @@ export const LabFixtureSchema = z.object({
 
   // Optional interactive playground config (Phase 01)
   diagram: DiagramSchema,
+
+  // Optional web-terminal section (xterm.js + /ws/terminal/:labSlug).
+  terminal: z
+    .object({ enabled: z.literal(true) })
+    .passthrough()
+    .optional(),
 });
 
 export const LabSchemas = {

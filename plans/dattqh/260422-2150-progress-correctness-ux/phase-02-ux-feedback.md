@@ -3,7 +3,7 @@ phase: 2
 name: Sprint 2 — UX feedback (hướng A)
 status: not-started
 priority: P1
-effort: 3-4 ngày
+effort: 2-3 ngày (giảm từ 3-4 sau codebase audit)
 ---
 
 # Phase 02 — UX feedback (hướng A)
@@ -13,7 +13,8 @@ User đang không thấy hệ thống phản hồi. Thêm 4 chỉ báo: stepper 
 ## Context Links
 
 - [plan.md](./plan.md) · [phase-01](./phase-01-p0-bug-bundle.md)
-- Files mới/sửa: `app/src/components/lab/progress-stepper.tsx` (new, thay `progress-bar.tsx`), `app/src/components/lab/sync-badge.tsx` (new), `app/src/components/lab/completion-banner.tsx` (new), `app/src/components/lab/lab-renderer.tsx`, `app/src/App.tsx` (sonner toaster), `app/src/lib/hooks/use-progress.ts`
+- Files mới/sửa: `app/src/components/lab/progress-stepper.tsx` (new, thay `progress-bar.tsx`), `app/src/components/lab/sync-badge.tsx` (new), `app/src/components/lab/completion-banner.tsx` (new), `app/src/components/lab/lab-renderer.tsx`, `app/src/lib/hooks/use-progress.ts`
+- **Sonner đã cài + mount** (`app/package.json` + `root-layout.tsx:69`) — không cần touch dep/layout
 
 ## Tasks
 
@@ -52,35 +53,35 @@ User đang không thấy hệ thống phản hồi. Thêm 4 chỉ báo: stepper 
   - Complete quiz full lần đầu → banner hiện
   - Reload trang đã completed → KHÔNG hiện banner (vì prev=value, curr=value)
 
-### F6 — Toast sonner cho error + migrate success
+### F6 — Toast sonner cho progress mutation error
 
-- **Dependency:** add `sonner` package (`pnpm add sonner` in `app/`)
-- **Mount:** `<Toaster position="bottom-right" richColors />` trong `App.tsx`
-- **Wire:**
-  - `use-progress.ts` `onError`: `toast.error('Không lưu được tiến độ — thử lại?')`
-  - Migrate endpoint caller (xem nơi gọi `/api/progress/migrate` — check `app/src/contexts/` hoặc login flow): success → `toast.success('Đã đồng bộ {n} lab từ lịch sử duyệt')`; fail → `toast.error('Đồng bộ lỗi — vẫn có thể làm lab, thử lại sau')`
+- **Scope giảm (so bản cũ):** sonner đã install (`^1.7.4`) + Toaster đã mount tại `root-layout.tsx:69`. Chỉ wire `toast()` ở hook.
+- **Wire trong `use-progress.ts`:**
+  - `onError`: `toast.error('Không lưu được tiến độ — thử lại?')`
+  - Special-case status 429 nếu sau này có rate-limit (hiện không có, skip)
+- **Migrate success/fail toast:** chuyển sang B6 phase-04 — hiện FE KHÔNG có caller `/api/progress/migrate`, phải wire vào AuthContext sau login mới có trigger
 - **Acceptance:**
-  - Mutation fail → toast đỏ
-  - Login → migrate chạy → toast xanh với số lab
+  - Mutation fail → toast đỏ ở góc bottom-right
+  - Multi-fail cùng slug → React Query retry 1 lần (default), toast 1 lần
 
 ## Implementation order
 
-1. F6 (toast infra) — 30min, blocking cho F3/F4/F5 error path
+1. F6 wire (10 min) — chỉ `toast.error` trong `onError` của mutation
 2. F4 (SyncBadge) — 1h, refactor `use-progress.ts` expose `syncStatus`
 3. F3 (ProgressStepper) — 2-3h, replace progress-bar
 4. F5 (CompletionBanner) — 1-2h
 
+**Effort giảm:** 3-4 ngày → 2-3 ngày (bỏ install + mount + migrate caller chuyển sang phase-04)
+
 ## Todo
 
-- [ ] `pnpm add sonner` in app/, mount Toaster ở App.tsx
-- [ ] `use-progress.ts` expose `syncStatus` + wire `toast.error` ở `onError`
+- [ ] `use-progress.ts` expose `syncStatus` + wire `toast.error` ở `onError` (sonner + Toaster đã có sẵn)
 - [ ] Create `sync-badge.tsx`
 - [ ] Create `progress-stepper.tsx` (ref Magic UI stepper patterns, no Lucide-only icons)
 - [ ] Replace `<ProgressBar>` → `<ProgressStepper>` in `lab-renderer.tsx:248`
 - [ ] Delete `progress-bar.tsx` (grep callers first)
 - [ ] Create `completion-banner.tsx` with prev-value ref
 - [ ] Mount banner in `lab-renderer.tsx`
-- [ ] Wire migrate toast (find caller, hint: auth context or login page)
 - [ ] QA manual: mount/quiz/flashcard/offline toast path
 
 ## Design notes (anti-slop)
@@ -93,8 +94,8 @@ User đang không thấy hệ thống phản hồi. Thêm 4 chỉ báo: stepper 
 
 ## Risk
 
-- Replace `progress-bar.tsx` có thể vỡ Storybook/test snapshot — grep `ProgressBar` tổng thể trước
-- Toast migrate cần tìm caller — chưa chắc đã có UI trigger, có thể phải add trong auth success callback
+- Replace `progress-bar.tsx`: grep đã verify chỉ 3 callsite (`lab-renderer.tsx`, `progress-bar.tsx` chính nó, `use-progress.ts`). Không có test/Storybook ref → safe delete
+- Lưu ý: WebTerminal render qua PlaygroundSection khi `lab.diagram.component === 'WebTerminal'`, CompletionBanner sticky-bottom ngoài scroll container của terminal để xterm.js FitAddon không bị reflow
 
 ## Success criteria
 

@@ -14,6 +14,7 @@ effort: 1-2 ngày
 
 - [plan.md](./plan.md)
 - Files chính: `server/api/progress-routes.js`, `server/db/models/progress-model.js`, `app/src/components/lab/lab-renderer.tsx`, `app/src/lib/hooks/use-progress.ts`, `app/src/lib/api.ts`
+- Path sanity (verified 2026-04-22): use-progress ở `app/src/lib/hooks/`, không phải `app/src/hooks/`
 
 ## Tasks
 

@@ -21,10 +21,12 @@ Migrate idempotent, test coverage, docs. **B5 rate-limit đã drop theo quyết 
 
 Không làm theo quyết định user. Lý do: scale hiện tại chưa có vector abuse, trust authed user, giữ code sạch. Nếu sau có dấu hiệu spam → xem [Backlog] trong `plan.md`.
 
-### B6 — Migrate idempotent + 2-phase batch record
+### B6 — Migrate idempotent + 2-phase batch record + wire FE trigger
 
-- **File:** `server/api/progress-routes.js:82-135`, new `server/db/models/migration-batch-model.js`
-- **Problem:** `bulkWrite` không atomic; crash giữa chừng → imported 1 phần, user không biết
+- **Files:** `server/api/progress-routes.js:82-135`, new `server/db/models/migration-batch-model.js`, `app/src/contexts/auth-context.tsx`, `app/src/lib/api.ts`
+- **Problem kép:**
+  1. `bulkWrite` không atomic; crash giữa chừng → imported 1 phần, user không biết
+  2. **Endpoint dead:** `grep migrate app/src/` = 0 → guest progress không tự sync sang user sau login, data split
 - **Constraint:** Mongo standalone — KHÔNG dùng transactions. Dùng idempotent key + 2-phase batch record thay thế.
 - **Change (2-phase pattern):**
   1. **Body schema:** `{ "batchId": "uuid-v4", "items": [...] }`
@@ -36,7 +38,12 @@ Không làm theo quyết định user. Lý do: scale hiện tại chưa có vect
      - Nếu bulkWrite throw: giữ batch `pending` + log — retry cùng batchId sẽ thấy `in_progress`
   4. **Self-heal job** (optional, backlog): cron scan batch `pending` > 10 phút → retry hoặc mark `failed`
 - **Response:** `{ ok, imported, batchId, status: 'completed' | 'already_applied' | 'in_progress' }`
-- **FE:** generate `crypto.randomUUID()` cho batchId, cache ở localStorage `progress_migration_batch` → replay safe; nhận `in_progress` → retry sau 5s với cùng batchId
+- **FE wire (mới):**
+  - Thêm helper `migrateProgress(items, batchId)` trong `app/src/lib/api.ts`
+  - Thêm caller trong `auth-context.tsx` sau `exchangeIdToken` thành công (cả 3 path: `getRedirectResult`, `signInWithPopup`, token-refresh effect). Trước khi gọi migrate, đọc guest entries từ `GET /api/progress` (lúc còn userUuid, trước khi session swap) — nhưng session đã swap sang user rồi → thực tế **BE phải tự đọc guest bucket theo cookie** và migrate internally. Xem "Simplify" bên dưới.
+  - **Simplify (YAGNI):** đổi contract `POST /api/progress/migrate` → body CHỈ `{ batchId }`. BE đọc `userUuid` từ cookie (middleware đã có), auto migrate toàn bộ guest progress sang `user._id`. FE không cần gửi `items` — tránh round-trip thừa và race với session swap.
+  - Caller: 1 dòng `await migrateProgress(crypto.randomUUID())` sau mỗi lần `queryClient.invalidateQueries({queryKey:['me']})`, wrap try/catch với `toast.error`/`toast.success`
+- **FE idempotent:** batchId lưu localStorage `progress_migration_batch_id` — retry cùng batchId tới khi BE trả `completed` hoặc `already_applied`
 - **Acceptance:**
   - Call `/migrate` 2 lần cùng batchId thành công → lần 2 trả `already_applied`, không insert dup trong `progresses`
   - Kill server giữa bulkWrite → restart, retry cùng batchId → resume (lần retry re-run bulkWrite; `$min` + `$setOnInsert` idempotent nên an toàn ghi lại)
@@ -99,6 +106,11 @@ Không làm theo quyết định user. Lý do: scale hiện tại chưa có vect
 - [ ] Viết section "Progress state machine" trong `docs/system-architecture.md`
 - [ ] Tạo `server/db/models/migration-batch-model.js`
 - [ ] Refactor `/api/progress/migrate` dùng batchId 2-phase (pending → completed), KHÔNG transaction vì Mongo standalone
+- [ ] Đổi contract BE: body `{ batchId }`, BE đọc userUuid từ cookie (bỏ `items` array)
+- [ ] FE helper `migrateProgress(batchId)` trong `api.ts`
+- [ ] Wire caller ở `auth-context.tsx` (3 path: redirectResult, popup, token-refresh effect)
+- [ ] Toast success/error migrate (dùng Toaster sẵn có ở root-layout)
+- [ ] Update integration test X2: reflect new single-arg contract
 - [ ] FE generate UUID batchId, lưu localStorage
 - [ ] Viết X1 unit test
 - [ ] Viết X2 integration test
