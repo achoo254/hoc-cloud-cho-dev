@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
-import { Progress } from '../db/models/index.js';
+import { Progress, MigrationBatch } from '../db/models/index.js';
 import { anonUuidMiddleware } from '../lib/anon-uuid-cookie.js';
 import { requireAuth } from '../auth/require-auth.js';
 
 const SLUG_RE = /^[a-z0-9-]{1,64}$/i;
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const progressRoutes = new Hono()
   .use('/api/progress', anonUuidMiddleware)
@@ -109,6 +110,16 @@ export const progressRoutes = new Hono()
     return c.json({ ok: true });
   })
 
+  /**
+   * POST /api/progress/migrate
+   *
+   * Merges guest progress (keyed by userUuid cookie) into the authed user's
+   * bucket (keyed by userId). Body: { batchId }.
+   *
+   * Two-phase pattern guards against mid-run crashes without transactions:
+   *   pending → bulkWrite → completed. Replay of the same batchId is safe
+   *   because the bulkWrite itself is idempotent (`$setOnInsert` + `$min`).
+   */
   .post('/api/progress/migrate', requireAuth, async (c) => {
     const user = c.get('user');
     const uuid = c.get('userUuid');
@@ -116,50 +127,83 @@ export const progressRoutes = new Hono()
     let body;
     try { body = await c.req.json(); } catch { return c.json({ error: 'invalid_json' }, 400); }
 
-    if (!Array.isArray(body?.items)) return c.json({ error: 'items_required' }, 400);
-    if (body.items.length > 200) return c.json({ error: 'too_many_items' }, 400);
+    const batchId = String(body?.batchId || '');
+    if (!UUID_V4_RE.test(batchId)) {
+      return c.json({ error: 'invalid_batch_id' }, 400);
+    }
+    if (!uuid) {
+      // No guest cookie → nothing to migrate; treat as a no-op success.
+      return c.json({ ok: true, imported: 0, batchId, status: 'completed' });
+    }
 
-    let imported = 0;
-    const bulkOps = [];
-
-    for (const it of body.items) {
-      if (!SLUG_RE.test(String(it.lab_slug || ''))) continue;
-
-      const openedAt = Number.isFinite(it.opened_at) ? new Date(it.opened_at * 1000) : null;
-      const completedAt = Number.isFinite(it.completed_at) ? new Date(it.completed_at * 1000) : null;
-
-      const updateDoc = {
-        $set: {
-          userId: user._id,
-          ...(Number.isFinite(it.quiz_score)
-            ? { quizScore: Math.max(0, Math.min(100, it.quiz_score | 0)) }
-            : {}),
-        },
-        $setOnInsert: { userUuid: uuid, labSlug: it.lab_slug },
-        // $min preserves earliest timestamps across merges
-        ...(openedAt || completedAt
-          ? {
-              $min: {
-                ...(openedAt ? { openedAt } : {}),
-                ...(completedAt ? { completedAt } : {}),
-              },
-            }
-          : {}),
-      };
-
-      bulkOps.push({
-        updateOne: {
-          filter: { userUuid: uuid, labSlug: it.lab_slug },
-          update: updateDoc,
-          upsert: true,
-        },
+    // Phase 1 — claim the batch. Duplicate key means a prior attempt exists.
+    let batchDoc;
+    try {
+      batchDoc = await MigrationBatch.create({
+        userId: user._id,
+        batchId,
+        status: 'pending',
       });
-      imported++;
+    } catch (err) {
+      if (err?.code !== 11000) throw err;
+      const existing = await MigrationBatch.findOne({ userId: user._id, batchId }).lean();
+      if (existing?.status === 'completed') {
+        return c.json({
+          ok: true,
+          imported: existing.imported ?? 0,
+          batchId,
+          status: 'already_applied',
+        });
+      }
+      // Still pending → caller should retry later; another worker may be
+      // finishing the bulkWrite, or a prior attempt crashed mid-run.
+      return c.json({ ok: true, batchId, status: 'in_progress' }, 202);
     }
 
+    // Read guest bucket from server-side (FE does not ship items to avoid
+    // racing the cookie swap after login).
+    const guestRows = await Progress.find({ userUuid: uuid }).lean();
+
+    const bulkOps = guestRows
+      .filter((row) => SLUG_RE.test(String(row.labSlug || '')))
+      .map((row) => {
+        const setOps = {};
+        if (Number.isFinite(row.quizScore)) {
+          setOps.quizScore = Math.max(0, Math.min(100, row.quizScore | 0));
+        }
+        if (row.lastOpenedAt) setOps.lastOpenedAt = row.lastOpenedAt;
+
+        const minOps = {};
+        if (row.openedAt) minOps.openedAt = row.openedAt;
+        if (row.completedAt) minOps.completedAt = row.completedAt;
+
+        return {
+          updateOne: {
+            filter: { userId: user._id, labSlug: row.labSlug },
+            update: {
+              $setOnInsert: { userId: user._id, labSlug: row.labSlug },
+              ...(Object.keys(setOps).length ? { $set: setOps } : {}),
+              ...(Object.keys(minOps).length ? { $min: minOps } : {}),
+            },
+            upsert: true,
+          },
+        };
+      });
+
+    // Unordered: one bad row should not halt the rest. Re-running after a
+    // partial failure is safe (idempotent ops).
+    let imported = 0;
     if (bulkOps.length > 0) {
-      await Progress.bulkWrite(bulkOps);
+      const result = await Progress.bulkWrite(bulkOps, { ordered: false });
+      imported = (result.upsertedCount ?? 0) + (result.modifiedCount ?? 0);
     }
 
-    return c.json({ ok: true, imported });
+    // Phase 2 — mark completed.
+    batchDoc.status = 'completed';
+    batchDoc.completedAt = new Date();
+    batchDoc.itemCount = guestRows.length;
+    batchDoc.imported = imported;
+    await batchDoc.save();
+
+    return c.json({ ok: true, imported, batchId, status: 'completed' });
   });

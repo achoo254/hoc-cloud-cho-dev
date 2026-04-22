@@ -1,10 +1,12 @@
 ---
 phase: 4
 name: Sprint 4 — Hardening
-status: not-started
+status: partial
 priority: P1
 effort: tuần sau (~4 ngày)
 ---
+
+> **Status 2026-04-22:** D1 (docs) + B6 (migrate 2-phase + FE wire) DONE. X1/X2/X3 deferred — repo chưa có Vitest/Playwright/mongo-memory-server, setup infra vượt scope sprint này. Move sang backlog, revisit khi thêm test stack.
 
 # Phase 04 — Hardening
 
@@ -103,19 +105,19 @@ Không làm theo quyết định user. Lý do: scale hiện tại chưa có vect
 
 ## Todo
 
-- [ ] Viết section "Progress state machine" trong `docs/system-architecture.md`
-- [ ] Tạo `server/db/models/migration-batch-model.js`
-- [ ] Refactor `/api/progress/migrate` dùng batchId 2-phase (pending → completed), KHÔNG transaction vì Mongo standalone
-- [ ] Đổi contract BE: body `{ batchId }`, BE đọc userUuid từ cookie (bỏ `items` array)
-- [ ] FE helper `migrateProgress(batchId)` trong `api.ts`
-- [ ] Wire caller ở `auth-context.tsx` (3 path: redirectResult, popup, token-refresh effect)
-- [ ] Toast success/error migrate (dùng Toaster sẵn có ở root-layout)
-- [ ] Update integration test X2: reflect new single-arg contract
-- [ ] FE generate UUID batchId, lưu localStorage
-- [ ] Viết X1 unit test
-- [ ] Viết X2 integration test
-- [ ] Viết X3 e2e smoke (check stack Playwright có chưa)
-- [ ] Chạy `npm test` hoặc tương đương, pass 100%
+- [x] Viết section "Progress state machine" trong `docs/system-architecture.md`
+- [x] Tạo `server/db/models/migration-batch-model.js`
+- [x] Refactor `/api/progress/migrate` dùng batchId 2-phase (pending → completed), KHÔNG transaction vì Mongo standalone
+- [x] Đổi contract BE: body `{ batchId }`, BE đọc userUuid từ cookie (bỏ `items` array)
+- [x] FE helper `migrateProgress(batchId)` trong `api.ts`
+- [x] Wire caller ở `auth-context.tsx` (3 path: redirectResult, popup, token-refresh effect)
+- [x] Toast success/error migrate (dùng Toaster sẵn có ở root-layout)
+- [ ] ~~Update integration test X2: reflect new single-arg contract~~ — deferred
+- [x] FE generate UUID batchId, lưu localStorage
+- [ ] ~~Viết X1 unit test~~ — deferred, repo chưa có Vitest
+- [ ] ~~Viết X2 integration test~~ — deferred, cần mongo-memory-server
+- [ ] ~~Viết X3 e2e smoke~~ — deferred, cần Playwright
+- [ ] ~~Chạy `npm test`~~ — typecheck pass thay (`pnpm --dir app run typecheck`)
 
 ## Risk
 

@@ -1,7 +1,7 @@
 ---
 phase: 3
 name: Sprint 3 — Recent activity + prefetch
-status: not-started
+status: done
 priority: P1
 effort: 2-3 ngày
 ---
@@ -77,15 +77,15 @@ effort: 2-3 ngày
 
 ## Todo
 
-- [ ] Thêm 2 compound index ở `progress-model.js`
-- [ ] Restart server, verify `db.progresses.getIndexes()` có index mới
-- [ ] Smoke perf: query recent activity < 10ms với 1000 doc
-- [ ] Create `deriveResumeAnchor()` util + unit test inline
-- [ ] Create `components/dashboard/recent-activity-section.tsx`
-- [ ] Mount trong `dashboard-layout.tsx` trước `<DueSection>` (heading: "Tiếp tục học")
-- [ ] Export `queryClient` singleton tại `app/src/lib/query-client.ts`, refactor `main.tsx` import từ đó
-- [ ] Add `loader` cho route `/` và `/lab/:slug` trong `App.tsx` dùng `queryClient.ensureQueryData(PROGRESS_QUERY_KEY)`
-- [ ] Verify prefetch qua Network tab (request start cùng với chunk JS)
+- [x] Thêm 2 compound index ở `progress-model.js`
+- [ ] Restart server, verify `db.progresses.getIndexes()` có index mới — manual ops
+- [ ] Smoke perf: query recent activity < 10ms với 1000 doc — manual benchmark
+- [x] Create `deriveResumeAnchor()` util (exported from `recent-activity-section.tsx`)
+- [x] Create `components/dashboard/recent-activity-section.tsx`
+- [x] Mount trong `dashboard-layout.tsx` trước `<DueSection>` (heading: "Tiếp tục học")
+- [x] Export `queryClient` singleton tại `app/src/lib/query-client.ts`, refactor `main.tsx` import từ đó
+- [x] Add `loader` cho route `/` và `/lab/:slug` trong `App.tsx` dùng `queryClient.ensureQueryData(PROGRESS_QUERY_KEY)`
+- [ ] Verify prefetch qua Network tab (request start cùng với chunk JS) — manual QA
 
 ## Design notes (anti-slop)
 

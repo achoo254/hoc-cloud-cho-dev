@@ -3,7 +3,7 @@ name: Progress correctness + UX hardening
 slug: progress-correctness-ux
 created: 2026-04-22
 owner: dattqh
-status: in-progress
+status: done-except-tests
 priority: P0
 blockedBy: []
 blocks: []
@@ -38,8 +38,8 @@ blocks: []
 |---|--------|------|-------|--------|
 | 1 | Sprint 1 — P0 bug bundle | [phase-01-p0-bug-bundle.md](phase-01-p0-bug-bundle.md) | B1, F1, F2 (+T1 verify) | done |
 | 2 | Sprint 2 — UX feedback (hướng A) | [phase-02-ux-feedback.md](phase-02-ux-feedback.md) | F3, F4, F5, F6 (wire-only) | done |
-| 3 | Sprint 3 — Recent activity + prefetch | [phase-03-recent-activity-prefetch.md](phase-03-recent-activity-prefetch.md) | F7, F10, B4 | not-started |
-| 4 | Sprint 4 — Hardening | [phase-04-hardening.md](phase-04-hardening.md) | B6 (+FE wire), X1-X3, D1 | not-started |
+| 3 | Sprint 3 — Recent activity + prefetch | [phase-03-recent-activity-prefetch.md](phase-03-recent-activity-prefetch.md) | F7, F10, B4 | done |
+| 4 | Sprint 4 — Hardening | [phase-04-hardening.md](phase-04-hardening.md) | B6 (+FE wire), X1-X3, D1 | partial (X1-X3 deferred) |
 
 ## Backlog (P2, out of scope cho 4 sprint trên)
 
@@ -49,6 +49,9 @@ blocks: []
 | B5 | Rate-limit POST progress | **Dropped** theo quyết định user (không cần). Revisit nếu phát hiện abuse. |
 | B7 | TTL / cleanup guest progress > 90 ngày | Chưa đo traffic, chưa thấy pressure |
 | B8 | Log/metric writes/user/day | Depends on observability stack chưa quyết |
+| X1 | Unit test use-progress hook | Deferred 2026-04-22 — repo chưa có Vitest/@testing-library. Setup infra trước. |
+| X2 | Integration test /migrate | Deferred 2026-04-22 — cần mongo-memory-server + supertest. Setup infra trước. |
+| X3 | E2E smoke happy-path | Deferred 2026-04-22 — cần Playwright. Setup riêng sprint sau. |
 | F8 | Skeleton stepper + recent activity | Phụ thuộc F3/F7 ship trước |
 | F9 | Retry button khi mutation error | React Query default + sonner toast ở F6 đã đủ ban đầu |
 | T2 | Zod schema `ProgressEntry` FE parse | Low ROI khi BE đã có schema cứng |

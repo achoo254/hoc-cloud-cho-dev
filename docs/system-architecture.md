@@ -137,6 +137,52 @@ CSS-only switch — no JS-based device detection.
 | Auth token | Firebase ID token exchanged server-side, never stored client-side |
 | CI secrets | `VITE_FIREBASE_CONFIG` + `FIREBASE_SERVICE_ACCOUNT_JSON` via GitHub Secrets |
 
+## Progress State Machine
+
+One `Progress` document per `(user, lab)`. Two buckets coexist: guest entries keyed by `userUuid` (anonymous cookie), authed entries keyed by `userId` (Mongo ObjectId). Login triggers a merge — see **Migration** below.
+
+```
+           touch / POST                quiz_score set                  completed_at set
+unopened  ──────────────────▶  opened  ──────────────▶  quiz_attempted  ─────────────▶  completed
+                                  │                                                       ▲
+                                  └─────────────────── flashcard-mastered ────────────────┘
+```
+
+### Invariants
+
+| Field              | Setter                          | Policy                                             |
+|--------------------|---------------------------------|----------------------------------------------------|
+| `openedAt`         | `$setOnInsert` on first touch   | Written once; never bumped — marks the true start. |
+| `lastOpenedAt`     | `$set` on every `/touch` + POST | Always latest; powers recent-activity sort.        |
+| `completedAt`      | `$min` when quiz-full or flash mastered | Earliest completion wins across races.     |
+| `quizScore`        | `$set` (clamped 0–100)          | Last write wins; usually monotonic in practice.    |
+| `lastUpdated`      | Mongoose `timestamps`           | Auto, on any write.                                |
+
+"Completed" is defined as `quizScore === 100` **OR** all flashcards mastered — whichever fires first. The FE sends `completed_at` on either condition; BE `$min` guarantees the earliest sticks.
+
+### FE vs BE Source of Truth
+
+| Concern                       | Owner | Notes                                         |
+|-------------------------------|-------|-----------------------------------------------|
+| `openedAt` initial timestamp  | BE    | FE never sends it — prevents clock skew bugs. |
+| `completedAt` computation     | FE    | FE decides the trigger; BE clamps via `$min`. |
+| SM-2 flashcard state          | FE    | localStorage only; not persisted server-side. |
+| Quiz score numeric range      | BE    | Clamp 0–100 regardless of FE input.           |
+
+### Migration (guest → authed)
+
+On successful login (`/auth/firebase/session`), the FE calls `POST /api/progress/migrate` with a UUID v4 `batchId` (persisted in localStorage for retry). BE reads the guest bucket via `userUuid` cookie and merges it into `userId` using `$min` on timestamps + `$setOnInsert` on identifiers — idempotent by construction.
+
+**2-phase batch record** (Mongo standalone, no transactions): a `MigrationBatch` doc guards the bulkWrite:
+
+```
+1. Insert batch { userId, batchId, status: 'pending' }        ← unique (userId, batchId)
+2. bulkWrite guest entries → user bucket (unordered)
+3. Update batch status: 'completed' + completedAt + imported count
+```
+
+Replay semantics: duplicate `batchId` → read existing doc. `status === 'completed'` → `{ status: 'already_applied' }`. `status === 'pending'` → `{ status: 'in_progress' }` (crashed mid-flight or still running; FE retries after ~5s). Because the bulkWrite itself is idempotent (`$setOnInsert` + `$min`), re-running a pending batch is safe.
+
 ## Deploy Pipeline
 
 See `docs/deployment-guide.md` for full detail.

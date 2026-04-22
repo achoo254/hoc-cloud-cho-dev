@@ -136,6 +136,20 @@ export const searchLabs = async (q: string) => {
   return res.results
 }
 
+/** POST /api/progress/migrate — merge guest bucket into the authed user */
+export interface MigrateProgressResponse {
+  ok: boolean
+  imported?: number
+  batchId: string
+  status: 'completed' | 'already_applied' | 'in_progress'
+}
+
+export const migrateProgress = (batchId: string) =>
+  request<MigrateProgressResponse>('/api/progress/migrate', {
+    method: 'POST',
+    body: JSON.stringify({ batchId }),
+  })
+
 /** GET /healthz */
 export const getHealth = () =>
   request<{ status: string; db: string }>('/healthz')

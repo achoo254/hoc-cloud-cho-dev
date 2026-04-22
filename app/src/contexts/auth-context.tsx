@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   signInWithPopup,
   signInWithRedirect,
@@ -10,7 +11,39 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth'
 import { getFirebaseAuth, googleProvider } from '@/lib/firebase'
-import { getMe, logout as apiLogout, type User } from '@/lib/api'
+import { getMe, logout as apiLogout, migrateProgress, type User } from '@/lib/api'
+import { PROGRESS_QUERY_KEY } from '@/lib/hooks/use-progress'
+
+const MIGRATE_BATCH_KEY = 'progress_migration_batch_id'
+
+/**
+ * Best-effort merge of guest progress into the authed user. The `batchId` is
+ * persisted so a retry after crash or offline reuses the same server-side
+ * batch record — replay returns `already_applied` without duplicating work.
+ */
+async function runMigrateProgress(): Promise<void> {
+  let batchId = localStorage.getItem(MIGRATE_BATCH_KEY)
+  if (!batchId) {
+    batchId = crypto.randomUUID()
+    localStorage.setItem(MIGRATE_BATCH_KEY, batchId)
+  }
+  try {
+    const res = await migrateProgress(batchId)
+    if (res.status === 'in_progress') {
+      // Another worker is still running this batch (or a prior attempt crashed
+      // mid-flight). batchId stays in storage; the next auth trigger retries.
+      return
+    }
+    localStorage.removeItem(MIGRATE_BATCH_KEY)
+    if (res.status === 'completed' && (res.imported ?? 0) > 0) {
+      toast.success(`Đã đồng bộ ${res.imported} lab từ phiên khách`)
+    }
+  } catch (err) {
+    console.error('[auth] progress migrate failed:', err)
+    // Surface only once per session-ish; keep batchId for retry.
+    toast.error('Không đồng bộ được tiến độ từ phiên khách — thử lại lần đăng nhập kế tiếp')
+  }
+}
 
 interface AuthContextValue {
   user: User | null
@@ -51,8 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!result) return
         const idToken = await result.user.getIdToken()
         await exchangeIdToken(idToken)
+        await runMigrateProgress()
         queryClient.invalidateQueries({ queryKey: ['me'] })
-        queryClient.invalidateQueries({ queryKey: ['progress'] })
+        queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
       })
       .catch((err) => {
         console.error('[auth] redirect result failed:', err)
@@ -76,8 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const idToken = await fbUser.getIdToken()
         if (cancelled) return
         await exchangeIdToken(idToken)
+        await runMigrateProgress()
         queryClient.invalidateQueries({ queryKey: ['me'] })
-        queryClient.invalidateQueries({ queryKey: ['progress'] })
+        queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
       } catch (err) {
         console.error('[auth] token exchange on state change failed:', err)
       }
@@ -91,8 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signInWithPopup(auth, googleProvider)
       const idToken = await result.user.getIdToken()
       await exchangeIdToken(idToken)
+      await runMigrateProgress()
       queryClient.invalidateQueries({ queryKey: ['me'] })
-      queryClient.invalidateQueries({ queryKey: ['progress'] })
+      queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
     } catch (err) {
       const code = (err as AuthError)?.code
       if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
@@ -111,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await apiLogout()
     queryClient.setQueryData(['me'], { user: null })
-    queryClient.invalidateQueries({ queryKey: ['progress'] })
+    queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
   }
 
   return (

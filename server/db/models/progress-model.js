@@ -15,4 +15,8 @@ const progressSchema = new Schema({
 progressSchema.index({ userUuid: 1, labSlug: 1 }, { unique: true, sparse: true });
 progressSchema.index({ userId: 1, labSlug: 1 }, { unique: true, sparse: true });
 
+// Recent-activity sort support: list latest N entries by user, newest first
+progressSchema.index({ userId: 1, lastUpdated: -1 });
+progressSchema.index({ userUuid: 1, lastUpdated: -1 });
+
 export const Progress = mongoose.model('Progress', progressSchema);

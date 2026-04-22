@@ -7,10 +7,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { getProgress, type ProgressEntry, type ProgressResponse } from '@/lib/api'
+import { PROGRESS_QUERY_KEY } from '@/lib/hooks/use-progress'
 import { getIndex } from '@/lib/content-loader'
 import { useAuth } from '@/contexts/auth-context'
 import { StatsSection } from './stats-section'
 import { DueSection } from './due-section'
+import { RecentActivitySection } from './recent-activity-section'
 import { RoadmapSection } from './roadmap-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
 import { LeaderboardSection } from './leaderboard-section'
@@ -45,7 +47,7 @@ export function DashboardLayout() {
     isLoading,
     isError,
   } = useQuery<ProgressResponse>({
-    queryKey: ['progress'],
+    queryKey: PROGRESS_QUERY_KEY,
     queryFn: getProgress,
     staleTime: 60_000,
     retry: 1,
@@ -77,6 +79,12 @@ export function DashboardLayout() {
         <StatsSection
           progressEntries={progressEntries}
           totalLabs={ALL_LABS.length}
+          isLoading={isLoading}
+        />
+
+        {/* "Tiếp tục học" — full width, above due/roadmap pair */}
+        <RecentActivitySection
+          progressEntries={progressEntries}
           isLoading={isLoading}
         />
 
