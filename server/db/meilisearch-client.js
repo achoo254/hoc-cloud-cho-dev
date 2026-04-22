@@ -24,12 +24,15 @@ export async function initLabsIndex() {
   const index = meili.index('labs');
 
   const task = await index.updateSettings({
+    // Order determines relevance weight (first = highest).
     searchableAttributes: [
       'title',
       'module',
-      'tldrTerms',
-      'tldrDefinitions',
+      'tldrText',
       'walkthroughText',
+      'quizText',
+      'flashcardText',
+      'tryAtHomeText',
     ],
     filterableAttributes: ['module'],
     sortableAttributes: ['title'],
@@ -39,7 +42,7 @@ export async function initLabsIndex() {
     },
   });
 
-  await meili.waitForTask(task.taskUid);
+  await meili.tasks.waitForTask(task.taskUid);
   console.log('[meilisearch] Labs index configured');
   return index;
 }

@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "subnet-cidr",
   "module": "01-networking",
   "title": "IPv4",
-  "file_path": "labs/01-networking/02-subnet-cidr.html",
   "estimated_minutes": 50,
   "content_hash": "fc4cbef5f191e9412c6182d04140bb75b95944a4",
   "updated_at": 1776596734,

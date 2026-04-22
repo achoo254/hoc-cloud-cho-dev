@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "tcp-ip-packet-journey",
   "module": "01-networking",
   "title": "Lý thuyết OSI TCP/IP",
-  "file_path": "labs/01-networking/01-tcp-ip-packet-journey.html",
   "estimated_minutes": 40,
   "content_hash": "3ca1b104e8ed29008894dfab27522a58e7263a09",
   "updated_at": 1776596703,

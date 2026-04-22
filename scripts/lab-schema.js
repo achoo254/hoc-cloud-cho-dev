@@ -81,7 +81,6 @@ export const LabFixtureSchema = z.object({
   slug: z.string().min(1),
   module: z.string().min(1),
   title: z.string().min(1),
-  file_path: z.string().min(1),
   estimated_minutes: z.number().int().positive(),
   content_hash: z.string().min(1),
   updated_at: z.number().int(),

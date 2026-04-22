@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "tcp-udp",
   "module": "01-networking",
   "title": "Tìm hiểu UDP/TCP",
-  "file_path": "labs/01-networking/03-tcp-udp.html",
   "estimated_minutes": 40,
   "content_hash": "2436b3e8322334d86ed5f28ebbbb71b23518aa8d",
   "updated_at": 1776596784,

@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "dns",
   "module": "01-networking",
   "title": "Tìm hiểu giao thức DNS",
-  "file_path": "labs/01-networking/08-dns.html",
   "estimated_minutes": 45,
   "content_hash": "9967d2ac4a5d9f558ca4aeb165d2d0c206bf6396",
   "updated_at": 1776596829,

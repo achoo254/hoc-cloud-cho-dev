@@ -68,9 +68,41 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const MARK_CLASS = 'bg-yellow-200/70 dark:bg-yellow-400/30 text-foreground rounded px-0.5'
+
+// Server-side delimiters (must match server/api/search-routes.js).
+const HL_START = ''
+const DELIMITED_PATTERN = /([^]*)/g
+
 /**
- * Split `text` by query tokens (whitespace-separated, case-insensitive),
- * wrapping matches in <mark>. Returns React fragments keyed by index.
+ * Render server-delimited text — parses `…` spans (written by Meili
+ * via the search endpoint) into <mark> React elements. Trust the server's match
+ * positions instead of re-deriving them on the client (Meili knows about typo
+ * tolerance and diacritic folding; JS regex doesn't).
+ */
+function renderDelimited(text: string): React.ReactNode {
+  if (!text.includes(HL_START)) return text
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  let key = 0
+  DELIMITED_PATTERN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = DELIMITED_PATTERN.exec(text)) !== null) {
+    if (match.index > cursor) parts.push(text.slice(cursor, match.index))
+    parts.push(
+      <mark key={key++} className={MARK_CLASS}>
+        {match[1]}
+      </mark>,
+    )
+    cursor = match.index + match[0].length
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor))
+  return parts
+}
+
+/**
+ * Local-fallback highlighter — whitespace-tokenised regex match over plain text.
+ * Used only for local MiniSearch results (no server delimiters available).
  */
 function highlight(text: string, query: string): React.ReactNode {
   const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2)
@@ -80,10 +112,7 @@ function highlight(text: string, query: string): React.ReactNode {
   const parts = text.split(splitPattern)
   return parts.map((part, i) =>
     matchPattern.test(part) ? (
-      <mark
-        key={i}
-        className="bg-yellow-200/70 dark:bg-yellow-400/30 text-foreground rounded px-0.5"
-      >
+      <mark key={i} className={MARK_CLASS}>
         {part}
       </mark>
     ) : (
@@ -101,8 +130,8 @@ function mergeResults(
   const fromServer: DisplayResult[] = serverResults.map((r) => ({
     slug: r.slug,
     title: r.title,
-    // preview may contain HTML <mark> tags — strip for plain display
-    snippet: (r.preview ?? '').replace(/<[^>]+>/g, ''),
+    // Preserve server delimiters (…). Parsed into <mark> at render time.
+    snippet: r.preview ?? '',
     tags: [],
     source: 'server',
   }))
@@ -276,7 +305,9 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                 <div className="flex w-full items-center gap-2">
                   <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="font-medium text-sm flex-1 truncate">
-                    {highlight(result.title, query)}
+                    {result.source === 'server'
+                      ? renderDelimited(result.title)
+                      : highlight(result.title, query)}
                   </span>
                   {result.source === 'local' && (
                     <Badge
@@ -291,7 +322,9 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                 {/* Snippet */}
                 {result.snippet && (
                   <p className="text-xs text-muted-foreground pl-5 line-clamp-2 leading-relaxed">
-                    {highlight(result.snippet, query)}
+                    {result.source === 'server'
+                      ? renderDelimited(result.snippet)
+                      : highlight(result.snippet, query)}
                   </p>
                 )}
 

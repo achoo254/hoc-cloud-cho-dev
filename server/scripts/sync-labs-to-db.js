@@ -21,7 +21,6 @@ export async function syncLabsToDb() {
       slug: lab.slug,
       module: lab.module,
       title: lab.title,
-      filePath: lab.file_path,
       estimatedMinutes: lab.estimatedMinutes,
       tldr: lab.tldr,
       walkthrough: lab.walkthrough,
@@ -34,7 +33,7 @@ export async function syncLabsToDb() {
     await Lab.findOneAndUpdate(
       { slug: lab.slug },
       { $set: doc },
-      { upsert: true }
+      { upsert: true, skipMeili: true }
     );
 
     if (existing) updated++;

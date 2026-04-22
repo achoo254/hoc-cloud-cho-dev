@@ -5,14 +5,14 @@
   "description": "Static server for cloud/devops learning labs",
   "type": "module",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "npm run gen:server-data && node --watch server/server.js",
-    "dev:server": "npm run gen:server-data && node --watch server/server.js",
+    "start": "node --env-file=.env server/server.js",
+    "dev": "npm run gen:server-data && node --env-file=.env.development --watch server/server.js",
+    "dev:server": "npm run gen:server-data && node --env-file=.env.development --watch server/server.js",
     "dev:app": "cd app && npx vite",
     "build:app": "cd app && npm run build",
     "gen:server-data": "node scripts/build-server-data.mjs",
     "build:server": "npm run gen:server-data && esbuild server/server.js --bundle --platform=node --target=node22 --format=esm --outfile=dist-server/server.bundle.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
-    "sync-labs": "node server/scripts/sync-labs-to-db.js",
+    "sync-labs": "node --env-file-if-exists=.env --env-file-if-exists=.env.development server/scripts/sync-labs-to-db.js",
     "validate:schema": "node scripts/validate-lab-schema.js",
     "export:labs": "node scripts/fixtures-to-ts.mjs",
     "gen:content": "node scripts/fixtures-to-ts.mjs && node scripts/generate-labs-index.mjs && node scripts/generate-search-index.mjs"

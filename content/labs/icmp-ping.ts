@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "icmp-ping",
   "module": "01-networking",
   "title": "Giao thức Ping",
-  "file_path": "labs/01-networking/04-icmp-ping.html",
   "estimated_minutes": 35,
   "content_hash": "77c0c05dde64222df5f428527d82dcc839d011af",
   "updated_at": 1776596587,

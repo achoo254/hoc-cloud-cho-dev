@@ -23,7 +23,6 @@ for (const f of readdirSync(fixturesDir).filter((x) => x.endsWith('.json')).sort
     slug: data.slug || basename(f, '.json'),
     module: data.module || 'unknown',
     title: String(data.title || data.slug || basename(f, '.json')),
-    file_path: data.file_path || `fixtures/labs/${f}`,
     tldr: data.tldr || [],
     walkthrough: data.walkthrough || [],
     quiz: data.quiz || [],

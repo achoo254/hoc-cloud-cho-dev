@@ -3,7 +3,6 @@
   "slug": "arp",
   "module": "01-networking",
   "title": "Giao thức ARP",
-  "file_path": "labs/01-networking/05-arp.html",
   "estimated_minutes": 30,
   "content_hash": "2fa08fadeab9ba991b40b4ba124f059b383c11f5",
   "updated_at": 1776596733,
@@ -351,9 +350,5 @@
       "cmd": "# Tìm 2 IP có cùng MAC address (dấu hiệu spoofing)\nip neigh show | awk '{print $5}' | sort | uniq -d\n\n# Quét ARP toàn bộ LAN và so sánh\nsudo arp-scan --localnet 2>/dev/null | awk '/([0-9a-f]{2}:){5}/' | sort -t$'\\t' -k2\n\n# Nếu thấy MAC trùng với 2+ IP → điều tra ngay",
       "observeWith": "# Output của ip neigh: cột 5 là MAC address\n# uniq -d chỉ in ra các MAC xuất hiện 2+ lần\n# arp-scan --localnet: mỗi dòng là 'IP\\tMAC\\tVendor' — sort -k2 để group theo MAC\n# Legitimate: bonding/teaming có thể share MAC → verify với hardware team"
     }
-  ],
-  "diagram": {
-    "type": "custom",
-    "component": "ArpPlayground"
-  }
+  ]
 }

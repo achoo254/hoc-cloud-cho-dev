@@ -8,7 +8,6 @@ const lab: LabContent = {
   "slug": "arp",
   "module": "01-networking",
   "title": "Giao thức ARP",
-  "file_path": "labs/01-networking/05-arp.html",
   "estimated_minutes": 30,
   "content_hash": "2fa08fadeab9ba991b40b4ba124f059b383c11f5",
   "updated_at": 1776596733,
