@@ -22,8 +22,12 @@ for (const file of [`.env.${envMode}`, '.env']) {
   }
 }
 
-import { connectMongo, getMongoStatus } from './db/mongo-client.js';
-import { getMeiliStatus } from './db/meilisearch-client.js';
+// Dynamic imports — modules read process.env tại top-level, phải chạy SAU khi
+// .env loader ở trên đã populate env. Static import sẽ hoisted và chạy trước
+// loader, khiến MEILISEARCH_API_KEY/MONGODB_URI undefined trên VPS (PM2 không
+// inject env từ .env file, chỉ server.js self-load).
+const { connectMongo, getMongoStatus } = await import('./db/mongo-client.js');
+const { getMeiliStatus } = await import('./db/meilisearch-client.js');
 
 await connectMongo();
 
