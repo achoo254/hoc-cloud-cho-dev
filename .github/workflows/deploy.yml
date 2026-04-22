@@ -80,21 +80,13 @@ jobs:
           curl -sf http://127.0.0.1:8399/healthz
           kill $SERVER_PID
 
-      - name: Stage prod node_modules (better-sqlite3 only)
-        run: |
-          mkdir -p stage/node_modules
-          cp -r node_modules/better-sqlite3 stage/node_modules/
-          # bindings + dep tree của better-sqlite3
-          for dep in bindings file-uri-to-path; do
-            if [ -d "node_modules/$dep" ]; then cp -r "node_modules/$dep" stage/node_modules/; fi
-          done
-
       - name: Compute release id
         id: release
         run: echo "id=$(date -u +%y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: Create bundle
         run: |
+          mkdir -p stage
           cp dist-server/server.bundle.js stage/server.bundle.js
           cp -r app/dist stage/app-dist
           tar -czf bundle.tar.gz -C stage .
@@ -124,7 +116,7 @@ jobs:
             STAGING="/tmp/hoccloud-deploy-$RELEASE"
             PM2_APP="hoccloud-server"
 
-            mkdir -p "$BASE/app/dist" "$BASE/node_modules" "$BASE/shared/data" "$BASE/logs"
+            mkdir -p "$BASE/app/dist" "$BASE/shared/data" "$BASE/logs"
 
             # Persist .env ở shared/ (config only, không phải source).
             umask 077
@@ -146,11 +138,8 @@ jobs:
             # Sync FE → $BASE/app/dist (atomic-ish qua rsync --delete).
             rsync -a --delete "$EXTRACT/app-dist/" "$BASE/app/dist/"
 
-            # Replace BE bundle.
+            # Replace BE bundle (esbuild bundled — no node_modules needed).
             cp "$EXTRACT/server.bundle.js" "$BASE/server.bundle.js"
-
-            # Sync native node_modules (chỉ better-sqlite3 + deps).
-            rsync -a --delete "$EXTRACT/node_modules/" "$BASE/node_modules/"
 
             # Symlink .env → shared (PM2 load từ cwd = $BASE).
             ln -sfn "$BASE/shared/.env" "$BASE/.env"
