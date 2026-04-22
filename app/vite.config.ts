@@ -84,6 +84,11 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         ws: false,
       },
+      '/ws': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 
@@ -108,6 +113,11 @@ export default defineConfig(({ mode }) => ({
         target: HONO_SERVER,
         changeOrigin: true,
         ws: false,
+      },
+      '/ws': {
+        target: HONO_SERVER,
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

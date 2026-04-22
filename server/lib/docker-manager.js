@@ -1,4 +1,6 @@
 import Docker from 'dockerode';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 
 const IMAGE = process.env.LAB_TERMINAL_IMAGE || 'lab-terminal:v1';
 
@@ -45,6 +47,39 @@ export async function createContainer(sessionId) {
 }
 
 /**
+ * Wraps a dockerode exec hijacked stream so:
+ *   - reads (consumer `on('data')`) get demultiplexed payload
+ *   - writes (`write()`) go to exec stdin
+ *
+ * Background: Docker daemon on Windows/Docker Desktop returns the 8-byte
+ * multiplex frame header (\x01\x00\x00\x00\x00\x00\x00<len>) even on
+ * `Tty: true` exec streams. If forwarded raw to xterm.js, the header bytes
+ * render as Ctrl+A (tmux prefix) + null padding, corrupting every keystroke.
+ * `docker.modem.demuxStream` transparently strips framing when present
+ * and passes through raw TTY bytes when not, so this fix is safe on all
+ * platforms.
+ */
+class ExecStreamWrapper extends EventEmitter {
+  constructor(src) {
+    super();
+    this._src = src;
+    const out = new PassThrough();
+    docker.modem.demuxStream(src, out, out);
+    out.on('data', (chunk) => this.emit('data', chunk));
+    out.on('end', () => this.emit('end'));
+    out.on('error', (err) => this.emit('error', err));
+    src.on('error', (err) => this.emit('error', err));
+    src.on('close', () => this.emit('end'));
+  }
+  write(data) { return this._src.write(data); }
+  get writable() { return this._src.writable ?? false; }
+  destroy(err) {
+    try { this._src.destroy?.(err); } catch {}
+    this.emit('close');
+  }
+}
+
+/**
  * Attach via tmux — `-A` creates session if missing, `-d` kicks any stale
  * client so a 2nd browser tab takes over the existing session rather than
  * spawning a fresh bash.
@@ -66,7 +101,8 @@ export async function attachContainer(container) {
     AttachStderr: true,
     Tty: true,
   });
-  return attach.start({ hijack: true, stdin: true });
+  const raw = await attach.start({ hijack: true, stdin: true });
+  return new ExecStreamWrapper(raw);
 }
 
 /** Attach to a specific tmux `lab` session inside a named container. */
