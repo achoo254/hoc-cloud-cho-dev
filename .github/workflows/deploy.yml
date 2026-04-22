@@ -13,6 +13,30 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment: DEPLOY SERVER STAGING
+    # Ephemeral services for smoke test — runner-local, no external secrets.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      meilisearch:
+        image: getmeili/meilisearch:v1.10
+        env:
+          MEILI_MASTER_KEY: smoke-master-key
+          MEILI_NO_ANALYTICS: 'true'
+          MEILI_ENV: development
+        ports:
+          - 7700:7700
+        options: >-
+          --health-cmd "curl -sf http://127.0.0.1:7700/health || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -68,15 +92,16 @@ jobs:
         run: npm run build:server
 
       - name: Smoke test BE bundle (boot + /healthz)
+        # Dùng services: mongodb + meilisearch tự spin up trong runner — không phụ
+        # thuộc secrets VPS. Firebase init lazily (chỉ khi verify token), /healthz
+        # không touch → không cần service account trong smoke.
         env:
           NODE_ENV: production
           PORT: '8399'
           HOST: 127.0.0.1
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          MEILISEARCH_HOST: ${{ secrets.MEILISEARCH_HOST }}
-          MEILISEARCH_API_KEY: ${{ secrets.MEILISEARCH_API_KEY }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          MONGODB_URI: mongodb://127.0.0.1:27017/smoke
+          MEILISEARCH_HOST: http://127.0.0.1:7700
+          MEILISEARCH_API_KEY: smoke-master-key
         run: |
           node dist-server/server.bundle.js &
           SERVER_PID=$!
@@ -84,8 +109,8 @@ jobs:
             if curl -sf http://127.0.0.1:8399/healthz > /dev/null; then break; fi
             sleep 0.5
           done
-          # /healthz trả 200 cả khi degraded — status check chỉ để boot không crash
-          curl -sf http://127.0.0.1:8399/healthz || (echo "healthz unreachable" && exit 1)
+          BODY=$(curl -sf http://127.0.0.1:8399/healthz) || { echo "healthz unreachable"; kill $SERVER_PID 2>/dev/null; exit 1; }
+          echo "healthz: $BODY"
           kill $SERVER_PID || true
 
       - name: Compute release id
