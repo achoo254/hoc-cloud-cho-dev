@@ -1,7 +1,7 @@
 ---
 phase: 1
 name: Sprint 1 — P0 bug bundle
-status: not-started
+status: done
 priority: P0
 effort: 1-2 ngày
 ---
@@ -66,15 +66,15 @@ effort: 1-2 ngày
 
 ## Todo
 
-- [ ] Grep codebase cho `opened_at` usage sai đơn vị
-- [ ] Add `lastOpenedAt` field + index in `progress-model.js`
-- [ ] Update POST `/api/progress` to `$set: lastOpenedAt`
-- [ ] Add GET response `last_opened_at`
-- [ ] Add `POST /api/progress/touch` route
-- [ ] Update `api.ts`: `ProgressEntry.last_opened_at`, `touchProgress()` helper
-- [ ] Update `use-progress.ts`: remove null-override bug (chỉ gửi field có giá trị)
-- [ ] Update `lab-renderer.tsx`: gọi `/touch` mount, sửa 2 call `update()` không gửi null
-- [ ] Smoke test: mở lab → quiz full → refresh → stepper 100%
+- [x] Grep codebase cho `opened_at` usage sai đơn vị
+- [x] Add `lastOpenedAt` field + index in `progress-model.js`
+- [x] Update POST `/api/progress` to `$set: lastOpenedAt`
+- [x] Add GET response `last_opened_at`
+- [x] Add `POST /api/progress/touch` route
+- [x] Update `api.ts`: `ProgressEntry.last_opened_at`, `touchProgress()` helper
+- [x] Update `use-progress.ts`: remove null-override bug (chỉ gửi field có giá trị)
+- [x] Update `lab-renderer.tsx`: gọi `/touch` mount, sửa 2 call `update()` không gửi null
+- [x] Smoke test: mở lab → quiz full → refresh → stepper 100%
 
 ## Risk
 

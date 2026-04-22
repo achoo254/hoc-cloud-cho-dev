@@ -27,13 +27,14 @@ export const progressRoutes = new Hono()
     const query = user ? { userId: user._id } : { userUuid: c.get('userUuid') };
 
     const rows = await Progress.find(query)
-      .select('labSlug openedAt completedAt quizScore lastUpdated')
+      .select('labSlug openedAt lastOpenedAt completedAt quizScore lastUpdated')
       .sort({ lastUpdated: -1 })
       .lean();
 
     const progress = rows.map(r => ({
       lab_slug: r.labSlug,
       opened_at: r.openedAt ? Math.floor(r.openedAt.getTime() / 1000) : null,
+      last_opened_at: r.lastOpenedAt ? Math.floor(r.lastOpenedAt.getTime() / 1000) : null,
       completed_at: r.completedAt ? Math.floor(r.completedAt.getTime() / 1000) : null,
       quiz_score: r.quizScore,
       last_updated: r.lastUpdated ? Math.floor(r.lastUpdated.getTime() / 1000) : null,
@@ -64,15 +65,44 @@ export const progressRoutes = new Hono()
         ? new Date(body.completed_at * 1000)
         : null;
 
+    // lastOpenedAt bumps on every write — quiz/flashcard activity also counts
+    // as "latest touch" for recent-activity sorting, even when /touch was not
+    // fired in the same session (e.g. SPA resume from cached route).
     const updateDoc = {
       $setOnInsert: { userId: user._id, labSlug: body.lab_slug, openedAt: new Date() },
-      ...(Object.keys(setOps).length > 0 ? { $set: setOps } : {}),
+      $set: { ...setOps, lastOpenedAt: new Date() },
       ...(completedAt ? { $min: { completedAt } } : {}),
     };
 
     await Progress.findOneAndUpdate(
       { userId: user._id, labSlug: body.lab_slug },
       updateDoc,
+      { upsert: true }
+    );
+
+    return c.json({ ok: true });
+  })
+
+  // Touch-only endpoint — called on every lab mount.
+  // Sets openedAt once ($setOnInsert) + always bumps lastOpenedAt ($set).
+  // Separated from POST /api/progress to keep upsert payload clean.
+  .post('/api/progress/touch', requireAuth, async (c) => {
+    const user = c.get('user');
+
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ error: 'invalid_json' }, 400); }
+
+    if (!body || !SLUG_RE.test(String(body.lab_slug || ''))) {
+      return c.json({ error: 'invalid_lab_slug' }, 400);
+    }
+
+    const now = new Date();
+    await Progress.findOneAndUpdate(
+      { userId: user._id, labSlug: body.lab_slug },
+      {
+        $setOnInsert: { userId: user._id, labSlug: body.lab_slug, openedAt: now },
+        $set: { lastOpenedAt: now },
+      },
       { upsert: true }
     );
 

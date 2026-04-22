@@ -14,7 +14,8 @@ import { Separator } from '@/components/ui/separator'
 import { CodeBlock } from '@/components/lab/code-block'
 import { QuizBlock } from '@/components/lab/quiz-block'
 import { FlashcardSM2 } from '@/components/lab/flashcard-sm2'
-import { ProgressBar } from '@/components/lab/progress-bar'
+import { ProgressStepper } from '@/components/lab/progress-stepper'
+import { CompletionBanner } from '@/components/lab/completion-banner'
 import { useProgress } from '@/lib/hooks/use-progress'
 import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
 import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
@@ -230,23 +231,29 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
 // ── Main renderer ─────────────────────────────────────────────────────────────
 
 export function LabRenderer({ lab, className }: LabRendererProps) {
-  const { update } = useProgress(lab.slug)
+  const { update, touch } = useProgress(lab.slug)
 
-  // Mark opened once per mount — BE applies $setOnInsert so later calls are no-ops
-  // for openedAt. StrictMode guard via ref avoids the duplicate write in dev.
+  // Ping /touch once per mount — BE $setOnInsert keeps openedAt stable while
+  // lastOpenedAt bumps each time. StrictMode guard via ref avoids dup write.
   const openedRef = useRef(false)
   useEffect(() => {
     if (openedRef.current) return
     openedRef.current = true
-    update({ completed_at: null, quiz_score: null })
+    touch()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function handleQuizScore(score: number) {
-    update({
-      completed_at: score === lab.quiz.length ? Math.floor(Date.now() / 1000) : null,
-      quiz_score: score,
-    })
+    // Only forward fields with real values — prevents races with flashcard
+    // mastery from nulling out completed_at on partial scores.
+    // Guard `lab.quiz.length > 0` so a lab with no quiz doesn't auto-complete
+    // via score === 0.
+    const isFullScore = lab.quiz.length > 0 && score === lab.quiz.length
+    if (isFullScore) {
+      update({ completed_at: Math.floor(Date.now() / 1000), quiz_score: score })
+    } else {
+      update({ quiz_score: score })
+    }
   }
 
   // Check if interactive playground should render (RED TEAM #12, #14)
@@ -262,8 +269,10 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
           <Badge variant="secondary" className="text-xs">~{lab.estimated_minutes} min</Badge>
         </div>
         <h1 className="text-2xl font-bold">{lab.title}</h1>
-        <ProgressBar labSlug={lab.slug} />
+        <ProgressStepper labSlug={lab.slug} />
       </header>
+
+      <CompletionBanner labSlug={lab.slug} labTitle={lab.title} />
 
       <Separator />
 
@@ -326,10 +335,9 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
             cards={lab.flashcards}
             labSlug={lab.slug}
             onAllMastered={() => {
-              update({
-                completed_at: Math.floor(Date.now() / 1000),
-                quiz_score: null,
-              })
+              // Only send completed_at — omitting quiz_score prevents the race
+              // where a prior partial quiz score gets nulled by this callback.
+              update({ completed_at: Math.floor(Date.now() / 1000) })
             }}
           />
         </div>

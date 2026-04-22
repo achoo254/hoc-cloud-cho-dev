@@ -36,8 +36,8 @@ blocks: []
 
 | # | Sprint | File | Scope | Status |
 |---|--------|------|-------|--------|
-| 1 | Sprint 1 — P0 bug bundle | [phase-01-p0-bug-bundle.md](phase-01-p0-bug-bundle.md) | B1, F1, F2 (+T1 verify) | not-started |
-| 2 | Sprint 2 — UX feedback (hướng A) | [phase-02-ux-feedback.md](phase-02-ux-feedback.md) | F3, F4, F5, F6 (wire-only) | not-started |
+| 1 | Sprint 1 — P0 bug bundle | [phase-01-p0-bug-bundle.md](phase-01-p0-bug-bundle.md) | B1, F1, F2 (+T1 verify) | done |
+| 2 | Sprint 2 — UX feedback (hướng A) | [phase-02-ux-feedback.md](phase-02-ux-feedback.md) | F3, F4, F5, F6 (wire-only) | done |
 | 3 | Sprint 3 — Recent activity + prefetch | [phase-03-recent-activity-prefetch.md](phase-03-recent-activity-prefetch.md) | F7, F10, B4 | not-started |
 | 4 | Sprint 4 — Hardening | [phase-04-hardening.md](phase-04-hardening.md) | B6 (+FE wire), X1-X3, D1 | not-started |
 

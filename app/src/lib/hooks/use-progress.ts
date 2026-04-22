@@ -10,9 +10,12 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import {
   getProgress,
   upsertProgress,
+  touchProgress,
   type ProgressEntry,
   type ProgressResponse,
 } from '@/lib/api'
@@ -29,6 +32,9 @@ export const PROGRESS_QUERY_KEY = ['progress'] as const
 
 // ── Return type ───────────────────────────────────────────────────────────────
 
+/** Sync state surfaced to UI chrome (SyncBadge, etc.) */
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 export interface UseProgressReturn {
   /** Full list of all progress entries for the current user */
   progress: ProgressEntry[]
@@ -38,6 +44,10 @@ export interface UseProgressReturn {
   /** Upsert a progress entry; lab_slug is auto-injected when labSlug is given */
   update: (patch: ProgressPatch) => void
   isUpdating: boolean
+  /** Fire POST /api/progress/touch — bumps lastOpenedAt + $setOnInsert openedAt */
+  touch: () => void
+  /** Derived sync status — idle → saving → saved → idle (fade after 1s) */
+  syncStatus: SyncStatus
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -62,11 +72,15 @@ export function useProgress(labSlug?: string): UseProgressReturn {
 
     mutationFn: (patch: ProgressPatch) => {
       if (!labSlug) return Promise.resolve({ ok: true })
-      return upsertProgress({
+      // Only forward fields with real values. null = "do not overwrite"; BE
+      // also ignores undefined/null, but omitting here keeps payload honest
+      // and prevents accidental race-overwrites across quiz/flashcard calls.
+      const payload: { lab_slug: string; completed_at?: number; quiz_score?: number } = {
         lab_slug: labSlug,
-        completed_at: patch.completed_at,
-        quiz_score: patch.quiz_score,
-      })
+      }
+      if (patch.completed_at != null) payload.completed_at = patch.completed_at
+      if (patch.quiz_score != null) payload.quiz_score = patch.quiz_score
+      return upsertProgress(payload)
     },
 
     // Optimistic update — splice new entry into cached list immediately
@@ -100,14 +114,48 @@ export function useProgress(labSlug?: string): UseProgressReturn {
       return { previous }
     },
 
-    // Roll back to previous state on error
+    // Roll back to previous state on error + surface a toast so users don't
+    // silently lose their progress write.
     onError: (_err, _patch, ctx) => {
       if (ctx?.previous) {
         queryClient.setQueryData(PROGRESS_QUERY_KEY, ctx.previous)
       }
+      toast.error('Không lưu được tiến độ — thử lại?')
     },
 
     // Always refetch to sync with server truth
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
+    },
+  })
+
+  // Derive syncStatus: flash "saved" for 1s after each success, then fade to idle
+  const [showSaved, setShowSaved] = useState(false)
+  useEffect(() => {
+    if (!mutation.isSuccess) return
+    setShowSaved(true)
+    const t = setTimeout(() => setShowSaved(false), 1000)
+    return () => clearTimeout(t)
+  }, [mutation.isSuccess, mutation.submittedAt])
+
+  const syncStatus: SyncStatus = mutation.isPending
+    ? 'saving'
+    : mutation.isError
+      ? 'error'
+      : showSaved
+        ? 'saved'
+        : 'idle'
+
+  const touchMutation = useMutation({
+    mutationKey: labSlug ? ['progress-touch', labSlug] : ['progress-touch'],
+    mutationFn: () => {
+      if (!labSlug) return Promise.resolve({ ok: true })
+      return touchProgress(labSlug)
+    },
+    // Touch is best-effort — silent on failure. Guests receive 401 (BE requires
+    // auth for any progress write) and that is expected: guests have no
+    // server-side progress bucket. No toast here so users aren't nagged on
+    // every unauthed lab mount. Main upsert mutation still toasts on error.
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
     },
@@ -119,5 +167,7 @@ export function useProgress(labSlug?: string): UseProgressReturn {
     isLoading,
     update: (patch) => mutation.mutate(patch),
     isUpdating: mutation.isPending,
+    touch: () => touchMutation.mutate(),
+    syncStatus,
   }
 }

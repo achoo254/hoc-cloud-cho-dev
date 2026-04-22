@@ -84,6 +84,8 @@ export interface ProgressEntry {
   lab_slug: string
   /** Unix seconds — first time the lab was opened (set once on insert) */
   opened_at: number | null
+  /** Unix seconds — latest mount of the lab (bumped on every /touch) */
+  last_opened_at?: number | null
   /** Unix seconds — earliest completion mark (quiz-full or flashcards-mastered) */
   completed_at: number | null
   quiz_score: number | null
@@ -119,6 +121,13 @@ export const upsertProgress = (entry: ProgressUpsertPayload) =>
   request<{ ok: boolean }>('/api/progress', {
     method: 'POST',
     body: JSON.stringify(entry),
+  })
+
+/** POST /api/progress/touch — bump lastOpenedAt + $setOnInsert openedAt */
+export const touchProgress = (labSlug: string) =>
+  request<{ ok: boolean }>('/api/progress/touch', {
+    method: 'POST',
+    body: JSON.stringify({ lab_slug: labSlug }),
   })
 
 /** GET /api/search?q=<query> — unwraps `{results: [...]}` to a bare array. */

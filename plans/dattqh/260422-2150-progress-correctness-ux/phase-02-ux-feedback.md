@@ -1,7 +1,7 @@
 ---
 phase: 2
 name: Sprint 2 — UX feedback (hướng A)
-status: not-started
+status: done
 priority: P1
 effort: 2-3 ngày (giảm từ 3-4 sau codebase audit)
 ---
@@ -75,14 +75,14 @@ User đang không thấy hệ thống phản hồi. Thêm 4 chỉ báo: stepper 
 
 ## Todo
 
-- [ ] `use-progress.ts` expose `syncStatus` + wire `toast.error` ở `onError` (sonner + Toaster đã có sẵn)
-- [ ] Create `sync-badge.tsx`
-- [ ] Create `progress-stepper.tsx` (ref Magic UI stepper patterns, no Lucide-only icons)
-- [ ] Replace `<ProgressBar>` → `<ProgressStepper>` in `lab-renderer.tsx:248`
-- [ ] Delete `progress-bar.tsx` (grep callers first)
-- [ ] Create `completion-banner.tsx` with prev-value ref
-- [ ] Mount banner in `lab-renderer.tsx`
-- [ ] QA manual: mount/quiz/flashcard/offline toast path
+- [x] `use-progress.ts` expose `syncStatus` + wire `toast.error` ở `onError` (sonner + Toaster đã có sẵn)
+- [x] Create `sync-badge.tsx`
+- [x] Create `progress-stepper.tsx` (ref Magic UI stepper patterns, no Lucide-only icons)
+- [x] Replace `<ProgressBar>` → `<ProgressStepper>` in `lab-renderer.tsx:248`
+- [x] Delete `progress-bar.tsx` (grep callers first)
+- [x] Create `completion-banner.tsx` with prev-value ref
+- [x] Mount banner in `lab-renderer.tsx`
+- [x] QA manual: mount/quiz/flashcard/offline toast path
 
 ## Design notes (anti-slop)
 
