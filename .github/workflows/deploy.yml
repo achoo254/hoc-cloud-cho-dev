@@ -68,17 +68,25 @@ jobs:
         run: npm run build:server
 
       - name: Smoke test BE bundle (boot + /healthz)
+        env:
+          NODE_ENV: production
+          PORT: '8399'
+          HOST: 127.0.0.1
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MEILISEARCH_HOST: ${{ secrets.MEILISEARCH_HOST }}
+          MEILISEARCH_API_KEY: ${{ secrets.MEILISEARCH_API_KEY }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
-          mkdir -p /tmp/smoke/data
-          SQLITE_DB_PATH=/tmp/smoke/data/test.db NODE_ENV=production PORT=8399 HOST=127.0.0.1 \
-            node dist-server/server.bundle.js &
+          node dist-server/server.bundle.js &
           SERVER_PID=$!
-          for i in $(seq 1 20); do
+          for i in $(seq 1 40); do
             if curl -sf http://127.0.0.1:8399/healthz > /dev/null; then break; fi
             sleep 0.5
           done
-          curl -sf http://127.0.0.1:8399/healthz
-          kill $SERVER_PID
+          # /healthz trả 200 cả khi degraded — status check chỉ để boot không crash
+          curl -sf http://127.0.0.1:8399/healthz || (echo "healthz unreachable" && exit 1)
+          kill $SERVER_PID || true
 
       - name: Compute release id
         id: release
@@ -124,8 +132,10 @@ jobs:
             NODE_ENV=production
             PORT=8387
             HOST=127.0.0.1
-            SQLITE_DB_PATH=$BASE/shared/data/hoccloud.db
             PUBLIC_BASE_URL=https://hoc-cloud.inetdev.io.vn
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            MEILISEARCH_HOST=${{ secrets.MEILISEARCH_HOST }}
+            MEILISEARCH_API_KEY=${{ secrets.MEILISEARCH_API_KEY }}
             FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
             FIREBASE_SERVICE_ACCOUNT_JSON=${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
             EOF
