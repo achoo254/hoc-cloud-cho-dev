@@ -12,7 +12,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { getDueItems } from '@/lib/stats'
+import { getIndex } from '@/lib/content-loader'
 import type { ProgressEntry } from '@/lib/api'
 
 // ── Animation ─────────────────────────────────────────────────────────────────
@@ -47,6 +49,12 @@ function duePriority(dueCount: number): 'destructive' | 'default' | 'secondary' 
 export function DueSection({ progressEntries, isLoading }: DueSectionProps) {
   // getDueItems reads localStorage — safe to call on client, returns [] on empty
   const dueItems = useMemo(() => getDueItems(progressEntries), [progressEntries])
+  // Map slug → human-readable title. Fallback handled at render site.
+  const titleBySlug = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of getIndex()) map.set(entry.slug, entry.title)
+    return map
+  }, [])
 
   const totalDue = dueItems.reduce((s, d) => s + d.dueCount, 0)
   const totalNew = dueItems.reduce((s, d) => s + d.newCount, 0)
@@ -141,51 +149,62 @@ export function DueSection({ progressEntries, isLoading }: DueSectionProps) {
           className="space-y-2"
           aria-label="Labs with cards due today"
         >
-          {dueItems.map((item) => (
-            <motion.li key={item.labSlug} variants={rowVariants}>
-              <Card className="hover:bg-accent/40 transition-colors">
-                <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
-                  {/* Lab info */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <BookOpen
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="font-medium text-sm truncate capitalize">
-                      {item.labSlug.replace(/-/g, ' ')}
-                    </span>
-                  </div>
-
-                  {/* Badges + CTA */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {item.dueCount > 0 && (
-                      <Badge variant={duePriority(item.dueCount)} className="tabular-nums text-xs">
-                        {item.dueCount} due
-                      </Badge>
-                    )}
-                    {item.newCount > 0 && (
-                      <Badge variant="secondary" className="tabular-nums text-xs">
-                        {item.newCount} new
-                      </Badge>
-                    )}
-                    <Button
-                      asChild
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                    >
-                      <Link
-                        to={`/lab/${item.labSlug}`}
-                        aria-label={`Ôn tập lab ${item.labSlug}`}
+          {dueItems.map((item) => {
+            // Fallback: slug-as-title when lab missing from index (orphaned SRS data)
+            const title =
+              titleBySlug.get(item.labSlug) ?? item.labSlug.replace(/-/g, ' ')
+            const useCapitalize = !titleBySlug.has(item.labSlug)
+            return (
+              <motion.li key={item.labSlug} variants={rowVariants}>
+                <Card className="hover:bg-accent/40 transition-colors">
+                  <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+                    {/* Lab info */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <BookOpen
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span
+                        className={cn(
+                          'font-medium text-sm truncate',
+                          useCapitalize && 'capitalize',
+                        )}
                       >
-                        Ôn ngay →
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.li>
-          ))}
+                        {title}
+                      </span>
+                    </div>
+
+                    {/* Badges + CTA */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.dueCount > 0 && (
+                        <Badge variant={duePriority(item.dueCount)} className="tabular-nums text-xs">
+                          {item.dueCount} due
+                        </Badge>
+                      )}
+                      {item.newCount > 0 && (
+                        <Badge variant="secondary" className="tabular-nums text-xs">
+                          {item.newCount} new
+                        </Badge>
+                      )}
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Link
+                          to={`/lab/${item.labSlug}`}
+                          aria-label={`Ôn tập lab ${title}`}
+                        >
+                          Ôn ngay →
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.li>
+            )
+          })}
         </motion.ul>
       )}
     </section>

@@ -150,31 +150,49 @@ export function getDueItems(
   srsData?: Record<string, SrsCard[]>,
 ): DueItem[] {
   const now = Date.now()
-  const result: DueItem[] = []
+  // Aggregate per labSlug — flashcards persist as `srs:{labSlug}:{idx}` (1 entry per card),
+  // so multiple keys collapse back to a single lab here.
+  const agg = new Map<string, { dueCount: number; newCount: number }>()
 
   const dataMap: Record<string, SrsCard[]> = srsData ?? readSrsFromStorage()
 
   for (const [key, cards] of Object.entries(dataMap)) {
-    let dueCount = 0
-    let newCount = 0
+    const labSlug = parseLabSlug(key)
+    if (!labSlug) continue
+
+    const bucket = agg.get(labSlug) ?? { dueCount: 0, newCount: 0 }
 
     for (const card of cards) {
       if (!card.interval || card.interval === 0) {
-        newCount++
+        bucket.newCount++
       } else {
         // A card is due when now >= lastReviewed + interval days
         const lastMs = card.lastReviewed ?? card.ts ?? card.last ?? 0
         const dueMs = lastMs + (card.interval ?? 0) * 86_400_000
-        if (now >= dueMs) dueCount++
+        if (now >= dueMs) bucket.dueCount++
       }
     }
 
-    if (dueCount > 0 || newCount > 0) {
-      result.push({ labSlug: key.replace(/^srs:/, ''), dueCount, newCount })
-    }
+    agg.set(labSlug, bucket)
   }
 
+  const result: DueItem[] = []
+  for (const [labSlug, { dueCount, newCount }] of agg) {
+    if (dueCount > 0 || newCount > 0) {
+      result.push({ labSlug, dueCount, newCount })
+    }
+  }
   return result.sort((a, b) => b.dueCount - a.dueCount)
+}
+
+/**
+ * Strip `srs:` prefix and the trailing `:<idx>` card index (if present).
+ * Accepts both new-style (`srs:arp:0`) and legacy (`srs:arp`) keys.
+ */
+function parseLabSlug(storageKey: string): string | null {
+  if (!storageKey.startsWith('srs:')) return null
+  const body = storageKey.slice(4)
+  return body.replace(/:\d+$/, '') || null
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
