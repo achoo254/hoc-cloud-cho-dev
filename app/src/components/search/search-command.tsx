@@ -50,8 +50,9 @@ function useDebounce<T>(value: T, ms: number): T {
 const MARK_CLASS = 'bg-yellow-200/70 dark:bg-yellow-400/30 text-foreground rounded px-0.5'
 
 // Server-side delimiters (must match server/api/search-routes.js).
-const HL_START = ''
-const DELIMITED_PATTERN = /([^]*)/g
+// Use \u escape sequences — raw control chars (0x01/0x02) get stripped by editors/tooling.
+const HL_START = ''
+const DELIMITED_PATTERN = /([^]*)/g
 
 /**
  * Render server-delimited text — parses `…` spans (written by Meili
