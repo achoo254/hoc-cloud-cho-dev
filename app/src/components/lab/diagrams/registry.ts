@@ -8,6 +8,10 @@ import type { LabContent } from '@/lib/schema-lab'
 
 export interface DiagramComponentProps {
   lab: LabContent
+  /** Nội dung append vào cuối tab SEE (lab-renderer truyền Walkthrough). */
+  seeExtraContent?: React.ReactNode
+  /** Khi có, bật tab OUTPUT (quiz/flashcards/try-at-home). */
+  outputContent?: React.ReactNode
 }
 
 type DiagramComponent = ComponentType<DiagramComponentProps>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Moon, Sun, Search, Cloud } from 'lucide-react'
+import { Moon, Sun, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/use-theme'
@@ -15,8 +15,8 @@ export function SiteHeader() {
       <div className="container flex h-14 items-center">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 font-bold text-lg mr-6">
-          <Cloud className="h-5 w-5 text-primary" />
-          <span>Hoc Cloud</span>
+          <img src="/logo.svg" alt="CloudLab" className="h-6 w-6" />
+          <span>CloudLab</span>
         </Link>
 
         {/* Nav links */}

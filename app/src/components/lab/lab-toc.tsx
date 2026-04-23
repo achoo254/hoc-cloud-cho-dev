@@ -45,6 +45,14 @@ export const PHASE_DOT_COLORS: Record<TocPhase, string> = {
   SHIP:  'bg-emerald-500',
 }
 
+// Map TOC phase → tab value trong lab-renderer (THINK/SEE/OUTPUT).
+// SHIP group (quiz/flashcards/commands) nằm trong tab OUTPUT.
+const PHASE_TO_TAB: Record<TocPhase, 'think' | 'see' | 'output'> = {
+  THINK: 'think',
+  SEE:   'see',
+  SHIP:  'output',
+}
+
 // For backwards compatibility
 export const LAB_TOC_ENTRIES = DEFAULT_TOC_ENTRIES
 
@@ -91,6 +99,22 @@ interface TocListProps {
   onSelect?: () => void
 }
 
+// Chuyển hash → tab tương ứng (triggers hashchange listener trong playground/lab-renderer),
+// rồi đợi tab content render xong và scroll tới section.
+function activateAndScroll(entry: TocEntry) {
+  const tab = PHASE_TO_TAB[entry.phase]
+  if (window.location.hash !== `#${tab}`) {
+    window.history.replaceState(null, '', `#${tab}`)
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+  }
+  // Đợi React render tab content (2 frame) rồi scroll — Radix TabsContent mount khi active.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.getElementById(entry.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  })
+}
+
 function TocList({ entries, activeId, onSelect }: TocListProps) {
   return (
     <nav aria-label="Lab sections">
@@ -99,7 +123,11 @@ function TocList({ entries, activeId, onSelect }: TocListProps) {
           <li key={entry.id}>
             <a
               href={`#${entry.id}`}
-              onClick={onSelect}
+              onClick={(e) => {
+                e.preventDefault()
+                activateAndScroll(entry)
+                onSelect?.()
+              }}
               className={cn(
                 'flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors',
                 activeId === entry.id

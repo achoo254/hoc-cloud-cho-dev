@@ -50,6 +50,33 @@ function clearHighlights(container: HTMLElement): void {
   })
 }
 
+/**
+ * Nếu mark nằm trong TabsContent đang inactive (forceMount + CSS hidden),
+ * đổi URL hash sang tab đó để lab-renderer/playground-shell switch tab,
+ * rồi scrollIntoView sau khi content hiển thị (2 rAF).
+ */
+function revealAndScroll(mark: HTMLElement): void {
+  const tabpanel = mark.closest<HTMLElement>('[role="tabpanel"]')
+  const tabValue = tabpanel?.getAttribute('data-tab-value')
+  const needsSwitch =
+    tabpanel?.getAttribute('data-state') === 'inactive' && tabValue
+
+  if (needsSwitch) {
+    if (window.location.hash !== `#${tabValue}`) {
+      window.history.replaceState(null, '', `#${tabValue}`)
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    })
+    return
+  }
+
+  mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 function applyHighlights(container: HTMLElement, pattern: RegExp): HTMLElement | null {
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
@@ -109,7 +136,7 @@ export function useQueryHighlight(containerRef: RefObject<HTMLElement>): void {
       const first = applyHighlights(container, pattern)
       if (first && !scrolled) {
         scrolled = true
-        first.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        revealAndScroll(first)
       }
     }
 

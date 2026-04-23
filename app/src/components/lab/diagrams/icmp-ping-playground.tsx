@@ -11,9 +11,11 @@ import { IcmpPingVisualizer } from './icmp-ping-visualizer'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function IcmpPingPlayground({ lab }: DiagramComponentProps) {
+export function IcmpPingPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
+      seeExtraContent={seeExtraContent}
+      outputContent={outputContent}
       thinkContent={
         <div className="space-y-8">
           <IcmpPingConceptCards items={lab.tldr} />

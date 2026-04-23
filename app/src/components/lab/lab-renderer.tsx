@@ -1,16 +1,18 @@
 /**
  * Top-level lab content renderer.
- * Renders sections in THINK → SEE → SHIP order (all visible on all devices):
- *   PLAYGROUND: Interactive diagram (if available)
- *   THINK: TLDR table
- *   SEE:   Walkthrough steps
- *   SHIP:  Quiz, Flashcards, Try-at-home commands
+ * Renders sections trong 3 tab THINK/SEE/OUTPUT:
+ *   THINK:  TLDR table (hoặc playground THINK nếu có diagram)
+ *   SEE:    Playground SEE (nếu có) + Walkthrough steps
+ *   OUTPUT: Quiz + Flashcards + Try-at-home commands
+ * Khi có playground, tab state do playground quản (nó nhận Walkthrough + OUTPUT làm slot).
+ * Khi không có playground, lab-renderer tự dựng Tabs với 3 tab.
  */
 
-import { useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CodeBlock } from '@/components/lab/code-block'
 import { QuizBlock } from '@/components/lab/quiz-block'
 import { FlashcardSM2 } from '@/components/lab/flashcard-sm2'
@@ -31,6 +33,18 @@ const getTextOverride = () =>
 interface LabRendererProps {
   lab: LabContent
   className?: string
+}
+
+type TabValue = 'think' | 'see' | 'output'
+
+function isValidTab(value: string): value is TabValue {
+  return value === 'think' || value === 'see' || value === 'output'
+}
+
+function getTabFromHash(): TabValue | null {
+  if (typeof window === 'undefined') return null
+  const hash = window.location.hash.slice(1).toLowerCase()
+  return isValidTab(hash) ? (hash as TabValue) : null
 }
 
 // ── Section heading ───────────────────────────────────────────────────────────
@@ -76,9 +90,17 @@ function PlaygroundSkeleton() {
   )
 }
 
-// ── Playground section (desktop only via CSS) ─────────────────────────────────
+// ── Playground section ────────────────────────────────────────────────────────
 
-function PlaygroundSection({ lab }: { lab: LabContent }) {
+function PlaygroundSection({
+  lab,
+  seeExtraContent,
+  outputContent,
+}: {
+  lab: LabContent
+  seeExtraContent?: React.ReactNode
+  outputContent?: React.ReactNode
+}) {
   if (!lab.diagram || lab.diagram.type !== 'custom') return null
 
   const componentKey = lab.diagram.component as DiagramRegistryKey
@@ -98,7 +120,11 @@ function PlaygroundSection({ lab }: { lab: LabContent }) {
       }
     >
       <Suspense fallback={<PlaygroundSkeleton />}>
-        <DiagramComponent lab={lab} />
+        <DiagramComponent
+          lab={lab}
+          seeExtraContent={seeExtraContent}
+          outputContent={outputContent}
+        />
       </Suspense>
     </PlaygroundErrorBoundary>
   )
@@ -228,6 +254,50 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
   )
 }
 
+// ── OUTPUT: Quiz + Flashcards + Try-at-home composed block ────────────────────
+
+function OutputBlock({
+  lab,
+  onQuizScore,
+  onAllMastered,
+}: {
+  lab: LabContent
+  onQuizScore: (score: number) => void
+  onAllMastered: () => void
+}) {
+  return (
+    <section className="space-y-8">
+      <SectionHeading
+        phase="OUTPUT"
+        title="Thực hành"
+        description="Quiz, flashcards, và lệnh thực hành."
+      />
+
+      <div id="section-quiz" className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Trắc nghiệm
+        </h3>
+        <QuizBlock items={lab.quiz} onScore={onQuizScore} />
+      </div>
+
+      <div id="section-flashcards" className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Thẻ ghi nhớ
+        </h3>
+        <FlashcardSM2
+          cards={lab.flashcards}
+          labSlug={lab.slug}
+          onAllMastered={onAllMastered}
+        />
+      </div>
+
+      <div id="section-commands">
+        <TryAtHomeSection items={lab.try_at_home} />
+      </div>
+    </section>
+  )
+}
+
 // ── Main renderer ─────────────────────────────────────────────────────────────
 
 export function LabRenderer({ lab, className }: LabRendererProps) {
@@ -256,9 +326,37 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
     }
   }
 
+  function handleAllMastered() {
+    // Only send completed_at — omitting quiz_score prevents the race
+    // where a prior partial quiz score gets nulled by this callback.
+    update({ completed_at: Math.floor(Date.now() / 1000) })
+  }
+
   // Check if interactive playground should render (RED TEAM #12, #14)
   const hasPlayground = PLAYGROUND_ENABLED && !getTextOverride() && lab.diagram?.type === 'custom'
   const hasTerminal = lab.terminal?.enabled === true
+
+  // SEE tab composed content: terminal (if any) + walkthrough
+  const seeComposed = (
+    <>
+      {hasTerminal && (
+        <div id="section-terminal">
+          <TerminalSection lab={lab} />
+        </div>
+      )}
+      <div id="section-see">
+        <WalkthroughSection steps={lab.walkthrough} />
+      </div>
+    </>
+  )
+
+  const outputComposed = (
+    <OutputBlock
+      lab={lab}
+      onQuizScore={handleQuizScore}
+      onAllMastered={handleAllMastered}
+    />
+  )
 
   return (
     <article className={cn('max-w-3xl mx-auto space-y-8 py-6 px-4', className)}>
@@ -276,76 +374,91 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       <Separator />
 
-      {/* Interactive Playground (if available) */}
-      {hasPlayground && (
+      {/* Khi có playground, playground quản tab (THINK/SEE/OUTPUT) — lab-renderer đẩy
+          SEE extra (walkthrough) và OUTPUT (quiz/flashcards/try-at-home) xuống dưới dạng slot. */}
+      {hasPlayground ? (
         <div id="section-playground">
-          <PlaygroundSection lab={lab} />
-        </div>
-      )}
-
-      {hasPlayground && <Separator />}
-
-      {/* Terminal — optional interactive shell, renders alongside playground */}
-      {hasTerminal && (
-        <>
-          <div id="section-terminal">
-            <TerminalSection lab={lab} />
-          </div>
-          <Separator />
-        </>
-      )}
-
-      {/* THINK: TLDR section — ẩn khi playground đã render TLDR (Concept Cards / LayerStack) */}
-      {!hasPlayground && (
-        <>
-          <div id="section-think">
-            <TldrSection items={lab.tldr} />
-          </div>
-          <Separator />
-        </>
-      )}
-
-      {/* SEE: Walkthrough section — always visible on all devices */}
-      <div id="section-see">
-        <WalkthroughSection steps={lab.walkthrough} />
-      </div>
-
-      <Separator />
-
-      {/* SHIP — anchored sub-sections for TOC */}
-      <section className="space-y-8">
-        <SectionHeading
-          phase="OUTPUT"
-          title="Thực hành"
-          description="Quiz, flashcards, và lệnh thực hành."
-        />
-
-        <div id="section-quiz" className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Trắc nghiệm
-          </h3>
-          <QuizBlock items={lab.quiz} onScore={handleQuizScore} />
-        </div>
-
-        <div id="section-flashcards" className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Thẻ ghi nhớ
-          </h3>
-          <FlashcardSM2
-            cards={lab.flashcards}
-            labSlug={lab.slug}
-            onAllMastered={() => {
-              // Only send completed_at — omitting quiz_score prevents the race
-              // where a prior partial quiz score gets nulled by this callback.
-              update({ completed_at: Math.floor(Date.now() / 1000) })
-            }}
+          <PlaygroundSection
+            lab={lab}
+            seeExtraContent={seeComposed}
+            outputContent={outputComposed}
           />
         </div>
-
-        <div id="section-commands">
-          <TryAtHomeSection items={lab.try_at_home} />
-        </div>
-      </section>
+      ) : (
+        <LabTabsWithoutPlayground
+          lab={lab}
+          seeComposed={seeComposed}
+          outputComposed={outputComposed}
+        />
+      )}
     </article>
+  )
+}
+
+// ── Tabs wrapper khi không có playground ──────────────────────────────────────
+
+function LabTabsWithoutPlayground({
+  lab,
+  seeComposed,
+  outputComposed,
+}: {
+  lab: LabContent
+  seeComposed: React.ReactNode
+  outputComposed: React.ReactNode
+}) {
+  const [activeTab, setActiveTab] = useState<TabValue>(() => getTabFromHash() || 'think')
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const tab = getTabFromHash()
+      if (tab) setActiveTab(tab)
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  const handleTabChange = useCallback((value: string) => {
+    if (!isValidTab(value)) return
+    setActiveTab(value)
+    window.history.replaceState(null, '', `#${value}`)
+  }, [])
+
+  return (
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+      <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsTrigger value="think">THINK</TabsTrigger>
+        <TabsTrigger value="see">SEE</TabsTrigger>
+        <TabsTrigger value="output">OUTPUT</TabsTrigger>
+      </TabsList>
+
+      <TabsContent
+        value="think"
+        forceMount
+        data-tab-value="think"
+        className="mt-4"
+      >
+        <div id="section-think">
+          <TldrSection items={lab.tldr} />
+        </div>
+      </TabsContent>
+
+      <TabsContent
+        value="see"
+        forceMount
+        data-tab-value="see"
+        className="mt-4 space-y-8"
+      >
+        {seeComposed}
+      </TabsContent>
+
+      <TabsContent
+        value="output"
+        forceMount
+        data-tab-value="output"
+        className="mt-4"
+      >
+        {outputComposed}
+      </TabsContent>
+    </Tabs>
   )
 }

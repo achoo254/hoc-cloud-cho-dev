@@ -11,9 +11,11 @@ import { HttpVisualizer } from './http-visualizer'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function HttpPlayground({ lab }: DiagramComponentProps) {
+export function HttpPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
+      seeExtraContent={seeExtraContent}
+      outputContent={outputContent}
       thinkContent={
         <div className="space-y-8">
           <HttpConceptCards items={lab.tldr} />
