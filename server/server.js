@@ -38,6 +38,7 @@ const { syncLabsToDb } = await import('./scripts/sync-labs-to-db.js');
 const { searchRoutes } = await import('./api/search-routes.js');
 const { progressRoutes } = await import('./api/progress-routes.js');
 const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
+const { labsRoutes } = await import('./api/labs-routes.js');
 const { authRoutes } = await import('./auth/firebase-auth.js');
 const { sessionMiddleware } = await import('./auth/session-middleware.js');
 const { mountTerminalRoutes } = await import('./terminal/terminal-routes.js');
@@ -108,6 +109,7 @@ app.route('/', authRoutes);
 app.route('/', searchRoutes);
 app.route('/', progressRoutes);
 app.route('/', leaderboardRoutes);
+app.route('/', labsRoutes);
 
 mountTerminalRoutes(app, upgradeWebSocket);
 

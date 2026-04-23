@@ -14,9 +14,7 @@
     "gen:server-data": "node scripts/build-server-data.mjs",
     "build:server": "pnpm run gen:server-data && esbuild server/server.js --bundle --platform=node --target=node22 --format=esm --outfile=dist-server/server.bundle.js --alias:ssh2=./server/stubs/ssh2-stub.js --alias:cpu-features=./server/stubs/empty-stub.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "sync-labs": "node --env-file-if-exists=.env --env-file-if-exists=.env.development server/scripts/sync-labs-to-db.js",
-    "validate:schema": "node scripts/validate-lab-schema.js",
-    "export:labs": "node scripts/fixtures-to-ts.mjs",
-    "gen:content": "node scripts/fixtures-to-ts.mjs && node scripts/generate-labs-index.mjs && node scripts/generate-search-index.mjs"
+    "validate:schema": "node scripts/validate-lab-schema.js"
   },
   "engines": {
     "node": ">=20"

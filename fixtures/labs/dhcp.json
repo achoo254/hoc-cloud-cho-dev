@@ -4,8 +4,8 @@
   "module": "01-networking",
   "title": "Giao thức DHCP",
   "estimated_minutes": 35,
-  "content_hash": "45cde8530bd7c0c6f12f1fc9c9e1116d1a09b57c",
-  "updated_at": 1776596764,
+  "content_hash": "377cbac61ae8a768c04d7ddfd30c27c557dcc2ed",
+  "updated_at": 1776908139,
   "tldr": [
     {
       "step": "D",
@@ -40,10 +40,10 @@
     {
       "step": "A",
       "name": "Ack",
-      "src_dst": "192.168.1.1 → 255.255.255.255",
+      "src_dst": "192.168.1.1 → 192.168.1.100 (unicast mặc định)",
       "port": "67 → 68",
       "payload": "IP xác nhận, lease time, options đầy đủ",
-      "why": "Server xác nhận chính thức. Client nhận ACK mới bắt đầu dùng IP. Nếu Ack mang NACK → client phải Discover lại.",
+      "why": "Server xác nhận chính thức bằng unicast tới MAC + IP mới cấp cho client (RFC 2131). Chỉ broadcast khi client set BROADCAST flag trong Request. Client nhận ACK mới bắt đầu dùng IP. Nếu server trả NACK → client phải Discover lại. [sửa theo audio 18/04/2026 — ACK mặc định là unicast, không phải broadcast]",
       "whyBreaks": "Có ACK nhưng client vẫn không lên mạng: (1) gateway option sai → no routing, (2) DNS option sai → domain không resolve, (3) DHCP client service crash sau khi nhận ACK. Verify: ip addr, ip route, cat /etc/resolv.conf sau khi DORA xong.",
       "deploymentUse": "Cloud init script chạy sau DHCP ACK. Nếu ACK cung cấp DNS server sai → cloud-init không download package → provisioning fail. AWS metadata server (169.254.169.254) cũng cần DHCP cấp đúng route."
     },
@@ -130,8 +130,8 @@
     },
     {
       "step": 4,
-      "what": "DHCPACK — Server xác nhận chính thức",
-      "why": "Server ghi lease vào database rồi gửi Ack. Chỉ khi nhận được Ack, client mới thực sự cấu hình IP, gateway, DNS vào interface. Trước Ack, IP vẫn chỉ là 'đang đàm phán'.",
+      "what": "DHCPACK — Server xác nhận chính thức (unicast)",
+      "why": "Server ghi lease vào database rồi gửi Ack bằng unicast tới MAC + IP mới cấp cho client — vì client đã được assign IP, server có thể trả lời trực tiếp qua ARP table (RFC 2131 §4.1). Chỉ broadcast khi client set BROADCAST flag. Chỉ khi nhận được Ack, client mới thực sự cấu hình IP, gateway, DNS vào interface. Trước Ack, IP vẫn chỉ là 'đang đàm phán'. [sửa theo audio 18/04/2026]",
       "code": "# Verify IP được gán sau DORA\nip addr show eth0\nip route  # Gateway đã có chưa?\ncat /etc/resolv.conf  # DNS đã config chưa?\n\n# Ping gateway để verify kết nối\nping -c 1 $(ip route | awk '/default/ {print $3}')",
       "whyBreaks": "Nhận ACK nhưng ip addr không thấy IP: dhclient crash sau khi nhận ACK (check journalctl -u dhclient). Hoặc gateway trong ACK là sai subnet → ip route không tạo được default route → có IP nhưng không reach internet.",
       "observeWith": "ip addr show eth0 | grep 'inet ' — phải thấy IP với flag 'dynamic'. ip route show default — phải có default route qua gateway. cat /etc/resolv.conf — phải có nameserver. Ping cả 3 cấp: gateway, 8.8.8.8, google.com."

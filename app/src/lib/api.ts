@@ -4,6 +4,16 @@
  */
 
 import type { SearchResponse } from '@/lib/schema-search'
+import type { LabContent } from '@/lib/schema-lab'
+
+export interface LabIndexEntry {
+  slug: string
+  title: string
+  module: string
+  estimated_minutes: number
+  updated_at: number
+  tags: string[]
+}
 
 export class ApiError extends Error {
   constructor(
@@ -134,6 +144,21 @@ export const touchProgress = (labSlug: string) =>
 export const searchLabs = async (q: string) => {
   const res = await request<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`)
   return res.results
+}
+
+/** GET /api/labs — returns lightweight catalog from MongoDB */
+export const getLabsIndex = async (): Promise<LabIndexEntry[]> => {
+  const res = await request<{ labs: LabIndexEntry[] }>('/api/labs')
+  return res.labs
+}
+
+/** GET /api/labs/:slug — returns full lab content, or null on 404 */
+export const getLabContent = async (slug: string): Promise<LabContent | null> => {
+  const res = await fetch(`/api/labs/${encodeURIComponent(slug)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new ApiError(res.status, await res.text().catch(() => res.statusText))
+  const { lab } = (await res.json()) as { lab: LabContent }
+  return lab
 }
 
 /** POST /api/progress/migrate — merge guest bucket into the authed user */

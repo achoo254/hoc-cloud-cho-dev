@@ -1,5 +1,5 @@
 /**
- * lab-catalog-grid.tsx — Grid of shadcn Cards, one per lab from labs-index.json.
+ * lab-catalog-grid.tsx — Grid of shadcn Cards, one per lab from /api/labs.
  * Hover lift via Framer Motion (translateY + scale).
  * Click navigates to /lab/:slug with layoutId shared-element transition.
  * Supports module filter prop from DashboardToolbar.
@@ -12,8 +12,7 @@ import { Clock, Tag, ArrowRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { LabIndexEntry } from '@/lib/content-loader'
-import type { ProgressEntry } from '@/lib/api'
+import type { LabIndexEntry, ProgressEntry } from '@/lib/api'
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 

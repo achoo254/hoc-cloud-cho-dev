@@ -32,7 +32,7 @@ Non-target: người tìm cert prep (AWS/Azure/GCP), enterprise training.
 | FR-1 | 8+ labs mạng cơ bản với playground tương tác | ✅ 8 labs live |
 | FR-2 | THINK/SEE/SHIP structure per lab (TL;DR → walkthrough → quiz) | ✅ |
 | FR-3 | Desktop shows playground, mobile falls back to text | ✅ CSS-only switch |
-| FR-4 | Full-text search across labs với highlight | ✅ SQLite FTS5 + bm25 |
+| FR-4 | Full-text search across labs với highlight | ✅ Meilisearch + typo-tolerance |
 | FR-5 | Progress tracking (opened, completed, quiz score) | ✅ Per anon UUID + authed user |
 | FR-6 | Activity heatmap (GitHub-style) | ✅ |
 | FR-7 | Spaced repetition queue (SM-2 algorithm) | ✅ Flashcards |
@@ -73,9 +73,9 @@ Xem `docs/content-guidelines.md` (canonical):
 
 ### Backend
 - Hono.js 4.6 trên Node 22+
-- better-sqlite3 (sync driver, FTS5 virtual tables)
+- MongoDB (Mongoose) cho labs + progress + users; Meilisearch cho full-text search
 - firebase-admin verify Firebase ID token → HttpOnly session cookie
-- esbuild bundle → single `server.bundle.js` (no `node_modules` trên VPS ngoài `better-sqlite3`)
+- esbuild bundle → pure-JS `server.bundle.js` (no native deps, no `node_modules` trên VPS)
 
 ### Infra
 - VPS + Nginx + PM2 (cluster mode)
@@ -104,14 +104,12 @@ Xem `docs/content-guidelines.md` (canonical):
 |------|------------|
 | Playground bug break full lab | `PlaygroundErrorBoundary` + `?textMode=1` escape hatch |
 | Firebase outage → auth down | Guest mode vẫn dùng được (anon UUID cookie); progress preserve |
-| SQLite single-point-of-failure | Daily backup + readonly migration dry-run trong CI |
+| MongoDB/Meilisearch outage | `/healthz` reports DB status; PM2 restart với retry; UI hiển thị banner khi search unavailable |
 | SVG export XSS | DOMPurify `svg` + `svgFilters` profile mandatory |
-| `better-sqlite3` ABI mismatch khi deploy | Native module build trong CI cùng Node version với VPS |
-| Content drift (fixture vs generated) | `npm run gen:content` + `sync-labs` chạy tự động; CI validate Zod |
+| Content drift (fixture vs DB) | `sync-labs` chạy khi deploy; CI validate Zod trước khi sync |
 
 ## 10. Open Questions
 
 - Web terminal dùng WebContainer (StackBlitz) hay Docker sandbox tự host?
-- SQLite có đủ scale khi user base > 10k? Có nên migrate LibSQL/Turso multi-region?
+- MongoDB replica set cho HA khi user base > 10k?
 - Rate-limit API (`/api/progress`, `/auth/session`) cần chưa?
-- Nên bundle search index client-side hay chỉ server API? (Hiện cả 2 — tradeoff size vs offline)

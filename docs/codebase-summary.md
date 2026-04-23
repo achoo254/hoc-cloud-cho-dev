@@ -8,10 +8,8 @@ Monorepo: Vite + React 18 SPA (`app/`) + Hono.js API (`server/`). Production: ht
 hoc-cloud-cho-dev/
 ├── app/                  # Vite + React SPA (TypeScript, Tailwind)
 ├── server/               # Hono.js API (Node 22+)
-├── fixtures/labs/        # Lab JSON — source of truth (schema v3)
-├── content/              # Generated TS modules
-├── scripts/              # Build scripts (fixtures → TS, schema validate)
-├── data/                 # (legacy SQLite removed — data now in MongoDB)
+├── fixtures/labs/        # Lab JSON — source of truth (schema v3, sync vào MongoDB)
+├── scripts/              # Build scripts (schema validate, bundler)
 ├── deploy/               # nginx.conf.example, ecosystem.config
 └── docs/                 # Project documentation
 ```
@@ -48,12 +46,10 @@ app/src/
 │   └── auth-context.tsx    # Firebase Auth state provider
 ├── lib/
 │   ├── firebase.ts         # Firebase client init (VITE_FIREBASE_CONFIG)
-│   ├── api.ts              # Fetch helpers (credentials: include)
+│   ├── api.ts              # Fetch helpers: getLabsIndex, getLabContent, search
 │   ├── schema-lab.ts       # Zod schema v3
-│   ├── search-client.ts    # MiniSearch fallback + server FTS
 │   └── sm2.ts              # SM-2 spaced-repetition algorithm
-├── generated/              # Lab index + search index (git-ignored)
-└── hooks/
+└── hooks/                  # useLabsIndex (React Query) + others
 ```
 
 ## Server (`server/`)
@@ -62,6 +58,7 @@ app/src/
 server/
 ├── server.js               # Hono app entry, middleware chain
 ├── api/
+│   ├── labs-routes.js      # GET /api/labs, GET /api/labs/:slug (MongoDB)
 │   ├── search-routes.js    # GET /api/search (Meilisearch + <mark> highlights)
 │   ├── progress-routes.js  # GET/POST /api/progress
 │   └── leaderboard-routes.js
@@ -74,19 +71,18 @@ server/
 ├── lib/
 │   └── csp-middleware.js   # Content Security Policy
 ├── scripts/
-│   └── sync-labs-to-db.js  # Fixture → SQLite sync
-└── ecosystem.config.cjs    # PM2 config (cluster mode)
+│   └── sync-labs-to-db.js  # Fixture → MongoDB + Meilisearch sync
+└── ecosystem.config.cjs    # PM2 config (fork mode)
 ```
 
 ## Data Flow
 
 ```
 fixtures/labs/*.json
-  ├─→ npm run gen:content  → app/src/generated/ + content/*.ts
-  └─→ npm run sync-labs    → MongoDB (labs collection) + Meilisearch (search index)
+  └─→ pnpm run sync-labs → MongoDB (labs collection) + Meilisearch (search index)
 ```
 
-Lab JSON = source of truth. Generated TS modules + MongoDB documents = derived artifacts.
+Lab JSON = source of truth. MongoDB documents + Meilisearch index = derived artifacts. FE đọc runtime qua `/api/labs` + `/api/labs/:slug` (React Query cache).
 
 ## Key Patterns
 
@@ -116,7 +112,6 @@ Lab JSON = source of truth. Generated TS modules + MongoDB documents = derived a
 | `framer-motion` | All DOM/SVG animation |
 | `d3-scale`, `d3-shape` | Math only (no DOM touch) |
 | `dompurify` | SVG export sanitization |
-| `@tanstack/react-query` | Data fetching |
-| `minisearch` | Client-side FTS fallback |
+| `@tanstack/react-query` | Data fetching + caching (labs index, lab content) |
 | `zod` | Runtime schema validation |
 | `shiki` | Code syntax highlighting |

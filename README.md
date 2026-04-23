@@ -27,7 +27,7 @@
 - **Animation**: Framer Motion 11, D3.js 7 (math only)
 - **Backend**: Hono.js 4.6, Node.js 22+
 - **Auth**: Firebase Auth (Google provider) + firebase-admin session cookies
-- **Database**: SQLite (better-sqlite3, FTS5 full-text search)
+- **Database**: MongoDB (Mongoose) + Meilisearch (full-text search)
 - **Deploy**: PM2 + Nginx trên VPS (GitHub Actions auto-deploy)
 
 ## Cấu trúc
@@ -35,48 +35,46 @@
 | Thư mục | Nội dung |
 |---------|----------|
 | `app/` | Vite+React SPA — components, playgrounds, diagrams, dashboard |
-| `server/` | Hono.js: `/api/search`, `/api/progress`, `/api/leaderboard`, `/auth/*` |
+| `server/` | Hono.js: `/api/labs`, `/api/search`, `/api/progress`, `/api/leaderboard`, `/auth/*` |
 | `server/auth/` | Firebase Admin, session middleware |
-| `fixtures/labs/` | Lab JSON (schema v3) — source of truth |
-| `content/` | TypeScript modules (generated từ fixtures) |
-| `scripts/` | Build scripts (fixtures → TS, bundler) |
+| `fixtures/labs/` | Lab JSON (schema v3) — source of truth (sync vào MongoDB) |
+| `scripts/` | Build scripts (validate schema, sync labs, bundler) |
 | `docs/` | Tài liệu dự án |
-| `data/` | `hoccloud.db` — SQLite (labs + FTS + progress + users) |
 | `deploy/` | `nginx.conf.example` tham chiếu |
 
 ## Development
 
 ```bash
-npm install              # root deps (Hono, better-sqlite3, firebase-admin)
-npm install --prefix app # app deps (React, Vite, firebase client)
+pnpm install              # root deps (Hono, Mongoose, Meilisearch, firebase-admin)
+pnpm --dir app install    # app deps (React, Vite, firebase client)
 ```
 
 ```bash
 # Terminal 1 — Hono API (port 8387)
-npm run dev:server
+pnpm run dev:server
 
 # Terminal 2 — Vite dev server (port 5173, proxy /api → :8387)
-npm run dev:app
+pnpm run dev:app
 ```
 
 Mở `http://localhost:5173`.
 
 ### Env vars
 
-Client cần `VITE_FIREBASE_CONFIG` (JSON config từ Firebase Console). Server cần credentials của Firebase Admin (service account JSON) — xem `docs/deployment-guide.md`.
+Client cần `VITE_FIREBASE_CONFIG` (JSON config từ Firebase Console). Server cần `MONGODB_URI`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` + credentials của Firebase Admin (service account JSON) — xem `docs/deployment-guide.md`.
 
 ## Build & Deploy
 
 ```bash
-npm run build --prefix app   # FE → app/dist/
-npm run build:server         # BE → dist-server/server.bundle.js (esbuild)
+pnpm --dir app run build   # FE → app/dist/
+pnpm run build:server      # BE → dist-server/server.bundle.js (esbuild, pure-JS bundle)
 ```
 
 GitHub Actions (`.github/workflows/deploy.yml`) tự chạy khi push `master`:
 
-1. Build FE (Vite) + BE (esbuild bundle)
+1. Build FE (Vite) + BE (esbuild bundle, no native deps)
 2. Smoke test `/healthz`
-3. Stage `app/dist/` + `server.bundle.js` + `node_modules/better-sqlite3`
+3. Stage `app/dist/` + `server.bundle.js`
 4. SCP lên VPS, extract, `pm2 restart` (với `NODE_ENV=production`)
 
 VPS không cần `package.json`, không `npm ci`. Nginx config: `deploy/nginx.conf.example`.
@@ -85,9 +83,8 @@ VPS không cần `package.json`, không `npm ci`. Nginx config: `deploy/nginx.co
 
 1. Tạo fixture JSON trong `fixtures/labs/` (schema v3 — xem `docs/lab-schema-v3.md`)
 2. Validate: `node scripts/validate-lab-fixtures.js`
-3. Generate content modules: `npm run gen:content`
-4. Sync vào DB: `npm run sync-labs`
-5. Thêm playground component vào `app/src/components/lab/diagrams/` nếu cần
+3. Sync vào MongoDB + Meilisearch: `pnpm run sync-labs`
+4. Thêm playground component vào `app/src/components/lab/diagrams/` nếu cần
 
 Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 
@@ -96,7 +93,9 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 | Method | Path | Mô tả |
 |--------|------|-------|
 | GET | `/healthz` | Health + DB status |
-| GET | `/api/search?q=<q>` | FTS5 full-text search (bm25 + `<mark>` highlight) |
+| GET | `/api/labs` | Lab index (MongoDB) |
+| GET | `/api/labs/:slug` | Nội dung một lab (MongoDB) |
+| GET | `/api/search?q=<q>` | Meilisearch full-text search với highlight |
 | GET | `/api/progress` | Trả `{ uuid, progress: [...] }` theo session cookie |
 | POST | `/api/progress` | Upsert `{ lab_slug, opened_at?, completed_at?, quiz_score? }` |
 | GET | `/api/leaderboard` | Top users theo completion + streak |
@@ -107,11 +106,8 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 ## Cheat-sheet
 
 ```bash
-# Sync fixtures → DB (tự chạy khi server boot)
-npm run sync-labs
-
-# Fresh DB (local dev)
-rm data/hoccloud.db && npm run dev:server
+# Sync fixtures → MongoDB + Meilisearch
+pnpm run sync-labs
 
 # Reset progress (browser)
 DevTools → Application → Cookies → xoá session; Local Storage → xoá key lab:*

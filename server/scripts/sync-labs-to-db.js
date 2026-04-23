@@ -27,6 +27,8 @@ export async function syncLabsToDb() {
       quiz: lab.quiz,
       flashcards: lab.flashcards,
       tryAtHome: lab.tryAtHome,
+      diagram: lab.diagram ?? null,
+      terminal: lab.terminal ?? null,
       contentHash: lab.content_hash,
     };
 

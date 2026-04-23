@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { getDueItems } from '@/lib/stats'
-import { getIndex } from '@/lib/content-loader'
+import { useLabsIndex } from '@/lib/hooks/use-labs-index'
 import type { ProgressEntry } from '@/lib/api'
 
 // ── Animation ─────────────────────────────────────────────────────────────────
@@ -49,12 +49,13 @@ function duePriority(dueCount: number): 'destructive' | 'default' | 'secondary' 
 export function DueSection({ progressEntries, isLoading }: DueSectionProps) {
   // getDueItems reads localStorage — safe to call on client, returns [] on empty
   const dueItems = useMemo(() => getDueItems(progressEntries), [progressEntries])
+  const { data: labsIndex = [] } = useLabsIndex()
   // Map slug → human-readable title. Fallback handled at render site.
   const titleBySlug = useMemo(() => {
     const map = new Map<string, string>()
-    for (const entry of getIndex()) map.set(entry.slug, entry.title)
+    for (const entry of labsIndex) map.set(entry.slug, entry.title)
     return map
-  }, [])
+  }, [labsIndex])
 
   const totalDue = dueItems.reduce((s, d) => s + d.dueCount, 0)
   const totalNew = dueItems.reduce((s, d) => s + d.newCount, 0)

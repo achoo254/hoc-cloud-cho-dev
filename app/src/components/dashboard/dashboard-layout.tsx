@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { getProgress, type ProgressEntry, type ProgressResponse } from '@/lib/api'
 import { PROGRESS_QUERY_KEY } from '@/lib/hooks/use-progress'
-import { getIndex } from '@/lib/content-loader'
+import { useLabsIndex } from '@/lib/hooks/use-labs-index'
 import { useAuth } from '@/contexts/auth-context'
 import { StatsSection } from './stats-section'
 import { DueSection } from './due-section'
@@ -17,10 +17,6 @@ import { RoadmapSection } from './roadmap-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
 import { LeaderboardSection } from './leaderboard-section'
 import { GuestDashboardLayout } from './guest-dashboard-layout'
-
-// ── Static data (build-time import, no network) ───────────────────────────────
-
-const ALL_LABS = getIndex()
 
 // ── Error banner ──────────────────────────────────────────────────────────────
 
@@ -41,10 +37,12 @@ function ErrorBanner({ message }: { message: string }) {
 export function DashboardLayout() {
   const { user, isLoading: authLoading } = useAuth()
 
+  const { data: labsIndex = [], isLoading: labsLoading } = useLabsIndex()
+
   // Fetch server-side progress — stale 60s, error is non-fatal
   const {
     data: progressData,
-    isLoading,
+    isLoading: progressLoading,
     isError,
   } = useQuery<ProgressResponse>({
     queryKey: PROGRESS_QUERY_KEY,
@@ -65,6 +63,7 @@ export function DashboardLayout() {
   }
 
   const progressEntries: ProgressEntry[] = progressData?.progress ?? []
+  const isLoading = progressLoading || labsLoading
 
   return (
     <div className="min-h-screen">
@@ -78,7 +77,7 @@ export function DashboardLayout() {
         {/* Stats: heatmap + streak + completed */}
         <StatsSection
           progressEntries={progressEntries}
-          totalLabs={ALL_LABS.length}
+          totalLabs={labsIndex.length}
           isLoading={isLoading}
         />
 
@@ -95,7 +94,7 @@ export function DashboardLayout() {
             isLoading={isLoading}
           />
           <RoadmapSection
-            labsIndex={ALL_LABS}
+            labsIndex={labsIndex}
             progressEntries={progressEntries}
           />
         </div>
@@ -105,7 +104,7 @@ export function DashboardLayout() {
 
         {/* Lab catalog — full width */}
         <LabCatalogGrid
-          labsIndex={ALL_LABS}
+          labsIndex={labsIndex}
           progressEntries={progressEntries}
           isLoading={isLoading}
         />

@@ -1,13 +1,13 @@
-import { getIndex } from '@/lib/content-loader'
+import { useLabsIndex } from '@/lib/hooks/use-labs-index'
 import { ProgressPreviewCard } from './progress-preview-card'
 import { SpacedRepetitionPreviewCard } from './spaced-repetition-preview-card'
 import { RoadmapSection } from './roadmap-section'
 import { LeaderboardSection } from './leaderboard-section'
 import { LabCatalogGrid } from './lab-catalog-grid'
 
-const ALL_LABS = getIndex()
-
 export function GuestDashboardLayout() {
+  const { data: labsIndex = [], isLoading } = useLabsIndex()
+
   return (
     <div className="min-h-screen">
       <div className="container py-8 space-y-12">
@@ -19,7 +19,7 @@ export function GuestDashboardLayout() {
         <div className="grid gap-8 md:grid-cols-2">
           <SpacedRepetitionPreviewCard />
           <RoadmapSection
-            labsIndex={ALL_LABS}
+            labsIndex={labsIndex}
             progressEntries={[]}
             showProgress={false}
           />
@@ -30,9 +30,9 @@ export function GuestDashboardLayout() {
 
         {/* Lab Catalog — no progress badges */}
         <LabCatalogGrid
-          labsIndex={ALL_LABS}
+          labsIndex={labsIndex}
           progressEntries={[]}
-          isLoading={false}
+          isLoading={isLoading}
           showProgress={false}
         />
 

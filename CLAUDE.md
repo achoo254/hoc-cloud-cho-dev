@@ -24,10 +24,10 @@ pnpm run build:server        # BE → dist-server/server.bundle.js
 # Validate lab fixtures against schema
 node scripts/validate-lab-fixtures.js
 
-# Regenerate content modules from fixtures
-pnpm run gen:content
+# Build server-side labs data bundle (fixtures → server/generated/labs-data.mjs)
+pnpm run gen:server-data
 
-# Sync labs to SQLite DB
+# Sync labs to MongoDB (+ Meilisearch index if reachable)
 pnpm run sync-labs
 ```
 
@@ -38,12 +38,14 @@ Monorepo with Vite+React SPA (`app/`) and Hono.js API server (`server/`).
 ### Data Flow
 
 ```
-fixtures/labs/*.json  ─→  npm run gen:content  ─→  app/src/generated/
-                                               ─→  content/*.ts
-                     ─→  npm run sync-labs    ─→  data/hoccloud.db (SQLite + FTS5)
+fixtures/labs/*.json ─→ scripts/build-server-data.mjs ─→ server/generated/labs-data.mjs
+                     ─→ server/scripts/sync-labs-to-db.js ─→ MongoDB (Lab collection)
+                                                         ─→ Meilisearch (labs index)
+
+Frontend ─→ GET /api/labs, /api/labs/:slug, /api/search ─→ Hono server ─→ MongoDB / Meilisearch
 ```
 
-Lab JSON fixtures are the source of truth. Generated TypeScript modules and SQLite tables are derived.
+Lab JSON fixtures are the source of truth. MongoDB stores the runtime copy that the FE reads via API; Meilisearch is a derived search index. No bundled lab content ships with the FE.
 
 ### Frontend Structure
 
@@ -55,9 +57,8 @@ Lab JSON fixtures are the source of truth. Generated TypeScript modules and SQLi
 
 1. Create fixture JSON in `fixtures/labs/` (see `docs/lab-schema-v3.md`)
 2. Validate: `node scripts/validate-lab-fixtures.js`
-3. Generate: `npm run gen:content`
-4. Sync DB: `npm run sync-labs`
-5. If interactive playground needed: create component in `app/src/components/lab/diagrams/`, register in `registry.ts`
+3. Sync DB: `pnpm run sync-labs` (writes to MongoDB, fan-out to Meilisearch)
+4. If interactive playground needed: create component in `app/src/components/lab/diagrams/`, register in `registry.ts`
 
 ### Adding a New Playground
 
@@ -102,8 +103,10 @@ Wrap lazy-loaded diagram components in `PlaygroundErrorBoundary`. Never let play
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/healthz` | Health + DB status |
-| GET | `/api/search?q=` | FTS5 full-text search |
-| GET | `/api/progress` | User progress by cookie |
+| GET | `/healthz` | Health + DB status (Mongo + Meilisearch) |
+| GET | `/api/labs` | Lab catalog (index entries from MongoDB) |
+| GET | `/api/labs/:slug` | Full lab content by slug |
+| GET | `/api/search?q=` | Meilisearch full-text search |
+| GET | `/api/progress` | User progress by cookie / auth |
 | POST | `/api/progress` | Upsert progress |
 | GET | `/sse/reload` | Dev live-reload SSE |

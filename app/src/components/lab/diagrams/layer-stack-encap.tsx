@@ -26,6 +26,21 @@ type EncapState = 0 | 1 | 2 | 3 | 4 // 0 = start at L4, 4 = complete (all layers
 const LAYER_ORDER: LayerKey[] = ['L4', 'L3', 'L2', 'L1']
 const PDU_NAMES = ['Message', 'Segment', 'Packet', 'Frame'] as const
 
+// OSI 7-layer mapping — cho biết mỗi tầng TCP/IP gộp tầng OSI nào
+const OSI_MAPPING: Record<LayerKey, { num: string; name: string }[]> = {
+  L4: [
+    { num: 'L7', name: 'Application' },
+    { num: 'L6', name: 'Presentation' },
+    { num: 'L5', name: 'Session' },
+  ],
+  L3: [{ num: 'L4', name: 'Transport' }],
+  L2: [{ num: 'L3', name: 'Network' }],
+  L1: [
+    { num: 'L2', name: 'Data Link' },
+    { num: 'L1', name: 'Physical' },
+  ],
+}
+
 export function LayerStackEncap({ tldr }: LayerStackEncapProps) {
   const [encapState, setEncapState] = useState<EncapState>(0)
   const [expandedLayer, setExpandedLayer] = useState<LayerKey | null>(null)
@@ -154,6 +169,25 @@ export function LayerStackEncap({ tldr }: LayerStackEncapProps) {
                         {item.pdu}
                       </span>
                     )}
+                  </div>
+
+                  {/* OSI mapping — TCP/IP "wraps" OSI layers */}
+                  <div className="flex flex-wrap items-center gap-1 mb-2">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mr-0.5">
+                      Gồm OSI:
+                    </span>
+                    {OSI_MAPPING[layerKey].map((osi) => (
+                      <span
+                        key={osi.num}
+                        className={cn(
+                          'px-1.5 py-0.5 rounded-md text-[11px] font-medium border border-dashed',
+                          colors.text,
+                          colors.border
+                        )}
+                      >
+                        <span className="font-bold">{osi.num}</span> {osi.name}
+                      </span>
+                    ))}
                   </div>
 
                   {/* Protocol chips */}

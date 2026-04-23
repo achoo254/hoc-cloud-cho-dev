@@ -44,14 +44,11 @@ Production: **https://hoc-cloud.inetdev.io.vn/**
 ```
 fixtures/labs/*.json   ── source of truth (schema v3, Zod-validated)
         │
-        ├─── scripts/fixtures-to-ts.mjs ──→ content/*.ts
-        ├─── scripts/generate-labs-index.mjs ──→ app/src/generated/labs-index.ts
-        ├─── scripts/generate-search-index.mjs ──→ app/src/generated/search-index.json
         └─── server/scripts/sync-labs-to-db.js ──→ MongoDB (labs collection)
                                                     + Meilisearch (search index)
 ```
 
-Lab JSON = single source of truth. TypeScript modules, search index, MongoDB documents = derived artifacts regenerated via `npm run gen:content` + `npm run sync-labs`.
+Lab JSON = single source of truth. MongoDB documents + Meilisearch index = derived artifacts regenerated via `pnpm run sync-labs`. FE đọc runtime qua `/api/labs` + `/api/labs/:slug` — không còn bundled content modules.
 
 ## Request Flows
 
@@ -87,7 +84,7 @@ GET /api/search?q=subnet
   → return [{ slug, title, snippet_with_<mark>_highlights }]
 ```
 
-Client fallback: MiniSearch on bundled `search-index.json` when API unreachable.
+Không còn offline fallback — Meilisearch là nguồn duy nhất. Khi API unreachable, UI hiển thị banner lỗi.
 
 ### 4. Progress & Leaderboard
 

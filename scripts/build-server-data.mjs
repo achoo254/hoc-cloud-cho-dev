@@ -28,6 +28,8 @@ for (const f of readdirSync(fixturesDir).filter((x) => x.endsWith('.json')).sort
     quiz: data.quiz || [],
     flashcards: data.flashcards || [],
     tryAtHome: data.tryAtHome || data.try_at_home || [],
+    diagram: data.diagram || null,
+    terminal: data.terminal || null,
     estimatedMinutes: Number.isFinite(data.estimated_minutes) ? data.estimated_minutes
       : Number.isFinite(data.estimatedMinutes) ? data.estimatedMinutes : null,
     content_hash: data.content_hash || createHash('sha1').update(raw).digest('hex'),

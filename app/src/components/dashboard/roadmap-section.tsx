@@ -9,8 +9,7 @@ import { motion, useInView } from 'framer-motion'
 import { CheckCircle2, Circle, Clock } from 'lucide-react'
 import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { Badge } from '@/components/ui/badge'
-import type { LabIndexEntry } from '@/lib/content-loader'
-import type { ProgressEntry } from '@/lib/api'
+import type { LabIndexEntry, ProgressEntry } from '@/lib/api'
 
 // ── Roadmap module definitions ────────────────────────────────────────────────
 

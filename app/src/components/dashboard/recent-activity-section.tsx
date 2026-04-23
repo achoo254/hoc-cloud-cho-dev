@@ -10,7 +10,7 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { RotateCw, PlayCircle, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getIndex } from '@/lib/content-loader'
+import { useLabsIndex } from '@/lib/hooks/use-labs-index'
 import type { ProgressEntry } from '@/lib/api'
 
 // ── Anchor derivation (shared logic) ──────────────────────────────────────────
@@ -70,12 +70,14 @@ export function RecentActivitySection({
   isLoading,
   limit = 5,
 }: RecentActivitySectionProps) {
-  // Map slug → title. Built once per render from the static index.
+  const { data: labsIndex = [] } = useLabsIndex()
+
+  // Map slug → title from the cached API index.
   const titleBySlug = useMemo(() => {
     const map = new Map<string, string>()
-    for (const entry of getIndex()) map.set(entry.slug, entry.title)
+    for (const entry of labsIndex) map.set(entry.slug, entry.title)
     return map
-  }, [])
+  }, [labsIndex])
 
   // "Still in progress" = opened (or touched) but not yet completed.
   // Sort desc by last_updated (falls back to opened_at / last_opened_at).

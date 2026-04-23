@@ -21,16 +21,3 @@ export const SearchResponseSchema = z.object({
 
 export type SearchResult = z.infer<typeof SearchResultSchema>
 export type SearchResponse = z.infer<typeof SearchResponseSchema>
-
-// ── Local (minisearch) result ─────────────────────────────────────────────────
-
-export interface LocalSearchResult {
-  slug: string
-  title: string
-  tags: string[]
-  /** Plain-text snippet around first match */
-  snippet: string
-  score: number
-  /** Marks result as coming from local index */
-  source: 'local'
-}

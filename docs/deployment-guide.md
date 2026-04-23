@@ -19,7 +19,7 @@ npm run build --prefix app   # → app/dist/
 npm run build:server         # → dist-server/server.bundle.js
 ```
 
-FE build chạy `npm run gen:content` (root) → `tsc --noEmit` → `vite build`.
+FE build chạy `tsc --noEmit` → `vite build`. Lab content được fetch runtime từ `/api/labs` — không còn bundled vào FE.
 
 ## Environment Variables
 
@@ -84,4 +84,4 @@ npm run typecheck --prefix app   # tsc --noEmit
 - **PM2 chạy sai NODE_ENV**: script deploy export `NODE_ENV=production` trước `pm2 start/restart` (commit `b9cdb41`).
 - **OAuth redirect lỗi**: Nginx phải proxy `/auth/*` — xem commit `e136584`.
 - **MongoDB connection refused**: Đảm bảo `MONGODB_URI` đúng và MongoDB service đang chạy trước khi PM2 start.
-- **Meilisearch unavailable**: Search API trả về lỗi; client-side MiniSearch fallback (`search-index.json`) vẫn hoạt động. Kiểm tra `MEILISEARCH_HOST` + `MEILISEARCH_API_KEY`.
+- **Meilisearch unavailable**: Search API trả về lỗi; UI hiển thị banner cảnh báo (không còn offline fallback). Kiểm tra `MEILISEARCH_HOST` + `MEILISEARCH_API_KEY`.

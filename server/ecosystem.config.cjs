@@ -1,5 +1,5 @@
 // PM2 process config: server chạy bundled từ /var/www/hoccloud/server.bundle.js.
-// node_modules/better-sqlite3 (native) resolved qua cwd = /var/www/hoccloud/.
+// cwd = /var/www/hoccloud/ (pure-JS bundle, không còn native deps).
 const VPS_BASE = '/var/www/hoccloud';
 module.exports = {
   apps: [
@@ -14,7 +14,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 8387,
       },
-      // Load runtime config (SQLITE_DB_PATH, PUBLIC_BASE_URL...) từ $BASE/.env
+      // Load runtime config (MONGODB_URI, MEILISEARCH_*, PUBLIC_BASE_URL...) từ $BASE/.env
       // (symlink tới /var/www/hoccloud/shared/.env do CI tạo).
       env_file: '.env',
       error_file: '/var/www/hoccloud/logs/err.log',

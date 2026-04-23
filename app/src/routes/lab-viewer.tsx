@@ -2,8 +2,8 @@
  * lab-viewer.tsx
  *
  * Route: /lab/:slug
- * Loads a single lab dynamically via content-loader.getLab() and
- * renders it with <LabRenderer>. Shows a skeleton while loading
+ * Fetches a single lab from /api/labs/:slug and renders it with
+ * <LabRenderer>. Shows a skeleton while loading
  * and a 404 card if the slug is not found.
  */
 
@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { LabRenderer } from '@/components/lab/lab-renderer'
 import { LabToc } from '@/components/lab/lab-toc'
 import { SearchHighlightChip } from '@/components/search/search-highlight-chip'
-import { getLab } from '@/lib/content-loader'
+import { getLabContent } from '@/lib/api'
 import { useQueryHighlight } from '@/lib/hooks/use-query-highlight'
 import type { LabContent } from '@/lib/schema-lab'
 
@@ -100,7 +100,7 @@ export default function LabViewerPage() {
 
     let cancelled = false
 
-    getLab(slug)
+    getLabContent(slug)
       .then((lab) => {
         if (cancelled) return
         if (lab === null) {

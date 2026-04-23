@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm -C .. run gen:content && tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
@@ -37,7 +37,6 @@
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.469.0",
     "mermaid": "^11.14.0",
-    "minisearch": "^7.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.2.0",
