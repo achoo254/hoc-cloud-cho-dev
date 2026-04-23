@@ -8,13 +8,13 @@
 
 ## Component Architecture
 
-### Lab Renderer (THINK / SEE / SHIP)
+### Lab Renderer (THINK / SEE / TRY IT)
 
 `lab-renderer.tsx` renders lab content in three phases:
 
 - **THINK**: TL;DR table (or interactive playground on desktop)
 - **SEE**: Walkthrough steps (or interactive playground on desktop)
-- **SHIP**: Quiz, flashcards, try-at-home commands
+- **TRY IT**: Quiz, flashcards, try-at-home commands
 
 Desktop shows interactive playground via CSS-only switch (`hidden md:block` / `md:hidden`). Mobile always falls back to text.
 

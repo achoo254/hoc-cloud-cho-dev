@@ -30,7 +30,7 @@ Non-target: người tìm cert prep (AWS/Azure/GCP), enterprise training.
 | Req | Description | Status |
 |-----|-------------|--------|
 | FR-1 | 8+ labs mạng cơ bản với playground tương tác | ✅ 8 labs live |
-| FR-2 | THINK/SEE/SHIP structure per lab (TL;DR → walkthrough → quiz) | ✅ |
+| FR-2 | THINK/SEE/TRY IT structure per lab (TL;DR → walkthrough → quiz) | ✅ |
 | FR-3 | Desktop shows playground, mobile falls back to text | ✅ CSS-only switch |
 | FR-4 | Full-text search across labs với highlight | ✅ Meilisearch + typo-tolerance |
 | FR-5 | Progress tracking (opened, completed, quiz score) | ✅ Per anon UUID + authed user |

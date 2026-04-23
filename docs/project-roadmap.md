@@ -12,7 +12,7 @@ Workspace tự học Cloud/DevOps với trải nghiệm interactive thay vì đ�
 |-------|--------|---------|
 | P0 · Content pipeline & schema | ✅ Done | Lab JSON v3 schema, Zod validation, fixtures → MongoDB + Meilisearch sync |
 | P1 · Vite + React SPA migration | ✅ Done | Legacy static site → Vite+React SPA (commit `7e5e859`) |
-| P2 · Interactive playgrounds (8 labs) | ✅ Done | THINK/SEE/SHIP renderer + lazy-loaded diagram registry |
+| P2 · Interactive playgrounds (8 labs) | ✅ Done | THINK/SEE/TRY IT renderer + lazy-loaded diagram registry |
 | P3 · Dashboard & progress | ✅ Done | Stats, heatmap, due-queue, roadmap, catalog |
 | P4 · Search (Meilisearch) | ✅ Done | `/api/search` — typo-tolerant, `<mark>` highlight |
 | P5 · Auth & leaderboard | ✅ Done | Firebase Auth (Google) + leaderboard (commit `7efd833`) |

@@ -2,8 +2,8 @@
  * TCP/IP Packet Journey Interactive Playground
  * Phase 02: Layer-stack encapsulation (THINK)
  * Phase 03: Packet journey story mode (SEE)
- * OUTPUT tab (optional): nhận nội dung quiz/flashcards/commands từ lab-renderer.
- * Syncs active tab with URL hash (#think, #see, #output) for persistence across reloads.
+ * TRY IT tab (optional): nhận nội dung quiz/flashcards/commands từ lab-renderer.
+ * Syncs active tab with URL hash (#think, #see, #try-it) for persistence across reloads.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -14,37 +14,37 @@ import { PacketJourney } from './packet-journey'
 import { NetworkTopology, EXAMPLE_DEVOPS_FLOW } from './network-topology'
 import type { DiagramComponentProps } from './registry'
 
-type TabValue = 'think' | 'see' | 'output'
+type TabValue = 'think' | 'see' | 'try-it'
 
-function isValidTab(value: string, hasOutput: boolean): value is TabValue {
-  return value === 'think' || value === 'see' || (hasOutput && value === 'output')
+function isValidTab(value: string, hasTryIt: boolean): value is TabValue {
+  return value === 'think' || value === 'see' || (hasTryIt && value === 'try-it')
 }
 
-function getTabFromHash(hasOutput: boolean): TabValue | null {
+function getTabFromHash(hasTryIt: boolean): TabValue | null {
   if (typeof window === 'undefined') return null
   const hash = window.location.hash.slice(1).toLowerCase()
-  return isValidTab(hash, hasOutput) ? (hash as TabValue) : null
+  return isValidTab(hash, hasTryIt) ? (hash as TabValue) : null
 }
 
-export function TcpIpJourneyPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
-  const hasOutput = outputContent !== undefined && outputContent !== null
+export function TcpIpJourneyPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
+  const hasTryIt = tryItContent !== undefined && tryItContent !== null
 
-  const [activeTab, setActiveTab] = useState<TabValue>(() => getTabFromHash(hasOutput) || 'think')
+  const [activeTab, setActiveTab] = useState<TabValue>(() => getTabFromHash(hasTryIt) || 'think')
 
   useEffect(() => {
     const handleHashChange = () => {
-      const tab = getTabFromHash(hasOutput)
+      const tab = getTabFromHash(hasTryIt)
       if (tab) setActiveTab(tab)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [hasOutput])
+  }, [hasTryIt])
 
   const handleTabChange = useCallback((value: string) => {
-    if (!isValidTab(value, hasOutput)) return
+    if (!isValidTab(value, hasTryIt)) return
     setActiveTab(value)
     window.history.replaceState(null, '', `#${value}`)
-  }, [hasOutput])
+  }, [hasTryIt])
 
   return (
     <div className="space-y-4">
@@ -52,12 +52,12 @@ export function TcpIpJourneyPlayground({ lab, seeExtraContent, outputContent }: 
         <TabsList
           className={cn(
             'grid w-full',
-            hasOutput ? 'grid-cols-3 max-w-md' : 'grid-cols-2 max-w-xs'
+            hasTryIt ? 'grid-cols-3 max-w-md' : 'grid-cols-2 max-w-xs'
           )}
         >
           <TabsTrigger value="think">THINK</TabsTrigger>
           <TabsTrigger value="see">SEE</TabsTrigger>
-          {hasOutput && <TabsTrigger value="output">OUTPUT</TabsTrigger>}
+          {hasTryIt && <TabsTrigger value="try-it">TRY IT</TabsTrigger>}
         </TabsList>
 
         <TabsContent
@@ -103,14 +103,14 @@ export function TcpIpJourneyPlayground({ lab, seeExtraContent, outputContent }: 
           {seeExtraContent}
         </TabsContent>
 
-        {hasOutput && (
+        {hasTryIt && (
           <TabsContent
-            value="output"
+            value="try-it"
             forceMount
-            data-tab-value="output"
+            data-tab-value="try-it"
             className="mt-4 space-y-8"
           >
-            {outputContent}
+            {tryItContent}
           </TabsContent>
         )}
       </Tabs>

@@ -11,11 +11,11 @@ import { DhcpDoraVisualizer } from './dhcp-dora-visualizer'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function DhcpPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
+export function DhcpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
       seeExtraContent={seeExtraContent}
-      outputContent={outputContent}
+      tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
           <DhcpConceptCards items={lab.tldr} />

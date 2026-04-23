@@ -1,10 +1,10 @@
 /**
  * Top-level lab content renderer.
- * Renders sections trong 3 tab THINK/SEE/OUTPUT:
+ * Renders sections trong 3 tab THINK/SEE/TRY IT:
  *   THINK:  TLDR table (hoặc playground THINK nếu có diagram)
  *   SEE:    Playground SEE (nếu có) + Walkthrough steps
- *   OUTPUT: Quiz + Flashcards + Try-at-home commands
- * Khi có playground, tab state do playground quản (nó nhận Walkthrough + OUTPUT làm slot).
+ *   TRY IT: Quiz + Flashcards + Try-at-home commands
+ * Khi có playground, tab state do playground quản (nó nhận Walkthrough + TRY IT làm slot).
  * Khi không có playground, lab-renderer tự dựng Tabs với 3 tab.
  */
 
@@ -35,10 +35,10 @@ interface LabRendererProps {
   className?: string
 }
 
-type TabValue = 'think' | 'see' | 'output'
+type TabValue = 'think' | 'see' | 'try-it'
 
 function isValidTab(value: string): value is TabValue {
-  return value === 'think' || value === 'see' || value === 'output'
+  return value === 'think' || value === 'see' || value === 'try-it'
 }
 
 function getTabFromHash(): TabValue | null {
@@ -54,21 +54,25 @@ function SectionHeading({
   title,
   description,
 }: {
-  phase: 'THINK' | 'SEE' | 'SHIP' | 'OUTPUT'
+  phase: 'THINK' | 'SEE' | 'TRY_IT'
   title: string
   description?: string
 }) {
   const phaseColors: Record<typeof phase, string> = {
     THINK:  'bg-violet-500/15 text-violet-600 dark:text-violet-400',
     SEE:    'bg-blue-500/15 text-blue-600 dark:text-blue-400',
-    SHIP:   'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-    OUTPUT: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    TRY_IT: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  }
+  const phaseLabels: Record<typeof phase, string> = {
+    THINK:  'THINK',
+    SEE:    'SEE',
+    TRY_IT: 'TRY IT',
   }
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
         <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full', phaseColors[phase])}>
-          {phase}
+          {phaseLabels[phase]}
         </span>
         <h2 className="text-lg font-semibold">{title}</h2>
       </div>
@@ -95,11 +99,11 @@ function PlaygroundSkeleton() {
 function PlaygroundSection({
   lab,
   seeExtraContent,
-  outputContent,
+  tryItContent,
 }: {
   lab: LabContent
   seeExtraContent?: React.ReactNode
-  outputContent?: React.ReactNode
+  tryItContent?: React.ReactNode
 }) {
   if (!lab.diagram || lab.diagram.type !== 'custom') return null
 
@@ -123,7 +127,7 @@ function PlaygroundSection({
         <DiagramComponent
           lab={lab}
           seeExtraContent={seeExtraContent}
-          outputContent={outputContent}
+          tryItContent={tryItContent}
         />
       </Suspense>
     </PlaygroundErrorBoundary>
@@ -228,7 +232,7 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
   )
 }
 
-// ── SHIP: Try-at-home section ─────────────────────────────────────────────────
+// ── Try-at-home sub-section (rendered inside TRY IT tab) ──────────────────────
 
 function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
   return (
@@ -254,9 +258,9 @@ function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
   )
 }
 
-// ── OUTPUT: Quiz + Flashcards + Try-at-home composed block ────────────────────
+// ── TRY IT: Quiz + Flashcards + Try-at-home composed block ────────────────────
 
-function OutputBlock({
+function TryItBlock({
   lab,
   onQuizScore,
   onAllMastered,
@@ -268,7 +272,7 @@ function OutputBlock({
   return (
     <section className="space-y-8">
       <SectionHeading
-        phase="OUTPUT"
+        phase="TRY_IT"
         title="Thực hành"
         description="Quiz, flashcards, và lệnh thực hành."
       />
@@ -350,8 +354,8 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
     </>
   )
 
-  const outputComposed = (
-    <OutputBlock
+  const tryItComposed = (
+    <TryItBlock
       lab={lab}
       onQuizScore={handleQuizScore}
       onAllMastered={handleAllMastered}
@@ -374,21 +378,21 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
       <Separator />
 
-      {/* Khi có playground, playground quản tab (THINK/SEE/OUTPUT) — lab-renderer đẩy
-          SEE extra (walkthrough) và OUTPUT (quiz/flashcards/try-at-home) xuống dưới dạng slot. */}
+      {/* Khi có playground, playground quản tab (THINK/SEE/TRY IT) — lab-renderer đẩy
+          SEE extra (walkthrough) và TRY IT (quiz/flashcards/try-at-home) xuống dưới dạng slot. */}
       {hasPlayground ? (
         <div id="section-playground">
           <PlaygroundSection
             lab={lab}
             seeExtraContent={seeComposed}
-            outputContent={outputComposed}
+            tryItContent={tryItComposed}
           />
         </div>
       ) : (
         <LabTabsWithoutPlayground
           lab={lab}
           seeComposed={seeComposed}
-          outputComposed={outputComposed}
+          tryItComposed={tryItComposed}
         />
       )}
     </article>
@@ -400,11 +404,11 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 function LabTabsWithoutPlayground({
   lab,
   seeComposed,
-  outputComposed,
+  tryItComposed,
 }: {
   lab: LabContent
   seeComposed: React.ReactNode
-  outputComposed: React.ReactNode
+  tryItComposed: React.ReactNode
 }) {
   const [activeTab, setActiveTab] = useState<TabValue>(() => getTabFromHash() || 'think')
 
@@ -428,7 +432,7 @@ function LabTabsWithoutPlayground({
       <TabsList className="grid w-full grid-cols-3 max-w-md">
         <TabsTrigger value="think">THINK</TabsTrigger>
         <TabsTrigger value="see">SEE</TabsTrigger>
-        <TabsTrigger value="output">OUTPUT</TabsTrigger>
+        <TabsTrigger value="try-it">TRY IT</TabsTrigger>
       </TabsList>
 
       <TabsContent
@@ -452,12 +456,12 @@ function LabTabsWithoutPlayground({
       </TabsContent>
 
       <TabsContent
-        value="output"
+        value="try-it"
         forceMount
-        data-tab-value="output"
+        data-tab-value="try-it"
         className="mt-4"
       >
-        {outputComposed}
+        {tryItComposed}
       </TabsContent>
     </Tabs>
   )

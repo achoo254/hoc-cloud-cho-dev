@@ -12,11 +12,11 @@ import { TcpUdpComparison } from './tcp-udp-comparison'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function TcpUdpPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
+export function TcpUdpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
       seeExtraContent={seeExtraContent}
-      outputContent={outputContent}
+      tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
           <TcpUdpConceptCards items={lab.tldr} />

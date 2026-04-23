@@ -20,7 +20,7 @@ app/src/
 ├── routes/                 # index, lab-viewer, search, dev/*, not-found
 ├── components/
 │   ├── lab/                # Lab content rendering
-│   │   ├── lab-renderer.tsx         # THINK/SEE/SHIP top-level renderer
+│   │   ├── lab-renderer.tsx         # THINK/SEE/TRY IT top-level renderer
 │   │   ├── diagrams/                # Interactive playground components
 │   │   │   ├── registry.ts          # Lazy-loaded diagram registry
 │   │   │   ├── export-utils.ts      # SVG export + DOMPurify

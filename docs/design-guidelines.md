@@ -57,7 +57,7 @@ Dark mode: `class` strategy (`.dark` on `<html>`). Never use `prefers-color-sche
 - Component file < 200 LOC — split theo concern khi vượt
 
 ### Lab Renderer
-- Pattern THINK/SEE/SHIP cố định — không thêm phase mới tùy ý
+- Pattern THINK/SEE/TRY IT cố định — không thêm phase mới tùy ý
 - Desktop playground + mobile text cùng source (fixture JSON), CSS switch
 
 ## 5. Animation Rules

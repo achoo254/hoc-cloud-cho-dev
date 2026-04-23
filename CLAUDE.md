@@ -39,7 +39,7 @@ MongoDB là single source of truth cho lab content. System labs mặc định đ
 
 ### Frontend Structure
 
-- `app/src/components/lab/lab-renderer.tsx` — Top-level renderer using THINK/SEE/SHIP phase pattern
+- `app/src/components/lab/lab-renderer.tsx` — Top-level renderer using THINK/SEE/TRY IT phase pattern
 - `app/src/components/lab/diagrams/registry.ts` — Maps `diagram.component` fixture keys to lazy-loaded React components
 - `app/src/lib/schema-lab.ts` — Zod schema for lab content validation (v3)
 
@@ -76,7 +76,7 @@ Never use `d3.select()` or direct DOM mutation — conflicts with React reconcil
 
 - **THINK**: TL;DR table (desktop shows interactive playground)
 - **SEE**: Walkthrough steps (desktop shows interactive playground)
-- **SHIP**: Quiz, flashcards, try-at-home commands
+- **TRY IT**: Quiz, flashcards, try-at-home commands
 
 Desktop/mobile switch is CSS-only (`hidden md:block`).
 

@@ -23,7 +23,7 @@ import {
 
 // ── TOC types & defaults ──────────────────────────────────────────────────────
 
-export type TocPhase = 'THINK' | 'SEE' | 'SHIP'
+export type TocPhase = 'THINK' | 'SEE' | 'TRY_IT'
 
 export interface TocEntry {
   id: string
@@ -32,25 +32,25 @@ export interface TocEntry {
 }
 
 export const DEFAULT_TOC_ENTRIES: TocEntry[] = [
-  { id: 'section-think',      label: 'Tổng quan',    phase: 'THINK' },
-  { id: 'section-see',        label: 'Walkthrough',  phase: 'SEE'   },
-  { id: 'section-quiz',       label: 'Quiz',         phase: 'SHIP'  },
-  { id: 'section-flashcards', label: 'Flashcards',   phase: 'SHIP'  },
-  { id: 'section-commands',   label: 'Commands',     phase: 'SHIP'  },
+  { id: 'section-think',      label: 'Tổng quan',    phase: 'THINK'  },
+  { id: 'section-see',        label: 'Walkthrough',  phase: 'SEE'    },
+  { id: 'section-quiz',       label: 'Quiz',         phase: 'TRY_IT' },
+  { id: 'section-flashcards', label: 'Flashcards',   phase: 'TRY_IT' },
+  { id: 'section-commands',   label: 'Commands',     phase: 'TRY_IT' },
 ]
 
 export const PHASE_DOT_COLORS: Record<TocPhase, string> = {
-  THINK: 'bg-violet-500',
-  SEE:   'bg-blue-500',
-  SHIP:  'bg-emerald-500',
+  THINK:  'bg-violet-500',
+  SEE:    'bg-blue-500',
+  TRY_IT: 'bg-amber-500',
 }
 
-// Map TOC phase → tab value trong lab-renderer (THINK/SEE/OUTPUT).
-// SHIP group (quiz/flashcards/commands) nằm trong tab OUTPUT.
-const PHASE_TO_TAB: Record<TocPhase, 'think' | 'see' | 'output'> = {
-  THINK: 'think',
-  SEE:   'see',
-  SHIP:  'output',
+// Map TOC phase → tab value trong lab-renderer (THINK/SEE/TRY IT).
+// TRY_IT group (quiz/flashcards/commands) nằm trong tab try-it.
+const PHASE_TO_TAB: Record<TocPhase, 'think' | 'see' | 'try-it'> = {
+  THINK:  'think',
+  SEE:    'see',
+  TRY_IT: 'try-it',
 }
 
 // For backwards compatibility

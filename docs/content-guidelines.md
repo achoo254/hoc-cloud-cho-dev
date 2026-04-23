@@ -142,7 +142,7 @@ Trước khi commit một lab/doc, kiểm:
 
 ## 8. Áp dụng cho schema v3 (labs)
 
-Mapping guidelines với 12 sections của schema v3 (mnemonic: THINK · SEE · SHIP · OUTPUT). Spec đầy đủ: [`lab-schema-v3.md`](./lab-schema-v3.md).
+Mapping guidelines với 12 sections của schema v3 (mnemonic: THINK · SEE · TRY IT — AUTOMATE/DEPLOY là callouts nằm trong walkthrough/tldr). Spec đầy đủ: [`lab-schema-v3.md`](./lab-schema-v3.md).
 
 | Group | Section | Key | Mandatory? | Yêu cầu nguồn |
 |-------|---------|-----|------------|---------------|
@@ -152,12 +152,12 @@ Mapping guidelines với 12 sections của schema v3 (mnemonic: THINK · SEE · 
 | SEE | OBSERVE | `observeWith` | ✅ | Bắt buộc cite man page tool |
 | SEE | FAIL | `failModes[]` | ⚪ optional | Bắt buộc cite log reference / error doc |
 | SEE | FIX | `fixSteps[]` | ⚪ optional | Bắt buộc cite man page cho command |
-| SHIP | AUTOMATE | `automateScript` | ⚪ optional | Cite vendor docs nếu dùng API/lib |
-| SHIP | DEPLOY | `deploymentUse` | ✅ | Bắt buộc cite vendor docs nếu config cụ thể |
-| OUTPUT | TL;DR | `tldr[]` | ✅ | Inherit cite từ row |
-| OUTPUT | Quiz | `quiz[]` | ✅ | Cite trong `whyCorrect` |
-| OUTPUT | Flashcards | `flashcards[]` | ✅ | Cite ngắn, inline |
-| OUTPUT | Try at home | `tryAtHome[]` | ✅ | Bắt buộc cite man page nếu flag lạ |
+| (callout) | AUTOMATE | `automateScript` | ⚪ optional | Cite vendor docs nếu dùng API/lib |
+| (callout) | DEPLOY | `deploymentUse` | ✅ | Bắt buộc cite vendor docs nếu config cụ thể |
+| TRY IT | TL;DR | `tldr[]` | ✅ | Inherit cite từ row |
+| TRY IT | Quiz | `quiz[]` | ✅ | Cite trong `whyCorrect` |
+| TRY IT | Flashcards | `flashcards[]` | ✅ | Cite ngắn, inline |
+| TRY IT | Try at home | `tryAtHome[]` | ✅ | Bắt buộc cite man page nếu flag lạ |
 
 Optional section (FAIL/FIX/AUTOMATE): **không render DOM trống** nếu thiếu data. Không gượng ép — thêm khi lab tự nhiên có failure evidence / fix action / automation script.
 

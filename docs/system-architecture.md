@@ -9,7 +9,7 @@ Production: **https://hoc-cloud.inetdev.io.vn/**
 │                    Browser (React SPA)                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
 │  │ Lab Renderer │  │  Dashboard   │  │  Firebase Auth SDK │    │
-│  │ THINK/SEE/SHIP│  │  + Heatmap  │  │  (Google provider) │    │
+│  │ THINK/SEE/TRY │  │  + Heatmap  │  │  (Google provider) │    │
 │  └──────┬───────┘  └──────┬───────┘  └─────────┬──────────┘    │
 │         │                 │                    │ ID token      │
 └─────────┼─────────────────┼────────────────────┼───────────────┘
@@ -58,7 +58,7 @@ GET /lab/dns
   → Nginx → SPA index.html
   → React Router lazy-loads lab-viewer route
   → fetch /api/progress (sets anon UUID cookie if absent)
-  → render THINK (playground + TL;DR) → SEE (walkthrough) → SHIP (quiz)
+  → render THINK (playground + TL;DR) → SEE (walkthrough) → TRY IT (quiz)
 ```
 
 ### 2. Google sign-in → Session cookie
@@ -99,13 +99,13 @@ GET /api/leaderboard
 
 ## Rendering Architecture
 
-### Lab Renderer THINK/SEE/SHIP
+### Lab Renderer THINK/SEE/TRY IT
 
 | Phase | Desktop (`md:block`) | Mobile (`md:hidden`) |
 |-------|---------------------|----------------------|
 | THINK | Interactive playground | TL;DR table |
 | SEE | Interactive playground | Walkthrough steps |
-| SHIP | Quiz + flashcards + try-at-home commands (same on both) |
+| TRY IT | Quiz + flashcards + try-at-home commands (same on both) |
 
 CSS-only switch — no JS-based device detection.
 

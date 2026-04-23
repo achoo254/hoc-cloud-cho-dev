@@ -1,9 +1,9 @@
 /**
- * Reusable playground shell with THINK/SEE/OUTPUT tabs pattern.
+ * Reusable playground shell with THINK/SEE/TRY IT tabs pattern.
  * Provides consistent structure for all lab playgrounds.
- * Syncs active tab with URL hash (#think, #see, #output) for persistence across reloads.
+ * Syncs active tab with URL hash (#think, #see, #try-it) for persistence across reloads.
  *
- * OUTPUT tab renders chỉ khi `outputContent` được truyền vào. `seeExtraContent`
+ * TRY IT tab renders chỉ khi `tryItContent` được truyền vào. `seeExtraContent`
  * được append vào cuối SEE tab (dành cho walkthrough lab-renderer đẩy xuống).
  */
 
@@ -11,65 +11,65 @@ import { useState, useEffect, useCallback } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 
-type TabValue = 'think' | 'see' | 'output'
+type TabValue = 'think' | 'see' | 'try-it'
 
 interface PlaygroundShellProps {
   thinkContent: React.ReactNode
   seeContent: React.ReactNode
   /** Hiển thị ở cuối tab SEE (thường là Walkthrough từ lab-renderer). */
   seeExtraContent?: React.ReactNode
-  /** Khi có, bật tab OUTPUT (quiz/flashcards/try-at-home). */
-  outputContent?: React.ReactNode
+  /** Khi có, bật tab TRY IT (quiz/flashcards/try-at-home). */
+  tryItContent?: React.ReactNode
   defaultTab?: TabValue
   thinkLabel?: string
   seeLabel?: string
-  outputLabel?: string
+  tryItLabel?: string
   className?: string
 }
 
-function isValidTab(value: string, hasOutput: boolean): value is TabValue {
-  return value === 'think' || value === 'see' || (hasOutput && value === 'output')
+function isValidTab(value: string, hasTryIt: boolean): value is TabValue {
+  return value === 'think' || value === 'see' || (hasTryIt && value === 'try-it')
 }
 
-function getTabFromHash(hasOutput: boolean): TabValue | null {
+function getTabFromHash(hasTryIt: boolean): TabValue | null {
   if (typeof window === 'undefined') return null
   const hash = window.location.hash.slice(1).toLowerCase()
-  return isValidTab(hash, hasOutput) ? (hash as TabValue) : null
+  return isValidTab(hash, hasTryIt) ? (hash as TabValue) : null
 }
 
 export function PlaygroundShell({
   thinkContent,
   seeContent,
   seeExtraContent,
-  outputContent,
+  tryItContent,
   defaultTab = 'think',
   thinkLabel = 'THINK',
   seeLabel = 'SEE',
-  outputLabel = 'OUTPUT',
+  tryItLabel = 'TRY IT',
   className,
 }: PlaygroundShellProps) {
-  const hasOutput = outputContent !== undefined && outputContent !== null
+  const hasTryIt = tryItContent !== undefined && tryItContent !== null
 
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
-    return getTabFromHash(hasOutput) || defaultTab
+    return getTabFromHash(hasTryIt) || defaultTab
   })
 
   // Sync hash → state on popstate (browser back/forward)
   useEffect(() => {
     const handleHashChange = () => {
-      const tab = getTabFromHash(hasOutput)
+      const tab = getTabFromHash(hasTryIt)
       if (tab) setActiveTab(tab)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [hasOutput])
+  }, [hasTryIt])
 
   // Update URL hash when tab changes
   const handleTabChange = useCallback((value: string) => {
-    if (!isValidTab(value, hasOutput)) return
+    if (!isValidTab(value, hasTryIt)) return
     setActiveTab(value)
     window.history.replaceState(null, '', `#${value}`)
-  }, [hasOutput])
+  }, [hasTryIt])
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -77,12 +77,12 @@ export function PlaygroundShell({
         <TabsList
           className={cn(
             'grid w-full',
-            hasOutput ? 'grid-cols-3 max-w-md' : 'grid-cols-2 max-w-xs'
+            hasTryIt ? 'grid-cols-3 max-w-md' : 'grid-cols-2 max-w-xs'
           )}
         >
           <TabsTrigger value="think">{thinkLabel}</TabsTrigger>
           <TabsTrigger value="see">{seeLabel}</TabsTrigger>
-          {hasOutput && <TabsTrigger value="output">{outputLabel}</TabsTrigger>}
+          {hasTryIt && <TabsTrigger value="try-it">{tryItLabel}</TabsTrigger>}
         </TabsList>
 
         <TabsContent
@@ -104,14 +104,14 @@ export function PlaygroundShell({
           {seeExtraContent}
         </TabsContent>
 
-        {hasOutput && (
+        {hasTryIt && (
           <TabsContent
-            value="output"
+            value="try-it"
             forceMount
-            data-tab-value="output"
+            data-tab-value="try-it"
             className="mt-4 space-y-8"
           >
-            {outputContent}
+            {tryItContent}
           </TabsContent>
         )}
       </Tabs>

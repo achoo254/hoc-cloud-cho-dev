@@ -1,21 +1,21 @@
 ---
-title: Lab Schema v3 — THINK · SEE · SHIP
+title: Lab Schema v3 — THINK · SEE · TRY IT
 status: active
 version: 3.0
 supersedes: schema-v2 (in content-guidelines.md §8)
 ---
 
-# Lab Schema v3 — THINK · SEE · SHIP
+# Lab Schema v3 — THINK · SEE · TRY IT
 
-Nâng cấp từ v2 (4 chân: WHY/BREAKS/OBSERVE/DEPLOY) sang v3 mnemonic 4 nhóm **12 sections**. Tách bạch lý luận (THINK), quan sát (SEE), action (SHIP), output học tập (OUTPUT).
+Nâng cấp từ v2 (4 chân: WHY/BREAKS/OBSERVE/DEPLOY) sang v3 mnemonic 3 nhóm tab UI (THINK/SEE/TRY IT) bao phủ **12 sections**. Tách bạch lý luận (THINK), quan sát (SEE), và thực hành chủ động (TRY IT — quiz, flashcards, try-at-home). AUTOMATE/DEPLOY callouts nằm trong walkthrough/tldr step, không còn là phase riêng.
 
 ## 1. Mnemonic
 
 ```
 THINK   → Misconceptions* · WHY* · BREAKS*
 SEE     → OBSERVE* · FAIL° · FIX°
-SHIP    → AUTOMATE° · DEPLOY*
-OUTPUT  → TL;DR* · Quiz* · Flashcards* · Try at home*
+TRY IT  → TL;DR* · Quiz* · Flashcards* · Try at home*
+           (callouts đi kèm step: AUTOMATE° · DEPLOY*)
 ```
 
 `*` = mandatory (9 sections) — thiếu → validator fail + console warn
@@ -32,20 +32,20 @@ OUTPUT  → TL;DR* · Quiz* · Flashcards* · Try at home*
 | `dependsOn` | string[] | — | meta | Badge hero |
 | `enables` | string[] | — | meta | Badge hero |
 | `misconceptions` | `{wrong, right, why}[]` | ✅ (≥2) | THINK | Giữ shape v2, ≥2 item |
-| `tldr` | row[] | ✅ | OUTPUT | Xem schema row dưới |
-| `walkthrough` | step[] | ✅ | OUTPUT | Xem schema step dưới |
-| `quiz` | question[] | ✅ | OUTPUT | ≥4 item |
-| `flashcards` | card[] | ✅ | OUTPUT | ≥5 item |
-| `tryAtHome` | task[] | ✅ | OUTPUT | ≥2 item |
+| `tldr` | row[] | ✅ | TRY IT | Xem schema row dưới |
+| `walkthrough` | step[] | ✅ | TRY IT | Xem schema step dưới |
+| `quiz` | question[] | ✅ | TRY IT | ≥4 item |
+| `flashcards` | card[] | ✅ | TRY IT | ≥5 item |
+| `tryAtHome` | task[] | ✅ | TRY IT | ≥2 item |
 
-### `tldr[]` row (nhóm OUTPUT, render bảng)
+### `tldr[]` row (nhóm TRY IT, render bảng)
 
 | Key | Type | Mandatory | Note |
 |-----|------|-----------|------|
 | `what` | string | ✅ | Tiêu đề row |
 | `why` | string | ✅ | THINK — lý do |
 | `whyBreaks` | string | ✅ | THINK — hậu quả lý luận |
-| `deploymentUse` | string | ✅ | SHIP — prod checklist |
+| `deploymentUse` | string | ✅ | DEPLOY callout — prod checklist |
 
 ### `walkthrough[]` step (SEE core, render card-by-card)
 
@@ -58,8 +58,8 @@ OUTPUT  → TL;DR* · Quiz* · Flashcards* · Try at home*
 | `observeWith` | string | ✅ | SEE | Callout OBSERVE (man/tool) |
 | `failModes` | `{symptom, evidence}[]` | ° | SEE | Callout FAIL — triệu chứng + log/error |
 | `fixSteps` | `{step, command?}[]` | ° | SEE | Callout FIX — action sau FAIL |
-| `automateScript` | `{lang, code, note?}` | ° | SHIP | Callout AUTOMATE — script hoá |
-| `deploymentUse` | string | — | SHIP | Optional per-step (TLDR đã có deployment) |
+| `automateScript` | `{lang, code, note?}` | ° | — | Callout AUTOMATE — script hoá |
+| `deploymentUse` | string | — | — | Callout DEPLOY — optional per-step (TLDR đã có deployment) |
 | `code` | string | — | — | Code block demo |
 | `lang` | string | — | — | Ngôn ngữ code (default `bash`) |
 | `note` | string | — | — | Ghi chú nhỏ |

@@ -14,11 +14,11 @@ import { SubnetDerivationGuide } from './subnet-derivation-guide'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function IPv4Playground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
+export function IPv4Playground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
       seeExtraContent={seeExtraContent}
-      outputContent={outputContent}
+      tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
           <IPv4ConceptCards items={lab.tldr} />

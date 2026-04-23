@@ -11,11 +11,11 @@ import { DnsVisualizer } from './dns-visualizer'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function DnsPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
+export function DnsPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
       seeExtraContent={seeExtraContent}
-      outputContent={outputContent}
+      tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
           <DnsConceptCards items={lab.tldr} />

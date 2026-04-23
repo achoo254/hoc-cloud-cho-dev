@@ -12,11 +12,11 @@ import { ArpHeaderComparison } from './arp-header-comparison'
 import { PlaygroundShell } from './shared'
 import type { DiagramComponentProps } from './registry'
 
-export function ArpPlayground({ lab, seeExtraContent, outputContent }: DiagramComponentProps) {
+export function ArpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
   return (
     <PlaygroundShell
       seeExtraContent={seeExtraContent}
-      outputContent={outputContent}
+      tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
           <ArpConceptCards items={lab.tldr} />

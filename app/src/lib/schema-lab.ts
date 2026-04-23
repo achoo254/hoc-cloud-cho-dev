@@ -1,5 +1,5 @@
 /**
- * Zod schema v3 for lab content — "THINK · SEE · SHIP" structure.
+ * Zod schema v3 for lab content — "THINK · SEE · TRY IT" structure.
  * Source of truth cho lab shape (FE parse API responses + seed fixtures).
  * Uses .passthrough() on all domain-specific objects to tolerate variance.
  */
@@ -79,7 +79,7 @@ export const WalkthroughStepSchema = z
   })
   .passthrough()
 
-// ── SHIP section ──────────────────────────────────────────────────────────────
+// ── TRY IT section ────────────────────────────────────────────────────────────
 
 export const QuizItemSchema = z
   .object({

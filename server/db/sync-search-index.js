@@ -51,7 +51,7 @@ function extractWalkthroughText(walkthrough) {
   return joinTexts(parts);
 }
 
-// Quiz items (SHIP phase): q/options/whyCorrect/whyWrong.
+// Quiz items (TRY IT phase): q/options/whyCorrect/whyWrong.
 function extractQuizText(quiz) {
   if (!Array.isArray(quiz)) return '';
   const parts = [];
@@ -67,7 +67,7 @@ function extractQuizText(quiz) {
   return joinTexts(parts);
 }
 
-// Flashcards (SHIP phase): front/back/why.
+// Flashcards (TRY IT phase): front/back/why.
 function extractFlashcardText(flashcards) {
   if (!Array.isArray(flashcards)) return '';
   const parts = [];
@@ -78,7 +78,7 @@ function extractFlashcardText(flashcards) {
   return joinTexts(parts);
 }
 
-// Try-at-home commands (SHIP phase): cmd/why/observeWith + legacy command/description.
+// Try-at-home commands (TRY IT phase): cmd/why/observeWith + legacy command/description.
 function extractTryAtHomeText(tryAtHome) {
   if (!Array.isArray(tryAtHome)) return '';
   const parts = [];
