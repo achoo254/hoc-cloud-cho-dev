@@ -57,11 +57,6 @@ export const diagramRegistry = {
       default: m.DnsPlayground,
     }))
   ),
-  WebTerminal: lazy(() =>
-    import('../web-terminal').then((m) => ({
-      default: m.WebTerminal,
-    }))
-  ),
 } as const satisfies Record<string, React.LazyExoticComponent<DiagramComponent>>
 
 export type DiagramRegistryKey = keyof typeof diagramRegistry

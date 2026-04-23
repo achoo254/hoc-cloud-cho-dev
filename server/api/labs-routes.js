@@ -19,7 +19,6 @@ function toLabContent(doc) {
     flashcards: doc.flashcards ?? [],
     try_at_home: doc.tryAtHome ?? [],
     diagram: doc.diagram ?? undefined,
-    terminal: doc.terminal ?? undefined,
   };
 }
 

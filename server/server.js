@@ -1,7 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
-import { createNodeWebSocket } from '@hono/node-ws';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { watch, existsSync, readFileSync } from 'node:fs';
@@ -40,14 +39,8 @@ const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
 const { labsRoutes } = await import('./api/labs-routes.js');
 const { authRoutes } = await import('./auth/firebase-auth.js');
 const { sessionMiddleware } = await import('./auth/session-middleware.js');
-const { mountTerminalRoutes } = await import('./terminal/terminal-routes.js');
-const { startCleanupCron } = await import('./terminal/cleanup-cron.js');
 
 const app = new Hono();
-
-// WS upgrade must be attached to the TOP-LEVEL app so injectWebSocket() can
-// find the /ws/* routes when the HTTP server upgrades.
-const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
 app.use('*', logger());
 app.use('*', cspMiddleware);
@@ -108,20 +101,10 @@ app.route('/', progressRoutes);
 app.route('/', leaderboardRoutes);
 app.route('/', labsRoutes);
 
-mountTerminalRoutes(app, upgradeWebSocket);
-
 app.notFound((c) => c.text('Not Found', 404));
 
 const port = Number(process.env.PORT) || 8387;
 
-const server = serve({ fetch: app.fetch, port, hostname: process.env.HOST || '127.0.0.1' }, (info) => {
+serve({ fetch: app.fetch, port, hostname: process.env.HOST || '127.0.0.1' }, (info) => {
   console.log(`[hoc-cloud-labs] serving on http://${info.address}:${info.port}`);
 });
-
-// Wire WS upgrade onto the node http.Server.
-injectWebSocket(server);
-
-// Start idle/orphan cleanup loop for terminal sessions.
-if (process.env.TERMINAL_CLEANUP_DISABLED !== '1') {
-  startCleanupCron();
-}

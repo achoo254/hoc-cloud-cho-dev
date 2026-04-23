@@ -16,7 +16,6 @@ const labSchema = new Schema({
   flashcards: [Schema.Types.Mixed],
   tryAtHome: [Schema.Types.Mixed],
   diagram: Schema.Types.Mixed,
-  terminal: Schema.Types.Mixed,
   contentHash: String,
 }, { timestamps: true });
 

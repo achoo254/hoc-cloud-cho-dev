@@ -21,7 +21,6 @@ import { CompletionBanner } from '@/components/lab/completion-banner'
 import { useProgress } from '@/lib/hooks/use-progress'
 import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
 import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
-import { WebTerminal } from '@/components/lab/web-terminal'
 import type { LabContent, TldrItem, WalkthroughStep, TryAtHome } from '@/lib/schema-lab'
 
 // Feature flag (RED TEAM #12) + query override
@@ -131,21 +130,6 @@ function PlaygroundSection({
         />
       </Suspense>
     </PlaygroundErrorBoundary>
-  )
-}
-
-// ── Terminal section (optional, via lab.terminal.enabled) ────────────────────
-
-function TerminalSection({ lab }: { lab: LabContent }) {
-  return (
-    <section className="space-y-4">
-      <SectionHeading
-        phase="SEE"
-        title="Terminal thực hành"
-        description="Shell tmux chạy trong container lab — gõ lệnh và quan sát trực tiếp."
-      />
-      <WebTerminal lab={lab} />
-    </section>
   )
 }
 
@@ -338,20 +322,11 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
 
   // Check if interactive playground should render (RED TEAM #12, #14)
   const hasPlayground = PLAYGROUND_ENABLED && !getTextOverride() && lab.diagram?.type === 'custom'
-  const hasTerminal = lab.terminal?.enabled === true
 
-  // SEE tab composed content: terminal (if any) + walkthrough
   const seeComposed = (
-    <>
-      {hasTerminal && (
-        <div id="section-terminal">
-          <TerminalSection lab={lab} />
-        </div>
-      )}
-      <div id="section-see">
-        <WalkthroughSection steps={lab.walkthrough} />
-      </div>
-    </>
+    <div id="section-see">
+      <WalkthroughSection steps={lab.walkthrough} />
+    </div>
   )
 
   const tryItComposed = (
