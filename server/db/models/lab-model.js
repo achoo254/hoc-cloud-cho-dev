@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
-// Content subdocs use Mixed: Zod (schema-lab.ts / lab-schema.js) is the source
-// of truth for fixture shape. Typed Mongoose subdocs dropped fixture fields
+// Content subdocs use Mixed: Zod (app/src/lib/schema-lab.ts) is the source
+// of truth for lab content shape. Typed Mongoose subdocs dropped fields
 // silently (tldr, quiz, tryAtHome all lost data). Mixed preserves everything.
 const labSchema = new Schema({
   slug: { type: String, unique: true, required: true, index: true },

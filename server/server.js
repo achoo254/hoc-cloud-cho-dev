@@ -34,7 +34,6 @@ await connectMongo();
 
 const { cspMiddleware } = await import('./lib/csp-middleware.js');
 const { broadcastReload, sseStream, addClient } = await import('./lib/sse-reload.js');
-const { syncLabsToDb } = await import('./scripts/sync-labs-to-db.js');
 const { searchRoutes } = await import('./api/search-routes.js');
 const { progressRoutes } = await import('./api/progress-routes.js');
 const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
@@ -43,8 +42,6 @@ const { authRoutes } = await import('./auth/firebase-auth.js');
 const { sessionMiddleware } = await import('./auth/session-middleware.js');
 const { mountTerminalRoutes } = await import('./terminal/terminal-routes.js');
 const { startCleanupCron } = await import('./terminal/cleanup-cron.js');
-
-try { await syncLabsToDb(); } catch (err) { console.error('[sync-labs] boot failed:', err.message); }
 
 const app = new Hono();
 

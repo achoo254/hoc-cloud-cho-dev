@@ -183,6 +183,16 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
             >
               <polygon points="0 0, 10 3.5, 0 7" className="fill-emerald-500" />
             </marker>
+            <marker
+              id="arrowhead-broadcast"
+              markerWidth="10"
+              markerHeight="7"
+              refX="9"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" className="fill-amber-500" />
+            </marker>
           </defs>
 
           {/* Connection lines */}
@@ -238,13 +248,48 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
             </g>
           ))}
 
-          {/* Direction arrow — from packet to target device */}
-          {packetDevice && currentFrame?.highlight?.device && !currentFrame?.isNarrationOnly && (() => {
-            const targetDevice = DEVICES.find(d => d.id === currentFrame.highlight?.device)
-            if (!targetDevice || targetDevice.id === packetPos?.device) return null
-            const startX = packetDevice.x
-            const endX = targetDevice.x
+          {/* Direction arrow(s) — broadcast toả ra tất cả, unicast chỉ tới target */}
+          {packetDevice && !currentFrame?.isNarrationOnly && (() => {
             const arrowY = DEVICE_Y - 60
+            const startX = packetDevice.x
+
+            if (currentFrame?.isBroadcast) {
+              // Broadcast: vẽ mũi tên từ packetDevice tới TẤT CẢ device khác
+              const others = DEVICES.filter((d) => d.id !== packetPos?.device)
+              return (
+                <>
+                  {others.map((d, i) => (
+                    <motion.line
+                      key={`bcast-${d.id}`}
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      animate={{ pathLength: 1, opacity: 0.55 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.3, delay: i * 0.05 }}
+                      x1={startX}
+                      y1={arrowY}
+                      x2={d.x - (d.x > startX ? 15 : -15)}
+                      y2={arrowY}
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeDasharray="3 3"
+                      className="stroke-amber-500"
+                      markerEnd="url(#arrowhead-broadcast)"
+                    />
+                  ))}
+                  <text
+                    x={startX + 8}
+                    y={arrowY - 6}
+                    className="fill-amber-500 text-[9px] font-semibold"
+                  >
+                    BROADCAST · FF:FF:FF:FF:FF:FF
+                  </text>
+                </>
+              )
+            }
+
+            // Unicast: chỉ 1 mũi tên tới target
+            const targetDevice = DEVICES.find((d) => d.id === currentFrame?.highlight?.device)
+            if (!targetDevice || targetDevice.id === packetPos?.device) return null
+            const endX = targetDevice.x
             return (
               <motion.line
                 initial={{ pathLength: 0, opacity: 0 }}
@@ -312,7 +357,7 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
         </svg>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-full bg-emerald-500" />
             Packet
@@ -327,9 +372,16 @@ export function PacketJourney({ labSlug = 'tcp-ip-packet-journey' }: PacketJourn
           </span>
           <span className="flex items-center gap-1">
             <span className="text-emerald-500">→</span>
-            Hướng di chuyển
+            Unicast
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-amber-500">⇢⇢</span>
+            Broadcast (ARP)
           </span>
         </div>
+        <p className="text-center mt-1 text-[10px] text-muted-foreground/80">
+          L1 = TCP/IP Link layer (tương đương OSI L1 Physical + L2 Data Link). ARP chạy ở tầng này.
+        </p>
       </div>
 
       {/* Timeline scrubber */}

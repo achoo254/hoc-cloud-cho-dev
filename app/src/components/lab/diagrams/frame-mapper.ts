@@ -20,6 +20,8 @@ export interface Frame {
   packetPath: PacketPosition[]
   highlight?: { protocol?: string; device?: DeviceId }
   isNarrationOnly?: boolean
+  // true = ARP-style broadcast: client gửi ra toàn LAN, vẽ nhiều mũi tên toả
+  isBroadcast?: boolean
 }
 
 // Hardcoded frames for tcp-ip-packet-journey walkthrough (8 steps)
@@ -57,8 +59,8 @@ export const TCP_IP_FRAMES: Frame[] = [
   {
     stepIdx: 2,
     narration: {
-      what: 'ARP Request: Client hỏi MAC của Router',
-      why: 'Cần MAC address để gửi frame qua Link layer',
+      what: 'ARP Request: Client broadcast "Ai giữ IP của Router?"',
+      why: 'Broadcast L2 tới TOÀN LAN (MAC đích = FF:FF:FF:FF:FF:FF). Client chưa biết ai là Router nên phải hỏi tất cả. Chỉ thiết bị có IP khớp mới trả lời.',
     },
     packetPath: [
       { device: 'client', layer: 2 },
@@ -66,12 +68,13 @@ export const TCP_IP_FRAMES: Frame[] = [
       { device: 'router', layer: 1 },
     ],
     highlight: { protocol: 'ARP', device: 'router' },
+    isBroadcast: true,
   },
   {
     stepIdx: 3,
     narration: {
-      what: 'ARP Reply: Router trả MAC address',
-      why: 'Client giờ có đủ thông tin để gửi packet qua router',
+      what: 'ARP Reply: Router unicast MAC của CHÍNH NÓ về Client',
+      why: 'Đây là MAC của Router (gateway), KHÔNG phải MAC của Server. Server ở ngoài LAN — Client không bao giờ biết MAC Server. Frame L2 chỉ đi được 1 hop, next-hop luôn là Router.',
     },
     packetPath: [
       { device: 'router', layer: 1 },

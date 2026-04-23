@@ -37,8 +37,6 @@
 | `app/` | Vite+React SPA — components, playgrounds, diagrams, dashboard |
 | `server/` | Hono.js: `/api/labs`, `/api/search`, `/api/progress`, `/api/leaderboard`, `/auth/*` |
 | `server/auth/` | Firebase Admin, session middleware |
-| `fixtures/labs/` | Lab JSON (schema v3) — source of truth (sync vào MongoDB) |
-| `scripts/` | Build scripts (validate schema, sync labs, bundler) |
 | `docs/` | Tài liệu dự án |
 | `deploy/` | `nginx.conf.example` tham chiếu |
 
@@ -81,10 +79,9 @@ VPS không cần `package.json`, không `npm ci`. Nginx config: `deploy/nginx.co
 
 ## Thêm lab mới
 
-1. Tạo fixture JSON trong `fixtures/labs/` (schema v3 — xem `docs/lab-schema-v3.md`)
-2. Validate: `node scripts/validate-lab-fixtures.js`
-3. Sync vào MongoDB + Meilisearch: `pnpm run sync-labs`
-4. Thêm playground component vào `app/src/components/lab/diagrams/` nếu cần
+1. Insert trực tiếp vào MongoDB (schema v3 — xem `docs/lab-schema-v3.md`), hoặc dùng UI editor khi có (user-generated labs phase)
+2. Meilisearch tự sync qua post-save hook (Mongoose `lab-model.js`)
+3. Thêm playground component vào `app/src/components/lab/diagrams/` nếu cần
 
 Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 
@@ -106,9 +103,6 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 ## Cheat-sheet
 
 ```bash
-# Sync fixtures → MongoDB + Meilisearch
-pnpm run sync-labs
-
 # Reset progress (browser)
 DevTools → Application → Cookies → xoá session; Local Storage → xoá key lab:*
 ```

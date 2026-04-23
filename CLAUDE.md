@@ -21,14 +21,6 @@ pnpm --dir app run typecheck
 pnpm --dir app run build     # FE → app/dist/
 pnpm run build:server        # BE → dist-server/server.bundle.js
 
-# Validate lab fixtures against schema
-node scripts/validate-lab-fixtures.js
-
-# Build server-side labs data bundle (fixtures → server/generated/labs-data.mjs)
-pnpm run gen:server-data
-
-# Sync labs to MongoDB (+ Meilisearch index if reachable)
-pnpm run sync-labs
 ```
 
 ## Architecture
@@ -38,14 +30,12 @@ Monorepo with Vite+React SPA (`app/`) and Hono.js API server (`server/`).
 ### Data Flow
 
 ```
-fixtures/labs/*.json ─→ scripts/build-server-data.mjs ─→ server/generated/labs-data.mjs
-                     ─→ server/scripts/sync-labs-to-db.js ─→ MongoDB (Lab collection)
-                                                         ─→ Meilisearch (labs index)
-
-Frontend ─→ GET /api/labs, /api/labs/:slug, /api/search ─→ Hono server ─→ MongoDB / Meilisearch
+MongoDB (Lab collection)  ─┐
+                           ├─ Hono API (/api/labs, /api/labs/:slug, /api/search)  ─→  Frontend
+Meilisearch (search idx)  ─┘
 ```
 
-Lab JSON fixtures are the source of truth. MongoDB stores the runtime copy that the FE reads via API; Meilisearch is a derived search index. No bundled lab content ships with the FE.
+MongoDB là single source of truth cho lab content. System labs mặc định được tạo trực tiếp trong MongoDB (không còn fixtures pipeline, không còn seed từ repo). Meilisearch index được sync từ Mongoose post-save hooks (auto). Không có lab content nào bundle vào FE.
 
 ### Frontend Structure
 
@@ -55,10 +45,9 @@ Lab JSON fixtures are the source of truth. MongoDB stores the runtime copy that 
 
 ### Adding a New Lab
 
-1. Create fixture JSON in `fixtures/labs/` (see `docs/lab-schema-v3.md`)
-2. Validate: `node scripts/validate-lab-fixtures.js`
-3. Sync DB: `pnpm run sync-labs` (writes to MongoDB, fan-out to Meilisearch)
-4. If interactive playground needed: create component in `app/src/components/lab/diagrams/`, register in `registry.ts`
+1. Tạo lab mới qua UI editor (khi Phase 1-4 xong) hoặc insert trực tiếp vào MongoDB (schema — xem `docs/lab-schema-v3.md`)
+2. Meilisearch tự sync qua post-save hook của Mongoose (`server/db/models/lab-model.js`)
+3. Nếu cần interactive playground: tạo component trong `app/src/components/lab/diagrams/`, register trong `registry.ts`
 
 ### Adding a New Playground
 

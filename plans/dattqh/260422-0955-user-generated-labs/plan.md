@@ -36,7 +36,7 @@ Cho phép mọi user tự tạo labs qua UI block editor (Tiptap), lưu hoàn to
 | 2 | Tiptap Editor Core + Custom Blocks | pending | 7d | [phase-02-tiptap-editor-core.md](phase-02-tiptap-editor-core.md) |
 | 3 | Diagram Picker + Registry Integration | pending | 3d | [phase-03-diagram-picker.md](phase-03-diagram-picker.md) |
 | 4 | My Labs Dashboard + Publish Flow | pending | 4d | [phase-04-my-labs-dashboard.md](phase-04-my-labs-dashboard.md) |
-| 5 | Migration: Seed + Remove Fixtures | pending | 3d | [phase-05-migration-remove-fixtures.md](phase-05-migration-remove-fixtures.md) |
+| 5 | Migration: Seed + Remove Fixtures | completed | 3d | [phase-05-migration-remove-fixtures.md](phase-05-migration-remove-fixtures.md) |
 | 6 | Testing + Security Hardening | pending | 3d | [phase-06-testing-and-security.md](phase-06-testing-and-security.md) |
 
 ## Key Dependencies

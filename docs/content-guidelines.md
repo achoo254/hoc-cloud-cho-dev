@@ -161,7 +161,7 @@ Mapping guidelines với 12 sections của schema v3 (mnemonic: THINK · SEE · 
 
 Optional section (FAIL/FIX/AUTOMATE): **không render DOM trống** nếu thiếu data. Không gượng ép — thêm khi lab tự nhiên có failure evidence / fix action / automation script.
 
-Validator: `npm run validate:schema` (CI hard fail nếu thiếu mandatory).
+Validation: Zod schema tại `app/src/lib/schema-lab.ts` throw runtime khi lab thiếu mandatory field.
 
 ---
 
@@ -189,6 +189,6 @@ Khi không thể áp dụng guideline này (vd: quote lại nguyên văn nguồn
 Repo này là personal learning workspace, không phải product/course.
 
 - **Tone**: Cấm marketing copy. Cấm: "dành cho ai", "tại sao chọn repo này", CTA ("bắt đầu ngay"), feature pitch ("tính năng nổi bật"), slogan ("chúc học vui"). Chỉ note kỹ thuật.
-- **Schema v3 mandatory**: Mọi lab mới BẮT BUỘC đủ 9 mandatory sections (Misconceptions ≥2, WHY, BREAKS, OBSERVE, DEPLOY, TL;DR, Quiz, Flashcards, Try at home). Optional (FAIL, FIX, AUTOMATE) — chỉ thêm khi tự nhiên có, không gượng ép. CI gate: `npm run validate:schema`.
+- **Schema v3 mandatory**: Mọi lab mới BẮT BUỘC đủ 9 mandatory sections (Misconceptions ≥2, WHY, BREAKS, OBSERVE, DEPLOY, TL;DR, Quiz, Flashcards, Try at home). Optional (FAIL, FIX, AUTOMATE) — chỉ thêm khi tự nhiên có, không gượng ép. Runtime Zod enforcement tại `app/src/lib/schema-lab.ts`.
 - **Ngôn ngữ**: Content/comment dùng tiếng Việt. Code identifier (function, variable, file name) dùng English.
 - **Markdown location**: Không tạo `.md` ngoài `plans/dattqh/` và `docs/` trừ khi user yêu cầu.

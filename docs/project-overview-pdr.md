@@ -106,7 +106,7 @@ Xem `docs/content-guidelines.md` (canonical):
 | Firebase outage → auth down | Guest mode vẫn dùng được (anon UUID cookie); progress preserve |
 | MongoDB/Meilisearch outage | `/healthz` reports DB status; PM2 restart với retry; UI hiển thị banner khi search unavailable |
 | SVG export XSS | DOMPurify `svg` + `svgFilters` profile mandatory |
-| Content drift (fixture vs DB) | `sync-labs` chạy khi deploy; CI validate Zod trước khi sync |
+| Mongo backup/restore | MongoDB = single source of truth; daily snapshot + Mongoose schema + Zod validator làm safety net |
 
 ## 10. Open Questions
 

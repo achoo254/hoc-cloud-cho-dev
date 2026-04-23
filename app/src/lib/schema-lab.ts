@@ -1,6 +1,6 @@
 /**
- * Zod schema v3 for lab fixtures — "THINK · SEE · SHIP" structure.
- * Ported from scripts/lab-schema.js with TypeScript ESM exports.
+ * Zod schema v3 for lab content — "THINK · SEE · SHIP" structure.
+ * Source of truth cho lab shape (FE parse API responses + seed fixtures).
  * Uses .passthrough() on all domain-specific objects to tolerate variance.
  */
 

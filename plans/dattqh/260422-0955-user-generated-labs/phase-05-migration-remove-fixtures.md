@@ -9,8 +9,31 @@
 
 - **Priority:** P1
 - **Effort:** 3 days
-- **Status:** pending
+- **Status:** completed (2026-04-23)
 
+Đã triển khai đầy đủ: MongoDB = single source of truth, loại bỏ hoàn toàn fixtures pipeline + seed path. System labs được verify (8/8) có trong MongoDB + Meilisearch qua `pnpm sync-labs` trước khi xóa.
+
+### Đã làm (2026-04-23)
+
+**Giai đoạn lite:**
+- Rewrite `server/scripts/sync-labs-to-db.js` đọc trực tiếp `fixtures/labs/*.json`.
+- Xóa `scripts/build-server-data.mjs`, `server/generated/labs-data.mjs`, `scripts/validate-lab-fixtures.js`, `scripts/lab-schema.js`, `scripts/validate-lab-schema.js`.
+- Xóa `package.json` scripts: `gen:server-data`, `validate:schema`. Bỏ prefix `pnpm run gen:server-data &&`.
+
+**Giai đoạn full:**
+- Verify MongoDB có đủ 8 labs (contentHash khớp) qua `pnpm sync-labs` một lần cuối.
+- Xóa boot-time `syncLabsToDb()` trong `server.js`.
+- Xóa `fixtures/labs/` (+ dir rỗng `fixtures/`), `server/scripts/` (+ sync-labs-to-db.js).
+- Xóa `sync-labs` script khỏi `package.json`.
+- Update docs: `CLAUDE.md`, `README.md`, `docs/codebase-summary.md`, `docs/system-architecture.md`, `docs/project-roadmap.md`, `docs/project-overview-pdr.md`, `docs/lab-schema-v3.md`.
+
+### Điểm lưu ý
+- `authorId=system/status=published/visibility=public` KHÔNG triển khai — schema hiện không có các field này (chờ Phase 1).
+- Nếu cần khôi phục fixtures, dùng `git show <commit>:fixtures/labs/*.json`.
+
+---
+
+### Nguyên plan gốc (reference)
 One-time migration: seed 8 existing labs từ JSON fixtures vào MongoDB với `authorId = system user`. Remove fixture pipeline + generated files. FE fetch từ API thay cho bundled JSON.
 
 ## Key Insights

@@ -42,13 +42,12 @@ Production: **https://hoc-cloud.inetdev.io.vn/**
 ## Content Pipeline
 
 ```
-fixtures/labs/*.json   ── source of truth (schema v3, Zod-validated)
-        │
-        └─── server/scripts/sync-labs-to-db.js ──→ MongoDB (labs collection)
-                                                    + Meilisearch (search index)
+MongoDB (labs collection)  ──→  Hono API (/api/labs*)  ──→  FE
+          │
+          └── post-save hook ──→ Meilisearch (search index, derived)
 ```
 
-Lab JSON = single source of truth. MongoDB documents + Meilisearch index = derived artifacts regenerated via `pnpm run sync-labs`. FE đọc runtime qua `/api/labs` + `/api/labs/:slug` — không còn bundled content modules.
+MongoDB = single source of truth cho lab content. Meilisearch được sync tự động từ Mongoose hooks (post-save / post-findOneAndUpdate / post-delete) tại `server/db/models/lab-model.js`. Không còn fixtures pipeline, không còn build-time bundle hoặc generated JS files. FE đọc runtime qua `/api/labs` + `/api/labs/:slug`.
 
 ## Request Flows
 

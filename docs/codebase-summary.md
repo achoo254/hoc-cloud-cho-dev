@@ -8,8 +8,6 @@ Monorepo: Vite + React 18 SPA (`app/`) + Hono.js API (`server/`). Production: ht
 hoc-cloud-cho-dev/
 ├── app/                  # Vite + React SPA (TypeScript, Tailwind)
 ├── server/               # Hono.js API (Node 22+)
-├── fixtures/labs/        # Lab JSON — source of truth (schema v3, sync vào MongoDB)
-├── scripts/              # Build scripts (schema validate, bundler)
 ├── deploy/               # nginx.conf.example, ecosystem.config
 └── docs/                 # Project documentation
 ```
@@ -70,19 +68,18 @@ server/
 │   └── mongoose-models/    # MongoDB models (labs, progress, users)
 ├── lib/
 │   └── csp-middleware.js   # Content Security Policy
-├── scripts/
-│   └── sync-labs-to-db.js  # Fixture → MongoDB + Meilisearch sync
 └── ecosystem.config.cjs    # PM2 config (fork mode)
 ```
 
 ## Data Flow
 
 ```
-fixtures/labs/*.json
-  └─→ pnpm run sync-labs → MongoDB (labs collection) + Meilisearch (search index)
+MongoDB (labs collection) ──┬──→  Hono API (/api/labs*)  ──→  FE (React Query)
+                            │
+Meilisearch (search index) ─┘  (tự sync qua Mongoose post-save hooks)
 ```
 
-Lab JSON = source of truth. MongoDB documents + Meilisearch index = derived artifacts. FE đọc runtime qua `/api/labs` + `/api/labs/:slug` (React Query cache).
+MongoDB = single source of truth cho lab content. Meilisearch được sync tự động từ Mongoose post-save/findOneAndUpdate/delete hooks (`server/db/models/lab-model.js`). FE không bundle lab content — đọc runtime qua API.
 
 ## Key Patterns
 
