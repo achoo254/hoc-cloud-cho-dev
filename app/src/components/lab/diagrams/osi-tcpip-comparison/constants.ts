@@ -379,3 +379,101 @@ export const TCPIP_GROUPS = {
   application: { label: 'Application Layer', tcpipIdx: [0] }, // Application
   dataFlow: { label: 'Data Flow Layer', tcpipIdx: [1, 2, 3] }, // Transport / Internet / Network Interface
 } as const
+
+// ── Topology nodes for Mô hình 3 (flow state) ────────────────────────────────
+// Mỗi hop có icon (lucide name), lớp OSI nó thao tác ở, và mô tả ngắn.
+// Icon rendered qua lucide-react (Monitor/Router/Cloud/Globe/Shield/Server/HardDrive).
+
+export type TopologyIconKey =
+  | 'monitor'
+  | 'router'
+  | 'cloud'
+  | 'globe'
+  | 'shield'
+  | 'loadbalancer'
+  | 'server'
+
+export interface TopologyNode {
+  id: string
+  label: string
+  sub?: string // phụ đề nhỏ dưới label
+  icon: TopologyIconKey
+  layers: number[] // OSI layer(s) nó operate ở (1..7)
+  desc: string
+}
+
+// 7 hops: Client (sender) → Router/NAT → ISP → Internet → Firewall → LB → Web Server (receiver)
+export const TOPOLOGY_NODES: TopologyNode[] = [
+  {
+    id: 'client',
+    label: 'Client',
+    sub: 'Browser / App',
+    icon: 'monitor',
+    layers: [1, 2, 3, 4, 5, 6, 7],
+    desc: 'Máy end-user — toàn bộ stack L1-L7. Nơi encap bắt đầu: app tạo data, TLS mã hoá, TCP segment, IP định tuyến.',
+  },
+  {
+    id: 'router',
+    label: 'Router / NAT',
+    sub: 'Home gateway',
+    icon: 'router',
+    layers: [1, 2, 3],
+    desc: 'Router biên: L3 forward theo routing table + NAT rewrite src IP private → public. Không biết nội dung L4+.',
+  },
+  {
+    id: 'isp',
+    label: 'ISP Network',
+    sub: 'Access / Core',
+    icon: 'cloud',
+    layers: [1, 2, 3],
+    desc: 'Mạng nhà cung cấp — chuỗi router backbone. BGP định tuyến inter-AS, MPLS label switching ở core.',
+  },
+  {
+    id: 'internet',
+    label: 'Internet',
+    sub: 'Transit AS',
+    icon: 'globe',
+    layers: [3],
+    desc: 'Tập hợp AS nối với nhau qua BGP. Mỗi hop router decrement TTL. Best-effort — không đảm bảo delivery.',
+  },
+  {
+    id: 'firewall',
+    label: 'Firewall',
+    sub: 'Stateful / L7 WAF',
+    icon: 'shield',
+    layers: [3, 4, 7],
+    desc: 'L3/L4 stateful filter (5-tuple rule + connection tracking). Nếu là WAF/L7 firewall → parse HTTP để block SQLi/XSS.',
+  },
+  {
+    id: 'lb',
+    label: 'Load Balancer',
+    sub: 'L4 / L7',
+    icon: 'loadbalancer',
+    layers: [4, 7],
+    desc: 'L4 LB (TCP/UDP): hash connection → backend. L7 LB (HTTP): parse request, route theo path/host/header, terminate TLS.',
+  },
+  {
+    id: 'server',
+    label: 'Web Server',
+    sub: 'Origin / App',
+    icon: 'server',
+    layers: [1, 2, 3, 4, 5, 6, 7],
+    desc: 'Backend origin — full stack. Decap: L2 bóc Eth, L3 IP, L4 TCP, L7 parse HTTP, trao request cho application handler.',
+  },
+]
+
+// Edges giữa nodes (dashed arrow, màu theo layer chính của destination).
+// Cấu trúc logic (xem Image #5):
+//   client ─→ router      (qua LAN)
+//   client ·─ dns (aside)  — tham chiếu, không animate
+//   router ─→ isp ─→ internet ─→ firewall
+//   firewall ↓ lb ↓ server
+export const TOPOLOGY_PATH: string[] = [
+  'client',
+  'router',
+  'isp',
+  'internet',
+  'firewall',
+  'lb',
+  'server',
+]
