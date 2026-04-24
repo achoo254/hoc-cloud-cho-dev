@@ -34,7 +34,7 @@ const W = 1320
 const H = 900
 
 // Stack dimensions (both sender/receiver)
-const STACK_CONTENT_Y = 64
+const STACK_CONTENT_Y = 92 // thêm top padding để title không bị packet chip che
 const ROW_H = 88
 const ROW_GAP = 6
 const STACK_W = 300
@@ -208,7 +208,7 @@ export function OsiFlowState({ className }: Props) {
   }, [phase, step, direction])
 
   const packetPos = useMemo<PacketPos>(() => {
-    if (phase === 'idle') return { x: S_X + STACK_W / 2, y: STACK_CONTENT_Y - 20 }
+    if (phase === 'idle') return { x: S_X + STACK_W / 2, y: stackRowCy(7) }
     if (phase === 'encap') return packetPosEncap(step, direction)
     if (phase === 'transit') return packetPosTransit(step, direction)
     if (phase === 'decap') return packetPosDecap(step, direction)
@@ -478,6 +478,7 @@ export function OsiFlowState({ className }: Props) {
 
         {/* Packet group — animated via framer-motion */}
         <motion.g
+          initial={false}
           animate={{ x: packetPos.x, y: packetPos.y }}
           transition={{
             duration:
