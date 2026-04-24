@@ -24,7 +24,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
-  Play, Pause, RotateCcw, SkipForward,
+  Play, Pause, RotateCcw, SkipForward, Maximize2, Minimize2,
   Monitor, Router as RouterIcon, Cloud, Globe, Shield, Network, Server,
 } from 'lucide-react'
 import { OSI_LAYERS, TOPOLOGY_NODES, type TopologyIconKey } from './constants'
@@ -64,10 +64,13 @@ const DECAP_MOVE = 520
 const DECAP_HOLD = 780
 const DECAP_STEP_MS = DECAP_MOVE + DECAP_HOLD
 const INTER_PHASE_MS = 700
-const FINAL_HOLD_MS = 2200
+const TURNAROUND_MS = 1100 // Server xử lý request, chuẩn bị response
+const FINAL_HOLD_MS = 2400
 
 // ── Types ────────────────────────────────────────────────────────────────────
-type Phase = 'idle' | 'encap' | 'transit' | 'decap' | 'done'
+// Full bidirectional cycle: idle → (req) encap → transit → decap → turnaround → (res) encap → transit → decap → done → loop
+type Phase = 'idle' | 'encap' | 'transit' | 'decap' | 'turnaround' | 'done'
+type Direction = 'req' | 'res'
 
 interface HeaderChip {
   label: string
@@ -155,22 +158,24 @@ const FULL_CHIPS: HeaderChip[] = (() => {
 // ── Packet position computation ──────────────────────────────────────────────
 interface PacketPos { x: number; y: number }
 
-function packetPosEncap(step: number): PacketPos {
+// Encap = đóng gói bên GỬI. req→sender stack (trái), res→receiver stack (phải).
+function packetPosEncap(step: number, dir: Direction): PacketPos {
   const osi = ENCAP_STEPS[step].osi
-  return { x: S_X + STACK_W / 2, y: stackRowCy(osi) }
+  const baseX = dir === 'req' ? S_X : R_X
+  return { x: baseX + STACK_W / 2, y: stackRowCy(osi) }
 }
 
-function packetPosTransit(step: number): PacketPos {
-  // step 0..4: di chuyển tới node i
-  // exit sender L1 = (S_X + STACK_W, stackRowCy(1))
-  // node i center = (nodeCx(i), TOPO_Y)
-  // enter receiver L1 = (R_X, stackRowCy(1))
-  return { x: nodeCx(step), y: TOPO_Y }
+// Transit đi qua 5 hop. req: node 0→4 (trái→phải). res: node 4→0 (phải→trái).
+function packetPosTransit(step: number, dir: Direction): PacketPos {
+  const idx = dir === 'req' ? step : INTERMEDIATE_IDS.length - 1 - step
+  return { x: nodeCx(idx), y: TOPO_Y }
 }
 
-function packetPosDecap(step: number): PacketPos {
+// Decap = bóc gói bên NHẬN. req→receiver (phải), res→sender (trái).
+function packetPosDecap(step: number, dir: Direction): PacketPos {
   const osi = DECAP_STEPS[step].osi
-  return { x: R_X + STACK_W / 2, y: stackRowCy(osi) }
+  const baseX = dir === 'req' ? R_X : S_X
+  return { x: baseX + STACK_W / 2, y: stackRowCy(osi) }
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -178,45 +183,54 @@ function packetPosDecap(step: number): PacketPos {
 export function OsiFlowState({ className }: Props) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [step, setStep] = useState(0)
+  const [direction, setDirection] = useState<Direction>('req')
   const [isPlaying, setIsPlaying] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const pausedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Dẫn đường animation: phase + step quyết định packet pos + chip visibility.
-  // note / activeLayerOsi / activeNodeIdx là derived state.
+  // Dẫn đường animation: phase + step + direction quyết định packet pos + chip visibility.
   const note = useMemo(() => {
-    if (phase === 'encap') return ENCAP_STEPS[step].note
+    const tag = direction === 'req' ? '→ REQUEST' : '← RESPONSE'
+    const side = direction === 'req' ? 'Client' : 'Server'
+    const peer = direction === 'req' ? 'Server' : 'Client'
+    if (phase === 'encap') return `[${tag}] ${side} ENCAP · ${ENCAP_STEPS[step].note}`
     if (phase === 'transit') {
-      const node = TOPOLOGY_NODES.find((n) => n.id === INTERMEDIATE_IDS[step])!
+      const idx = direction === 'req' ? step : INTERMEDIATE_IDS.length - 1 - step
+      const node = TOPOLOGY_NODES.find((n) => n.id === INTERMEDIATE_IDS[idx])!
       const layerList = node.layers.map((l) => `L${l}`).join('/')
-      return `Transit — ${node.label} thao tác ${layerList}. ${node.desc}`
+      return `[${tag}] TRANSIT · ${node.label} thao tác ${layerList}. ${node.desc}`
     }
-    if (phase === 'decap') return DECAP_STEPS[step].note
-    if (phase === 'done') return '✓ Server nhận data — vòng đời packet hoàn tất'
-    return 'ĐÓNG GÓI — dữ liệu xuất phát từ ứng dụng Client'
-  }, [phase, step])
+    if (phase === 'decap') return `[${tag}] ${peer} DECAP · ${DECAP_STEPS[step].note}`
+    if (phase === 'turnaround') return '↻ TURNAROUND · Server xử lý request, chuẩn bị response (build HTTP 200, serialize body)'
+    if (phase === 'done') return '✓ DONE · Vòng đời đầy đủ hoàn tất — Client nhận response từ Server. Loop lại...'
+    return 'IDLE · sẵn sàng đóng gói request từ Client'
+  }, [phase, step, direction])
 
   const packetPos = useMemo<PacketPos>(() => {
     if (phase === 'idle') return { x: S_X + STACK_W / 2, y: STACK_CONTENT_Y - 20 }
-    if (phase === 'encap') return packetPosEncap(step)
-    if (phase === 'transit') return packetPosTransit(step)
-    if (phase === 'decap') return packetPosDecap(step)
-    return { x: R_X + STACK_W / 2, y: stackRowCy(7) }
-  }, [phase, step])
+    if (phase === 'encap') return packetPosEncap(step, direction)
+    if (phase === 'transit') return packetPosTransit(step, direction)
+    if (phase === 'decap') return packetPosDecap(step, direction)
+    if (phase === 'turnaround') return { x: R_X + STACK_W / 2, y: stackRowCy(7) }
+    // done → trả về client L7
+    return { x: S_X + STACK_W / 2, y: stackRowCy(7) }
+  }, [phase, step, direction])
 
   const currentChips = useMemo<HeaderChip[]>(() => {
     if (phase === 'idle') return []
     if (phase === 'encap') return chipsAfterEncapStep(step)
-    if (phase === 'transit') return FULL_CHIPS // bits, nhưng visual giữ chips full bên trong
+    if (phase === 'transit') return FULL_CHIPS
     if (phase === 'decap') {
       if (step === 0) return FULL_CHIPS
       return FULL_CHIPS.slice(step)
     }
+    if (phase === 'turnaround') return [] // payload ở L7 trạng thái thuần data
     return []
   }, [phase, step])
 
   const packetKind = useMemo<'data' | 'composed' | 'bits'>(() => {
-    if (phase === 'idle') return 'data'
+    if (phase === 'idle' || phase === 'turnaround' || phase === 'done') return 'data'
     if (phase === 'encap') {
       if (step === ENCAP_STEPS.length - 1) return 'bits' // L1 = bits
       return 'composed'
@@ -229,15 +243,30 @@ export function OsiFlowState({ className }: Props) {
     return 'data'
   }, [phase, step])
 
-  const activeSenderOsi = phase === 'encap' ? ENCAP_STEPS[step].osi : null
-  const activeReceiverOsi = phase === 'decap' ? DECAP_STEPS[step].osi : null
-  const activeNodeIdx = phase === 'transit' ? step : null
+  // Active layer: direction thay đổi side nào được highlight.
+  // - encap req: sender stack sáng (client đóng gói)
+  // - encap res: receiver stack sáng (server đóng gói response)
+  // - decap req: receiver stack sáng (server bóc gói)
+  // - decap res: sender stack sáng (client bóc gói response)
+  const activeSenderOsi =
+    phase === 'encap' && direction === 'req' ? ENCAP_STEPS[step].osi :
+    phase === 'decap' && direction === 'res' ? DECAP_STEPS[step].osi :
+    null
+  const activeReceiverOsi =
+    phase === 'encap' && direction === 'res' ? ENCAP_STEPS[step].osi :
+    phase === 'decap' && direction === 'req' ? DECAP_STEPS[step].osi :
+    phase === 'turnaround' ? 7 : // server L7 xử lý
+    null
+  const activeNodeIdx =
+    phase === 'transit'
+      ? (direction === 'req' ? step : INTERMEDIATE_IDS.length - 1 - step)
+      : null
 
   const hasTrailer = useMemo(() => {
-    if (phase === 'idle') return false
+    if (phase === 'idle' || phase === 'turnaround' || phase === 'done') return false
     if (phase === 'encap') return ENCAP_STEPS.slice(0, step + 1).some((s) => s.trailer)
     if (phase === 'transit') return true
-    if (phase === 'decap') return step === 0 // chỉ bits giữ FCS
+    if (phase === 'decap') return step === 0
     return false
   }, [phase, step])
 
@@ -249,53 +278,62 @@ export function OsiFlowState({ className }: Props) {
     }
   }, [])
 
-  // Imperative timeline using setTimeout chain + phase state.
+  // Imperative timeline: full bidirectional cycle.
+  // req: client ENCAP → TRANSIT→ → server DECAP → turnaround → res: server ENCAP → TRANSIT← → client DECAP → done → loop.
   const runCycle = useCallback(() => {
     clearTimer()
     if (pausedRef.current) return
 
-    // Start with encap step 0
-    const runEncap = (i: number) => {
+    const runEncap = (dir: Direction, i: number) => {
       if (pausedRef.current) return
+      setDirection(dir)
       setPhase('encap')
       setStep(i)
       if (i < ENCAP_STEPS.length - 1) {
-        timerRef.current = setTimeout(() => runEncap(i + 1), ENCAP_STEP_MS)
+        timerRef.current = setTimeout(() => runEncap(dir, i + 1), ENCAP_STEP_MS)
       } else {
-        // Done encap → transit
-        timerRef.current = setTimeout(() => runTransit(0), ENCAP_STEP_MS + INTER_PHASE_MS)
+        timerRef.current = setTimeout(() => runTransit(dir, 0), ENCAP_STEP_MS + INTER_PHASE_MS)
       }
     }
-    const runTransit = (i: number) => {
+    const runTransit = (dir: Direction, i: number) => {
       if (pausedRef.current) return
+      setDirection(dir)
       setPhase('transit')
       setStep(i)
       if (i < INTERMEDIATE_IDS.length - 1) {
-        timerRef.current = setTimeout(() => runTransit(i + 1), TRANSIT_STEP_MS)
+        timerRef.current = setTimeout(() => runTransit(dir, i + 1), TRANSIT_STEP_MS)
       } else {
-        timerRef.current = setTimeout(() => runDecap(0), TRANSIT_STEP_MS + INTER_PHASE_MS)
+        timerRef.current = setTimeout(() => runDecap(dir, 0), TRANSIT_STEP_MS + INTER_PHASE_MS)
       }
     }
-    const runDecap = (i: number) => {
+    const runDecap = (dir: Direction, i: number) => {
       if (pausedRef.current) return
+      setDirection(dir)
       setPhase('decap')
       setStep(i)
       if (i < DECAP_STEPS.length - 1) {
-        timerRef.current = setTimeout(() => runDecap(i + 1), DECAP_STEP_MS)
+        timerRef.current = setTimeout(() => runDecap(dir, i + 1), DECAP_STEP_MS)
+      } else if (dir === 'req') {
+        // Request bóc xong → turnaround → response
+        timerRef.current = setTimeout(() => {
+          if (pausedRef.current) return
+          setPhase('turnaround')
+          timerRef.current = setTimeout(() => runEncap('res', 0), TURNAROUND_MS)
+        }, DECAP_STEP_MS)
       } else {
+        // Response bóc xong → done → loop
         timerRef.current = setTimeout(() => {
           if (pausedRef.current) return
           setPhase('done')
           timerRef.current = setTimeout(() => {
             if (pausedRef.current) return
-            runCycle() // loop
+            runCycle()
           }, FINAL_HOLD_MS)
         }, DECAP_STEP_MS)
       }
     }
 
-    // Initial delay then start
-    timerRef.current = setTimeout(() => runEncap(0), 400)
+    timerRef.current = setTimeout(() => runEncap('req', 0), 400)
   }, [clearTimer])
 
   const pause = useCallback(() => {
@@ -303,68 +341,12 @@ export function OsiFlowState({ className }: Props) {
     clearTimer()
   }, [clearTimer])
 
+  // Resume: đơn giản — tiếp tục cycle từ đầu (không cố resume-from-middle để giữ logic clean).
   const resume = useCallback(() => {
     if (!pausedRef.current) return
     pausedRef.current = false
-    // Resume từ state hiện tại — continue next step theo phase.
-    const continueFromCurrent = () => {
-      if (pausedRef.current) return
-      if (phase === 'encap') {
-        if (step < ENCAP_STEPS.length - 1) {
-          timerRef.current = setTimeout(() => runCycle_resumeEncap(step + 1), ENCAP_STEP_MS / 2)
-        } else {
-          timerRef.current = setTimeout(() => runCycle_resumeTransit(0), INTER_PHASE_MS)
-        }
-      } else if (phase === 'transit') {
-        if (step < INTERMEDIATE_IDS.length - 1) {
-          timerRef.current = setTimeout(() => runCycle_resumeTransit(step + 1), TRANSIT_STEP_MS / 2)
-        } else {
-          timerRef.current = setTimeout(() => runCycle_resumeDecap(0), INTER_PHASE_MS)
-        }
-      } else if (phase === 'decap') {
-        if (step < DECAP_STEPS.length - 1) {
-          timerRef.current = setTimeout(() => runCycle_resumeDecap(step + 1), DECAP_STEP_MS / 2)
-        } else {
-          timerRef.current = setTimeout(() => {
-            setPhase('done')
-            timerRef.current = setTimeout(() => runCycle(), FINAL_HOLD_MS)
-          }, DECAP_STEP_MS)
-        }
-      } else {
-        runCycle()
-      }
-    }
-
-    function runCycle_resumeEncap(i: number) {
-      if (pausedRef.current) return
-      setPhase('encap'); setStep(i)
-      if (i < ENCAP_STEPS.length - 1)
-        timerRef.current = setTimeout(() => runCycle_resumeEncap(i + 1), ENCAP_STEP_MS)
-      else
-        timerRef.current = setTimeout(() => runCycle_resumeTransit(0), ENCAP_STEP_MS + INTER_PHASE_MS)
-    }
-    function runCycle_resumeTransit(i: number) {
-      if (pausedRef.current) return
-      setPhase('transit'); setStep(i)
-      if (i < INTERMEDIATE_IDS.length - 1)
-        timerRef.current = setTimeout(() => runCycle_resumeTransit(i + 1), TRANSIT_STEP_MS)
-      else
-        timerRef.current = setTimeout(() => runCycle_resumeDecap(0), TRANSIT_STEP_MS + INTER_PHASE_MS)
-    }
-    function runCycle_resumeDecap(i: number) {
-      if (pausedRef.current) return
-      setPhase('decap'); setStep(i)
-      if (i < DECAP_STEPS.length - 1)
-        timerRef.current = setTimeout(() => runCycle_resumeDecap(i + 1), DECAP_STEP_MS)
-      else
-        timerRef.current = setTimeout(() => {
-          setPhase('done')
-          timerRef.current = setTimeout(() => runCycle(), FINAL_HOLD_MS)
-        }, DECAP_STEP_MS)
-    }
-
-    continueFromCurrent()
-  }, [phase, step, runCycle])
+    runCycle()
+  }, [runCycle])
 
   const handleReset = useCallback(() => {
     pausedRef.current = false
@@ -391,7 +373,22 @@ export function OsiFlowState({ className }: Props) {
     setIsPlaying(false)
     setPhase('done')
     setStep(0)
+    setDirection('res')
   }, [clearTimer])
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => !prev)
+  }, [])
+
+  // ESC thoát fullscreen.
+  useEffect(() => {
+    if (!isFullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isFullscreen])
 
   useEffect(() => {
     pausedRef.current = false
@@ -403,34 +400,71 @@ export function OsiFlowState({ className }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Direction chip label cho title bar
+  const dirLabel = direction === 'req' ? 'REQUEST →' : '← RESPONSE'
+  const dirTone = direction === 'req' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+
+  // Phase badge icon cho note bar
+  const phaseTag =
+    phase === 'encap' ? '↓ ENCAP' :
+    phase === 'transit' ? (direction === 'req' ? '→ TRANSIT' : '← TRANSIT') :
+    phase === 'decap' ? '↑ DECAP' :
+    phase === 'turnaround' ? '↻ TURNAROUND' :
+    phase === 'done' ? '✓ DONE' : '·'
+
   return (
-    <div className={cn('space-y-3', className)}>
-      <div>
-        <h3 className="text-lg font-semibold">
-          Mô hình 3: Packet Journey — Encap ↓ / Transit → / Decap ↑
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Bên gửi <span className="font-medium">(Client)</span> đóng gói L7→L1, bits đi qua network topology
-          (Router → ISP → Internet → Firewall → LB), bên nhận <span className="font-medium">(Server)</span> bóc tách
-          L1→L7. Mỗi hop highlight layer mà device operate.
-        </p>
+    <div
+      className={cn(
+        isFullscreen
+          ? 'fixed inset-0 z-50 bg-background p-4 overflow-auto flex flex-col gap-3'
+          : 'space-y-3',
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            Mô hình 3: Packet Journey — 2 chiều Request/Response
+            <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border', dirTone)}>
+              {dirLabel}
+            </span>
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Client ↔ Server qua topology (Router → ISP → Internet → Firewall → LB). Request đi trái→phải
+            (encap client → decap server), Response đi phải→trái (encap server → decap client).
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Thoát fullscreen' : 'Mở fullscreen'}
+          title={isFullscreen ? 'Thoát fullscreen (Esc)' : 'Fullscreen'}
+          className="shrink-0"
+        >
+          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </Button>
       </div>
 
       <svg
         width={W}
         height={H}
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full max-w-full border border-border rounded-lg bg-background"
+        preserveAspectRatio="xMidYMid meet"
+        className={cn(
+          'w-full border border-border rounded-lg bg-background',
+          isFullscreen ? 'flex-1 min-h-0 h-[calc(100vh-160px)] max-h-[calc(100vh-160px)]' : 'min-h-[620px]',
+        )}
       >
         {/* Title on top */}
         <text x={S_X + STACK_W / 2} y={40} textAnchor="middle" className="fill-foreground font-bold text-sm">
-          CLIENT — Sender
+          CLIENT — {direction === 'req' ? 'Sender' : 'Receiver'}
         </text>
         <text x={R_X + STACK_W / 2} y={40} textAnchor="middle" className="fill-foreground font-bold text-sm">
-          SERVER — Receiver
+          SERVER — {direction === 'req' ? 'Receiver' : 'Sender'}
         </text>
         <text x={W / 2} y={40} textAnchor="middle" className="fill-foreground font-bold text-sm">
-          Network Topology (transit)
+          Network Topology ({direction === 'req' ? 'transit →' : 'transit ←'})
         </text>
 
         {/* Sender stack */}
@@ -440,7 +474,7 @@ export function OsiFlowState({ className }: Props) {
         <StackColumn side="receiver" activeOsi={activeReceiverOsi} />
 
         {/* Topology path connectors + nodes */}
-        <TopologyLayer activeNodeIdx={activeNodeIdx} phase={phase} />
+        <TopologyLayer activeNodeIdx={activeNodeIdx} phase={phase} direction={direction} />
 
         {/* Packet group — animated via framer-motion */}
         <motion.g
@@ -449,7 +483,7 @@ export function OsiFlowState({ className }: Props) {
             duration:
               phase === 'transit' ? TRANSIT_MOVE / 1000 :
               phase === 'encap'   ? ENCAP_MOVE / 1000 :
-              phase === 'decap'   ? DECAP_MOVE / 1000 : 0.4,
+              phase === 'decap'   ? DECAP_MOVE / 1000 : 0.45,
             ease: 'easeInOut',
           }}
         >
@@ -458,11 +492,11 @@ export function OsiFlowState({ className }: Props) {
 
         {/* Note bar at bottom */}
         <foreignObject x={24} y={H - 48} width={W - 48} height={36}>
-          <div className="px-3 py-1.5 rounded-md bg-muted/60 border border-border text-xs text-foreground">
-            <span className="font-semibold uppercase tracking-wide mr-2 text-muted-foreground">
-              {phase === 'encap' ? '↓ ENCAP' : phase === 'transit' ? '→ TRANSIT' : phase === 'decap' ? '↑ DECAP' : phase === 'done' ? '✓ DONE' : '·'}
+          <div className="px-3 py-1.5 rounded-md bg-muted/60 border border-border text-xs text-foreground flex items-center">
+            <span className="font-semibold uppercase tracking-wide mr-2 text-muted-foreground whitespace-nowrap">
+              {phaseTag}
             </span>
-            {note}
+            <span className="truncate">{note}</span>
           </div>
         </foreignObject>
       </svg>
@@ -571,9 +605,11 @@ function StackColumn({ side, activeOsi }: { side: 'sender' | 'receiver'; activeO
 function TopologyLayer({
   activeNodeIdx,
   phase,
+  direction,
 }: {
   activeNodeIdx: number | null
   phase: Phase
+  direction: Direction
 }) {
   // Connector path: sender L1 right → curve → node 0 left → node 1 left → ... → node 4 right → curve → receiver L1 left
   const senderExit = { x: S_X + STACK_W, y: stackRowCy(1) }
@@ -601,33 +637,44 @@ function TopologyLayer({
 
   return (
     <g>
-      {/* Connectors */}
+      {/* Connectors — highlight theo direction */}
       {segments.map((seg) => {
-        // Segment idx i connects (i-1)→(i). Active when packet just arrived at node i (transit step i).
-        // Hightlight logic: in transit, segment <= step+1 is "done" (strong), rest is "dim".
-        const isDone =
-          phase === 'transit' && activeNodeIdx !== null && seg.idx <= activeNodeIdx
-        const isCurrent =
-          phase === 'transit' && activeNodeIdx === seg.idx
-        const isAfterTransit = phase === 'decap' || phase === 'done'
-        const opacity = isDone || isAfterTransit ? 0.85 : isCurrent ? 1 : 0.35
+        // req: packet đi trái→phải. Node i dùng seg.idx = i (just arrived). Next = i+1.
+        // res: packet đi phải→trái. Node i dùng seg.idx = i+1 (just arrived). Next = i.
+        let opacity = 0.3
+        if (phase === 'transit' && activeNodeIdx !== null) {
+          if (direction === 'req') {
+            if (seg.idx <= activeNodeIdx) opacity = 0.9
+            else if (seg.idx === activeNodeIdx + 1) opacity = 1
+            else opacity = 0.3
+          } else {
+            if (seg.idx > activeNodeIdx) opacity = 0.9
+            else if (seg.idx === activeNodeIdx) opacity = 1
+            else opacity = 0.3
+          }
+        } else if (phase === 'decap' || phase === 'turnaround' || phase === 'done') {
+          opacity = 0.75
+        } else if (phase === 'encap') {
+          // encap res: sáng lên dần vì sắp transit về phía trái; giữ dim trong encap req
+          opacity = direction === 'res' ? 0.55 : 0.3
+        }
         return (
           <motion.path
             key={seg.idx}
             d={seg.d}
             fill="none"
+            className={cn(
+              direction === 'req' ? 'text-emerald-400/80' : 'text-amber-400/80',
+              phase === 'idle' && 'text-muted-foreground',
+            )}
             stroke="currentColor"
-            className="text-muted-foreground"
-            strokeWidth={2}
+            strokeWidth={2.25}
             strokeDasharray="6,5"
             animate={{ opacity }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.35 }}
           />
         )
       })}
-
-      {/* Arrowheads at end of each segment (simple triangle) */}
-      {/* (optional — skip for KISS) */}
 
       {/* Nodes */}
       {INTERMEDIATE_IDS.map((id, idx) => {
