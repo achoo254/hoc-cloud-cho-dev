@@ -203,9 +203,10 @@ export function LayerStackEncap({ tldr }: LayerStackEncapProps) {
                   </div>
 
                   {/* Why snippet */}
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {item.why}
-                  </p>
+                  <p
+                    className="text-sm text-muted-foreground line-clamp-2"
+                    dangerouslySetInnerHTML={{ __html: item.why }}
+                  />
                 </div>
 
                 {/* Expand indicator */}
@@ -236,12 +237,18 @@ export function LayerStackEncap({ tldr }: LayerStackEncapProps) {
                       )}
                       <p className="text-sm">
                         <span className="font-medium text-destructive">Breaks when:</span>{' '}
-                        <span className="text-muted-foreground">{item.whyBreaks}</span>
+                        <span
+                          className="text-muted-foreground"
+                          dangerouslySetInnerHTML={{ __html: item.whyBreaks }}
+                        />
                       </p>
                       {item.deploymentUse && (
                         <p className="text-sm">
                           <span className="font-medium text-blue-600 dark:text-blue-400">Deploy:</span>{' '}
-                          <span className="text-muted-foreground">{item.deploymentUse}</span>
+                          <span
+                            className="text-muted-foreground"
+                            dangerouslySetInnerHTML={{ __html: item.deploymentUse }}
+                          />
                         </p>
                       )}
                     </div>

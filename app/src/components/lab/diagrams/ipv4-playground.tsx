@@ -12,6 +12,7 @@ import { IpAddressClassifier } from './ip-address-classifier'
 import { IPv4ConceptCards } from './ipv4-concept-cards'
 import { SubnetDerivationGuide } from './subnet-derivation-guide'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function IPv4Playground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -21,6 +22,7 @@ export function IPv4Playground({ lab, seeExtraContent, tryItContent }: DiagramCo
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <IPv4ConceptCards items={lab.tldr} />
           <hr className="border-border" />
           <SubnetDerivationGuide />

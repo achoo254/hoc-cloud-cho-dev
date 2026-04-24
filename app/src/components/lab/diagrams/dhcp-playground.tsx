@@ -9,6 +9,7 @@
 import { DhcpConceptCards } from './dhcp-concept-cards'
 import { DhcpDoraVisualizer } from './dhcp-dora-visualizer'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function DhcpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -18,6 +19,7 @@ export function DhcpPlayground({ lab, seeExtraContent, tryItContent }: DiagramCo
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <DhcpConceptCards items={lab.tldr} />
         </div>
       }

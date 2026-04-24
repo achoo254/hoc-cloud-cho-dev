@@ -10,6 +10,7 @@ import { TcpUdpConceptCards } from './tcp-udp-concept-cards'
 import { TcpHandshakeVisualizer } from './tcp-handshake-visualizer'
 import { TcpUdpComparison } from './tcp-udp-comparison'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function TcpUdpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -19,6 +20,7 @@ export function TcpUdpPlayground({ lab, seeExtraContent, tryItContent }: Diagram
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <TcpUdpConceptCards items={lab.tldr} />
         </div>
       }

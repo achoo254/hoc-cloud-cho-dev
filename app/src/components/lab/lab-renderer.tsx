@@ -21,6 +21,7 @@ import { CompletionBanner } from '@/components/lab/completion-banner'
 import { useProgress } from '@/lib/hooks/use-progress'
 import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
 import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
+import { MisconceptionsSection } from '@/components/lab/misconceptions-section'
 import type { LabContent, TldrItem, WalkthroughStep, TryAtHome } from '@/lib/schema-lab'
 
 // Feature flag (RED TEAM #12) + query override
@@ -160,16 +161,16 @@ function TldrSection({ items }: { items: TldrItem[] }) {
             )}
             <p className="text-sm text-muted-foreground leading-relaxed">
               <span className="font-medium text-foreground">Why: </span>
-              {item.why}
+              <span dangerouslySetInnerHTML={{ __html: item.why }} />
             </p>
             <p className="text-sm text-muted-foreground leading-relaxed">
               <span className="font-medium text-destructive">Breaks when: </span>
-              {item.whyBreaks}
+              <span dangerouslySetInnerHTML={{ __html: item.whyBreaks }} />
             </p>
             {item.deploymentUse && (
               <p className="text-sm text-muted-foreground leading-relaxed">
                 <span className="font-medium text-blue-600 dark:text-blue-400">Deploy: </span>
-                {item.deploymentUse}
+                <span dangerouslySetInnerHTML={{ __html: item.deploymentUse }} />
               </p>
             )}
           </div>
@@ -416,7 +417,8 @@ function LabTabsWithoutPlayground({
         data-tab-value="think"
         className="mt-4"
       >
-        <div id="section-think">
+        <div id="section-think" className="space-y-6">
+          <MisconceptionsSection items={lab.misconceptions} />
           <TldrSection items={lab.tldr} />
         </div>
       </TabsContent>

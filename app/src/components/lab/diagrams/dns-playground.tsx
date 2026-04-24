@@ -9,6 +9,7 @@
 import { DnsConceptCards } from './dns-concept-cards'
 import { DnsVisualizer } from './dns-visualizer'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function DnsPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -18,6 +19,7 @@ export function DnsPlayground({ lab, seeExtraContent, tryItContent }: DiagramCom
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <DnsConceptCards items={lab.tldr} />
         </div>
       }

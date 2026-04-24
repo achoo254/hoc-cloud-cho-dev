@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { LayerStackEncap } from './layer-stack-encap'
 import { PacketJourney } from './packet-journey'
 import { NetworkTopology, EXAMPLE_DEVOPS_FLOW } from './network-topology'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 type TabValue = 'think' | 'see' | 'try-it'
@@ -64,8 +65,9 @@ export function TcpIpJourneyPlayground({ lab, seeExtraContent, tryItContent }: D
           value="think"
           forceMount
           data-tab-value="think"
-          className="mt-4"
+          className="mt-4 space-y-6"
         >
+          <MisconceptionsSection items={lab.misconceptions} />
           <LayerStackEncap tldr={lab.tldr} />
         </TabsContent>
 

@@ -9,6 +9,7 @@
 import { HttpConceptCards } from './http-concept-cards'
 import { HttpVisualizer } from './http-visualizer'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function HttpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -18,6 +19,7 @@ export function HttpPlayground({ lab, seeExtraContent, tryItContent }: DiagramCo
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <HttpConceptCards items={lab.tldr} />
         </div>
       }

@@ -9,6 +9,7 @@
 import { IcmpPingConceptCards } from './icmp-ping-concept-cards'
 import { IcmpPingVisualizer } from './icmp-ping-visualizer'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function IcmpPingPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -18,6 +19,7 @@ export function IcmpPingPlayground({ lab, seeExtraContent, tryItContent }: Diagr
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <IcmpPingConceptCards items={lab.tldr} />
         </div>
       }

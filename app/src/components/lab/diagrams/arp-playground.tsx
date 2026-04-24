@@ -10,6 +10,7 @@ import { ArpConceptCards } from './arp-concept-cards'
 import { ArpVisualizer } from './arp-visualizer'
 import { ArpHeaderComparison } from './arp-header-comparison'
 import { PlaygroundShell } from './shared'
+import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
 
 export function ArpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -19,6 +20,7 @@ export function ArpPlayground({ lab, seeExtraContent, tryItContent }: DiagramCom
       tryItContent={tryItContent}
       thinkContent={
         <div className="space-y-8">
+          <MisconceptionsSection items={lab.misconceptions} />
           <ArpConceptCards items={lab.tldr} />
         </div>
       }
