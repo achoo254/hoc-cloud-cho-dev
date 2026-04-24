@@ -64,6 +64,16 @@ TRY IT  → TL;DR* · Quiz* · Flashcards* · Try at home*
 | `lang` | string | — | — | Ngôn ngữ code (default `bash`) |
 | `note` | string | — | — | Ghi chú nhỏ |
 
+### `misconceptions[]` item
+
+| Key | Type | Mandatory | Note |
+|-----|------|-----------|------|
+| `wrong` | string | ✅ | Myth phát biểu như fact (không dùng "nhiều người nghĩ...") |
+| `right` | string | ✅ | Correction ngắn gọn, cụ thể |
+| `why` | string | ✅ | HTML-capable (rendered via `dangerouslySetInnerHTML`). Tuân theo 3-paragraph depth standard: P1 Contract + P2 Mechanics + P3 Implication. Tối thiểu ~200 ký tự. Cite RFC/ISO dưới dạng `<a href="...">RFC XXXX §N</a>`. |
+
+Advisory: tối thiểu 2 item per lab (Zod vẫn validate `optional()` hiện tại — sẽ tighten sang `required()` sau khi xác nhận đủ 8 labs backfill).
+
 ### `quiz[]`, `flashcards[]`, `tryAtHome[]` — giữ nguyên shape v2
 
 Xem `labs/_shared/lab-template.js` validator hiện tại.

@@ -35,6 +35,9 @@ Cấm không điều kiện (vì mơ hồ, không kiểm chứng được, hoặ
 - "thuần code app", "dev chân chính"
 - "production-ready", "deploy-ready" khi không kèm checklist định nghĩa cụ thể
 - "ai cũng dùng", "đa số dev", "phổ biến nhất" (không kèm số liệu + nguồn)
+- "nhiều người nhầm" → thay bằng misconception cụ thể phát biểu dưới dạng fact
+- "thường gặp" → thay bằng RFC hoặc OS behavior citation cụ thể
+- "thực tế" (standalone, không kèm citation) → thay bằng tên hệ thống cụ thể
 
 Nếu cần diễn đạt ý tương tự: thay bằng fact cụ thể + nguồn. Ví dụ:
 
@@ -75,6 +78,20 @@ Kết hợp hai cách:
   [1] RFC 793 — Transmission Control Protocol. https://datatracker.ietf.org/doc/html/rfc793
   [2] man 8 tcpdump. https://www.tcpdump.org/manpages/tcpdump.1.html
   ```
+
+### HTML vs Markdown format
+
+Chọn format theo nơi field được render:
+
+- **MongoDB content fields** (`tldr[].why`, `walkthrough[].why`, `misconceptions[].why`) — render qua `dangerouslySetInnerHTML` trong React → dùng HTML inline:
+  ```html
+  <a href="https://datatracker.ietf.org/doc/html/rfc793#section-3">RFC 793 §3</a>
+  ```
+- **`.md` plan/doc files** → dùng Markdown:
+  ```markdown
+  [RFC 793 §3](https://datatracker.ietf.org/doc/html/rfc793#section-3)
+  ```
+- **Không mix** hai format trong cùng một field.
 
 ### Link phải cụ thể
 
@@ -192,3 +209,28 @@ Repo này là personal learning workspace, không phải product/course.
 - **Schema v3 mandatory**: Mọi lab mới BẮT BUỘC đủ 9 mandatory sections (Misconceptions ≥2, WHY, BREAKS, OBSERVE, DEPLOY, TL;DR, Quiz, Flashcards, Try at home). Optional (FAIL, FIX, AUTOMATE) — chỉ thêm khi tự nhiên có, không gượng ép. Runtime Zod enforcement tại `app/src/lib/schema-lab.ts`.
 - **Ngôn ngữ**: Content/comment dùng tiếng Việt. Code identifier (function, variable, file name) dùng English.
 - **Markdown location**: Không tạo `.md` ngoài `plans/dattqh/` và `docs/` trừ khi user yêu cầu.
+
+---
+
+## 12. Chuẩn độ sâu cho field `why`
+
+Mọi field `why` trong `tldr[]`, `walkthrough[]`, và `misconceptions[]` phải tuân theo cấu trúc 3 đoạn:
+
+**P1 — Contract**: Component/layer này nhận gì, trả gì, tham chiếu gì? Cite spec chuẩn (RFC/ISO anchor) cho hành vi được mô tả.
+
+**P2 — Mechanics**: Header field cụ thể, state machine, protocol value, OS/kernel behavior — số liệu, tên field, section RFC cụ thể.
+
+**P3 — Implication**: Hiểu điều này thay đổi gì trong cách dev debug, deploy, hoặc đọc vendor docs? Nêu tên cụ thể: tool, command, hoặc vendor concept bị ảnh hưởng.
+
+**Độ dài**: tối thiểu ~200 ký tự. Không có hard max — UI dùng collapse/expand để handle nội dung dài.
+
+Ví dụ (misconceptions[].why):
+
+```
+P1: TCP không đảm bảo delivery trong một segment duy nhất — receiver reassemble từ nhiều segment theo
+sequence number (RFC 793 §3.3). P2: Mỗi byte trong stream mang sequence number; ACK trả về
+"next expected byte", không phải "segment received". Retransmit xảy ra khi RTO expire
+(RFC 6298) hoặc 3 duplicate ACK. P3: Khi tcpdump thấy retransmit, không phải packet bị drop
+một lần — sequence space cho biết đúng offset bị mất; `ss -ti` field `retrans` đếm lần retransmit
+per-socket.
+```

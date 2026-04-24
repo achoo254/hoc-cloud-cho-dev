@@ -21,6 +21,7 @@ app/src/
 ├── components/
 │   ├── lab/                # Lab content rendering
 │   │   ├── lab-renderer.tsx         # THINK/SEE/TRY IT top-level renderer
+│   │   ├── misconceptions-section.tsx  # Renders misconceptions[] above TL;DR on THINK tab
 │   │   ├── diagrams/                # Interactive playground components
 │   │   │   ├── registry.ts          # Lazy-loaded diagram registry
 │   │   │   ├── export-utils.ts      # SVG export + DOMPurify
@@ -80,6 +81,10 @@ Meilisearch (search index) ─┘  (tự sync qua Mongoose post-save hooks)
 ```
 
 MongoDB = single source of truth cho lab content. Meilisearch được sync tự động từ Mongoose post-save/findOneAndUpdate/delete hooks (`server/db/models/lab-model.js`). FE không bundle lab content — đọc runtime qua API.
+
+Field `misconceptions[]` (shape `{wrong, right, why}`) lưu trong MongoDB, trả về qua `/api/labs/:slug`, validate qua Zod schema (`app/src/lib/schema-lab.ts`), render bởi `MisconceptionsSection` component phía trên TL;DR trên tab THINK.
+
+Field `tldr[].why` và `walkthrough[].why` hỗ trợ HTML inline link — render qua `dangerouslySetInnerHTML` (author-controlled content từ MongoDB).
 
 ## Key Patterns
 
