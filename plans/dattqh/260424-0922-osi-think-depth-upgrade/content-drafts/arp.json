@@ -1,0 +1,42 @@
+{
+  "slug": "arp",
+  "expected": { "tldr": 7, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> định nghĩa ARP là giao thức ánh xạ địa chỉ network layer (IPv4) sang địa chỉ hardware (MAC). IP là địa chỉ logic (L3), MAC là địa chỉ vật lý (L2); frame Ethernet yêu cầu MAC đích — ARP lấp khoảng trống đó bằng cách truy vấn broadcast trong broadcast domain. Thiếu ARP thì kernel không thể tạo frame Ethernet hợp lệ dù biết IP đích — mọi packet ra LAN đều bị drop ở L2.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826#section-2\">RFC 826 §2</a> quy định ARP Request được gửi broadcast (Ethernet dst=FF:FF:FF:FF:FF:FF) tới toàn bộ LAN vì sender chưa biết MAC đích và không thể unicast. ARP packet chứa opcode=1 (request), sender hardware address, sender protocol address, và target protocol address — mọi host đọc để kiểm tra IP match. Chi phí: mọi NIC trong broadcast domain phải ngắt CPU để xử lý frame — đây là lý do ARP cache quan trọng để giảm tần suất broadcast.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc4861#section-7.3\">RFC 4861 §7.3</a> mô tả neighbor cache state machine áp dụng cho cả IPv4 (Linux kernel): entry chuyển qua INCOMPLETE → REACHABLE (~30s) → STALE → DELAY → PROBE → FAILED. Thời gian REACHABLE do kernel quyết định dựa trên neighbor reachability confirmation, không phải giá trị cố định 1–5 phút. Thấy STALE trong ip neigh là trạng thái bình thường — kernel sẽ re-verify khi có traffic, không phải lỗi.",
+    "6": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> thiết kế ARP không có authentication field — packet format chỉ gồm hardware type, protocol type, opcode, và 4 địa chỉ (sender/target hardware + protocol). Bất kỳ host nào trong LAN đều có thể gửi ARP Reply với nội dung tùy ý; kernel nhận và cập nhật cache không kiểm tra nguồn gốc. Attacker gửi Reply giả khai MAC của mình ứng với IP gateway → victim cache bị poisoned → mọi outbound traffic đi qua attacker (MITM). Phòng ngừa phải ở tầng khác: Dynamic ARP Inspection (DAI) trên switch, TLS end-to-end."
+  },
+  "walkthroughWhyPatches": {
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> quy định host phải tra cứu ARP cache trước khi gửi frame. Kernel Linux kiểm tra bảng neighbor (ip neigh) — nếu entry ở trạng thái REACHABLE thì dùng MAC đã có, không phát broadcast. Cache hit tránh được 1 broadcast round-trip trong LAN; giá trị latency cụ thể phụ thuộc vào link layer và tải mạng, không có giá trị cố định.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> quy định sau khi nhận ARP Reply, host lưu mapping IP→MAC vào cache để dùng cho các frame tiếp theo. ip neigh flush xóa cache → ping trigger ARP Request mới → entry mới được tạo với state REACHABLE. Thời gian ARP resolve phụ thuộc RTT trong LAN (điển hình <1ms khi host alive và không tải cao), nhưng đây là giá trị đo thực tế, không phải giá trị RFC-mandated.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> xác định ARP chỉ hoạt động trong broadcast domain (L2). Khi ping 8.8.8.8, kernel tra routing table — 8.8.8.8 không cùng subnet → next-hop là default gateway. ARP Request được gửi cho IP gateway, không phải IP đích 8.8.8.8; frame gửi với MAC gateway, gateway bóc L2 header, re-encapsulate và forward tiếp theo IP routing. Nhầm điểm này dẫn đến debug MITM sai layer."
+  },
+  "misconceptions": [
+    {
+      "wrong": "ARP Request được gửi unicast trực tiếp tới IP đích",
+      "right": "ARP Request là broadcast (Ethernet dst=FF:FF:FF:FF:FF:FF) gửi tới toàn bộ broadcast domain; chỉ host có IP trùng khớp mới gửi Reply unicast về. Xem <a href=\"https://datatracker.ietf.org/doc/html/rfc826#section-2\">RFC 826 §2</a>.",
+      "why": "Hiểu sai dẫn đến không debug được 'no ARP reply' — nếu VLAN isolation sai hoặc broadcast domain bị phân tách, ARP Request không đến được đích mặc dù IP routing vẫn ổn. Kiểm tra bằng tcpdump -n arp để thấy broadcast frame thực tế."
+    },
+    {
+      "wrong": "Khi ping 8.8.8.8, hệ điều hành gửi ARP Request cho 8.8.8.8",
+      "right": "Kernel tra routing table để xác định next-hop; nếu 8.8.8.8 nằm ngoài subnet, ARP được gửi cho IP của default gateway, không phải 8.8.8.8. <a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a> giới hạn ARP trong broadcast domain — các IP ngoài subnet không có ARP entry.",
+      "why": "Hiểu sai dẫn đến debug firewall sai layer: thấy 'no ARP for 8.8.8.8' tưởng lỗi routing, thực ra gateway ARP đang fail. Dùng ip neigh show | grep gateway-IP để xác định đúng."
+    },
+    {
+      "wrong": "ARP cache giữ entry vĩnh viễn đến khi khởi động lại",
+      "right": "Linux neighbor cache theo state machine <a href=\"https://datatracker.ietf.org/doc/html/rfc4861#section-7.3\">RFC 4861 §7.3</a>: REACHABLE (~30s) → STALE → DELAY → PROBE → FAILED; kernel tự expire và re-verify khi cần. Entry STALE là bình thường — không cần flush thủ công.",
+      "why": "Không biết STALE là trạng thái bình thường dẫn đến flush ARP cache không cần thiết, gây broadcast storm nhỏ trong LAN lớn. Chỉ flush khi entry ở FAILED và cần force re-resolve."
+    },
+    {
+      "wrong": "Chỉ có một loại ARP message (Request)",
+      "right": "ARP có 2 opcode: Request (opcode=1) và Reply (opcode=2) theo <a href=\"https://datatracker.ietf.org/doc/html/rfc826#section-3\">RFC 826 §3</a>. Ngoài ra còn Gratuitous ARP — host gửi ARP Request hoặc Reply tự hỏi/tự trả lời IP của chính mình để update cache và detect IP conflict, định nghĩa trong <a href=\"https://datatracker.ietf.org/doc/html/rfc5227#section-2\">RFC 5227 §2</a>.",
+      "why": "Không phân biệt Gratuitous ARP dẫn đến đọc sai tcpdump khi debug failover: thấy ARP Reply không có Request trước là bình thường trong VRRP/keepalived failover — không phải ARP spoofing."
+    },
+    {
+      "wrong": "ARP hoạt động qua router, resolve IP ở bất kỳ subnet nào",
+      "right": "ARP là L2 protocol, broadcast không vượt qua router (<a href=\"https://datatracker.ietf.org/doc/html/rfc826\">RFC 826</a>). Mỗi subnet có ARP broadcast domain riêng; router forward packet bằng IP routing, không dùng ARP xuyên subnet. Proxy ARP là tính năng đặc biệt router opt-in, không phải mặc định.",
+      "why": "Hiểu sai dẫn đến thiết kế VPC sai: tạo /16 subnet cho cả datacenter, kỳ vọng ARP resolve xuyên rack — thực tế cần L3 routing giữa các /24. Kubernetes node cũng cần cùng broadcast domain để ARP hoạt động."
+    }
+  ]
+}

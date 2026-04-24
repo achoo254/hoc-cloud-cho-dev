@@ -1,0 +1,37 @@
+{
+  "slug": "dns",
+  "expected": { "tldr": 12, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-5.3.1\">RFC 1034 §5.3.1</a> định nghĩa stub resolver là thành phần DNS client đơn giản nhất, nằm trong OS — không tự thực hiện recursive resolution mà chỉ forward query tới recursive resolver được cấu hình (thường qua /etc/resolv.conf). Stub resolver nhận response cuối cùng và trả về ứng dụng. Nếu stub resolver hỏng hoặc resolv.conf sai → mọi domain đều fail dù mạng IP vẫn thông.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-4.3.2\">RFC 1034 §4.3.2</a> định nghĩa recursive resolution: recursive resolver nhận query từ stub, tự thực hiện toàn bộ chuỗi Root → TLD → Authoritative thay cho client. Resolver gửi iterative query từng bước, tổng hợp kết quả rồi trả về cho stub kèm TTL. Google 8.8.8.8 và Cloudflare 1.1.1.1 là public recursive resolver; ISP thường cấp resolver riêng nhưng một số inject response cho NXDOMAIN.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-3.6\">RFC 1034 §3.6</a> định nghĩa root server là đỉnh của DNS hierarchy — chỉ biết NS record của từng TLD, không biết IP của domain cụ thể. Có 13 địa chỉ IP root (a–m.root-servers.net), mỗi địa chỉ dùng IP anycast với nhiều physical instance; tổng số instance >1800 trên toàn cầu theo dữ liệu từ <a href=\"https://root-servers.org\">root-servers.org</a>.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-3.6\">RFC 1034 §3.6</a> định nghĩa TLD server quản lý zone delegation: biết NS record của từng domain trong TLD đó và trả về referral cho recursive resolver. .com TLD server biết ns1.example.com là authoritative cho example.com nhưng không biết IP của example.com. Khi mua domain mới và set nameserver, TLD cần 24–48h để propagate NS record.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1\">RFC 1035 §4.1.1</a> định nghĩa bit AA (Authoritative Answer) trong DNS message header: khi set = 1, response đến trực tiếp từ zone's authoritative server — không phải từ cache của resolver. Authoritative server là nơi duy nhất lưu trữ record thật; mọi resolver chỉ cache bản sao theo TTL. Response từ cache của resolver có AA=0.",
+    "5": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-3.5\">RFC 1034 §3.5</a> định nghĩa TTL là thời gian tính bằng giây mà resolver được phép cache record trước khi hỏi lại authoritative. TTL cao giảm query load nhưng làm chậm propagation khi thay đổi. Trước migration IP: hạ TTL về 300s ít nhất 1 TTL cycle (bằng TTL hiện tại) để tất cả resolver flush cache, sau đó thay đổi A record.",
+    "9": "<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\">RFC 7208</a> định nghĩa SPF: TXT record liệt kê IP/domain được phép gửi email thay cho domain. <a href=\"https://datatracker.ietf.org/doc/html/rfc6376\">RFC 6376</a> định nghĩa DKIM: chữ ký số dùng private key trên mail server, public key publish qua DNS TXT record. <a href=\"https://datatracker.ietf.org/doc/html/rfc7489\">RFC 7489</a> định nghĩa DMARC: policy xử lý email fail SPF/DKIM (none/quarantine/reject). Thiếu cả 3 → email vào spam hoặc bị reject bởi Gmail/Outlook.",
+    "10": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2308#section-3\">RFC 2308 §3</a> định nghĩa negative caching: khi domain không tồn tại (NXDOMAIN), resolver cache kết quả theo giá trị minimum TTL trong SOA record của zone cha. NXDOMAIN cache ngăn resolver hỏi lại authoritative liên tục cho domain không tồn tại. Sau khi tạo DNS record mới, phải chờ negative TTL của SOA hết trước khi record được resolve.",
+    "11": "<a href=\"https://datatracker.ietf.org/doc/html/rfc8484\">RFC 8484</a> định nghĩa DNS over HTTPS (DoH): DNS query được encode theo DNS wire format, gửi qua HTTPS POST/GET tới endpoint cụ thể (ví dụ https://cloudflare-dns.com/dns-query). Query được encrypt bởi TLS — ISP không thấy hostname đang được query. Firefox bật DoH mặc định từ v83 (Mỹ). DoH tập trung traffic DNS về một số provider lớn, có thể bypass corporate DNS filter."
+  },
+  "walkthroughWhyPatches": {
+    "1": "dig là DNS client cho phép query trực tiếp DNS server và xem raw response. Output gồm QUESTION SECTION (domain query), ANSWER SECTION (record + TTL), và SERVER (resolver đang dùng). TTL trong ANSWER SECTION là số giây còn lại trong cache của resolver. Query time trong output là RTT tới resolver — latency thấp (<5ms) thường là cache hit, cao hơn là fresh lookup từ authoritative, nhưng ngưỡng cụ thể phụ thuộc vào vị trí địa lý và resolver.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-4.3.2\">RFC 1034 §4.3.2</a> mô tả recursive resolution chain: Root → TLD → Authoritative. +trace buộc dig bypass cache của resolver và tự thực hiện toàn bộ chain bằng iterative query từ root. Nếu +trace trả record mới nhưng dig thông thường vẫn trả record cũ → xác nhận là cache issue tại resolver, không phải authoritative chưa cập nhật.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-3.5\">RFC 1034 §3.5</a> quy định resolver decrement TTL mỗi giây trong cache — TTL trong response không phải giá trị gốc mà là số giây còn lại. Query lần 1 TTL=3600, query lần 2 sau 60s TTL=3540. Khi TTL về 0, resolver hỏi lại authoritative và reset TTL về giá trị gốc. Hiểu cơ chế này để tính đúng thời gian chờ khi migration."
+  },
+  "misconceptions": [
+    {
+      "wrong": "Stub resolver tự đi hỏi Root, TLD, rồi Authoritative server",
+      "right": "Stub resolver chỉ forward query tới recursive resolver đã cấu hình trong /etc/resolv.conf — không tự thực hiện recursive lookup. Chỉ recursive resolver mới tự đi hỏi toàn bộ chain Root → TLD → Authoritative theo <a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-5.3.1\">RFC 1034 §5.3.1</a>.",
+      "why": "Khi debug DNS failure, nhầm vai trò dẫn đến kiểm tra sai chỗ: nếu stub resolver gửi query đến recursive resolver nhưng recursive resolver fail, lỗi xuất hiện ở stub — phải kiểm tra recursive resolver, không phải authoritative server."
+    },
+    {
+      "wrong": "Đổi A record là DNS thay đổi ngay lập tức trên toàn cầu",
+      "right": "Resolver cache record theo TTL của record tại thời điểm query; nếu TTL=86400 khi đổi, resolver giữ cache tới 24h theo <a href=\"https://datatracker.ietf.org/doc/html/rfc1034#section-3.5\">RFC 1034 §3.5</a>. Chỉ dig +trace thấy record mới ngay vì bypass cache.",
+      "why": "Không hạ TTL trước migration → user bị split-brain: một số thấy server mới (cache expired), số khác server cũ (cache còn hiệu lực). Quy trình đúng: hạ TTL về 300s, chờ đủ 1 TTL cycle cũ, rồi mới đổi A record."
+    },
+    {
+      "wrong": "CNAME có thể đặt ở apex domain (example.com trực tiếp)",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2181#section-10.1\">RFC 2181 §10.1</a> cấm CNAME coexist với bất kỳ record nào khác tại cùng owner name; apex domain (zone root) bắt buộc có SOA và NS record → CNAME ở apex vi phạm RFC. Dùng ALIAS/ANAME nếu cần apex trỏ về hostname.",
+      "why": "Một số DNS provider allow CNAME apex nhưng hành vi undefined trên provider khác — đổi provider sẽ break domain. Nguy hiểm hơn: CNAME ở apex thường xung đột với MX record → email toàn bộ domain fail."
+    }
+  ]
+}

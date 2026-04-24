@@ -1,0 +1,43 @@
+{
+  "slug": "tcp-udp",
+  "expected": { "tldr": 6, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.5\">RFC 9293 §3.5</a> định nghĩa cơ chế reliable delivery của TCP: mỗi byte được đánh sequence number; receiver gửi ACK xác nhận; sender retransmit khi không nhận ACK trong RTO. Application code không cần tự xử lý mất gói — TCP đảm bảo delivery và ordering. Chi phí: latency tăng khi có retransmit, không phù hợp cho real-time media.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc768\">RFC 768</a> định nghĩa UDP là connectionless datagram protocol — không có handshake, không có ACK, không có ordering. Mỗi datagram là độc lập. Dùng khi application tự xử lý được loss hoặc khi latency quan trọng hơn reliability: DNS query, VoIP, game state update, live streaming. Latency penalty của TCP retransmit ảnh hưởng đến real-time application như thế nào phụ thuộc vào network condition cụ thể.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.3\">RFC 9293 §3.3</a> định nghĩa TCP 3-way handshake: SYN → SYN-ACK → ACK. Handshake xác nhận cả 2 chiều đều reachable và đồng bộ Initial Sequence Number (ISN) trước khi truyền data. Không có handshake → 1 bên có thể gửi vào hư không khi mạng bất đối xứng (outbound OK nhưng inbound blocked).",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.1\">RFC 9293 §3.1</a> định nghĩa TCP header với 16-bit source port và 16-bit destination port. Port phân biệt nhiều service trên cùng 1 IP address — kernel dùng 4-tuple (src IP, src port, dst IP, dst port) để demultiplex packet tới đúng socket. Well-known ports (0–1023) yêu cầu CAP_NET_BIND_SERVICE trên Linux — security boundary, không phải performance limit.",
+    "5": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9000\">RFC 9000</a> định nghĩa QUIC: reliability layer xây trên UDP, giải quyết TCP head-of-line blocking bằng cách isolate stream — mất packet ở stream A không block stream B. <a href=\"https://datatracker.ietf.org/doc/html/rfc9114\">RFC 9114</a> định nghĩa HTTP/3 trên QUIC. Lợi ích tốc độ của HTTP/3 so với HTTP/2 phụ thuộc vào network condition — rõ rệt nhất khi có packet loss."
+  },
+  "walkthroughWhyPatches": {
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.5.2\">RFC 9293 §3.5.2</a> quy định khi TCP SYN đến port đóng (không có process listen), kernel gửi RST ngay lập tức — đây là 'Connection refused'. nc -l tạo listening socket trên port chỉ định; không có socket listen thì SYN nhận RST thay vì SYN-ACK. Kiểm tra process đang listen bằng ss -tlnp | grep PORT.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.1\">RFC 9293 §3.1</a> định nghĩa TCP control bits trong header: SYN (bit 1), ACK (bit 4), FIN (bit 0), RST (bit 2). tcpdump dùng notation: [S]=SYN, [S.]=SYN-ACK (SYN+ACK), [.]=ACK, [F.]=FIN-ACK, [R]=RST. Quan sát 3-way handshake là [S] → [S.] → [.] — sau đó mới có data transfer.",
+    "6": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4\">RFC 1035 §2.3.4</a> định nghĩa giới hạn 512 byte cho DNS message qua UDP — lý do DNS là ví dụ kinh điển nhất cho UDP: query và response thường fit trong 1 datagram nhỏ, overhead của TCP 3-way handshake lớn hơn lợi ích. DNS fallback sang TCP khi response vượt 512 byte (hoặc EDNS0 mở rộng limit lên 4096 byte theo RFC 6891)."
+  },
+  "misconceptions": [
+    {
+      "wrong": "TCP retransmit xảy ra tức thì khi phát hiện mất gói",
+      "right": "TCP dùng RTO (Retransmission Timeout) tính theo RTT với thuật toán Jacobson/Karels theo <a href=\"https://datatracker.ietf.org/doc/html/rfc6298#section-2\">RFC 6298 §2</a>; giá trị tối thiểu là 1 giây theo RFC 6298 §2.4. Retransmit không tức thì — đây là nguồn gốc của TCP head-of-line blocking trong HTTP/1.1.",
+      "why": "Hiểu đúng latency penalty của TCP retransmit để chọn đúng protocol: video call dùng UDP vì 1 frame mất tốt hơn là đợi 1+ giây retransmit gây freeze. QUIC giải quyết bằng cách isolate stream-level retransmit."
+    },
+    {
+      "wrong": "UDP không reliable = không dùng được cho application quan trọng",
+      "right": "UDP có thể xây reliability layer ở application level — QUIC (<a href=\"https://datatracker.ietf.org/doc/html/rfc9000\">RFC 9000</a>) là ví dụ: sequence number, ACK, retransmit per-stream trên nền UDP. WebRTC cũng dùng UDP với application-level reliability cho media.",
+      "why": "Binary thinking TCP=reliable/UDP=unreliable dẫn đến không hiểu kiến trúc QUIC/WebRTC. HTTP/3 dùng UDP nhưng reliable hơn HTTP/2-over-TCP trên mạng lossy vì không có transport-level HOL blocking."
+    },
+    {
+      "wrong": "TIME_WAIT là lỗi cần tắt đi bằng sysctl",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9293#section-3.3.2\">RFC 9293 §3.3.2</a> quy định TIME_WAIT duration = 2×MSL (Maximum Segment Lifetime) để đảm bảo delayed duplicate packets từ connection cũ không corrupt connection mới dùng cùng 4-tuple. Tắt TIME_WAIT = risk data corruption. SO_REUSEADDR là cách đúng để bypass khi dev local.",
+      "why": "sysctl tcp_tw_recycle (đã bị remove khỏi Linux kernel 4.12) gây bug production thực tế với NAT — connections từ cùng NAT gateway bị drop do timestamp không đồng bộ. Không tắt TIME_WAIT trên production."
+    },
+    {
+      "wrong": "Port nhỏ hơn 1024 bị giới hạn vì lý do hiệu năng",
+      "right": "Well-known ports (0–1023) yêu cầu CAP_NET_BIND_SERVICE (Linux) hoặc root vì đây là security boundary — chỉ privileged process mới claim ports quan trọng, tránh user-space process giả mạo SSH (22) hay HTTP (80). Không liên quan đến hiệu năng.",
+      "why": "Cấu hình container/systemd service bind port 80/443 không cần chạy root: dùng setcap cap_net_bind_service=+ep trên binary hoặc authbind. Hiểu đúng lý do giúp cấu hình đúng capabilities thay vì escalate privilege không cần thiết."
+    },
+    {
+      "wrong": "SYN flood attack làm server hết RAM vì mỗi half-open connection tốn nhiều bộ nhớ",
+      "right": "SYN flood exhausts backlog queue (net.ipv4.tcp_max_syn_backlog) thay vì RAM — half-open connection (SYN_RCVD) tốn tương đối ít memory. SYN cookies (<a href=\"https://datatracker.ietf.org/doc/html/rfc4987\">RFC 4987</a>) giải quyết bằng cách encode state vào ISN, không cần lưu per-connection state cho half-open.",
+      "why": "Mitigation strategy khác nhau tùy root cause đúng: nếu nghĩ là RAM → tăng RAM không giải quyết được; phải enable SYN cookies (net.ipv4.tcp_syncookies=1) và tăng backlog queue để absorb burst."
+    }
+  ]
+}

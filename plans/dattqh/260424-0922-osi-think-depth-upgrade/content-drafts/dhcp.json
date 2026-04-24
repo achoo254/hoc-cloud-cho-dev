@@ -1,0 +1,42 @@
+{
+  "slug": "dhcp",
+  "expected": { "tldr": 7, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.1\">RFC 2131 §4.3.1</a> quy định DHCPDISCOVER phải được gửi broadcast (src=0.0.0.0, dst=255.255.255.255) vì client chưa có địa chỉ IP để gửi unicast. Packet chứa xid (transaction ID) và chaddr (MAC address) để server nhận diện client. Broadcast đảm bảo mọi DHCP server trong L2 segment nhận được Discover — nếu có nhiều server, tất cả đều Offer, client chọn cái đầu tiên.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.4.5\">RFC 2131 §4.4.5</a> định nghĩa T1 = 0.5 × lease_time (mặc định 50%): tại thời điểm T1, client unicast DHCPREQUEST tới server đã cấp IP để gia hạn. Unicast vì client đã biết server IP từ ACK. Nếu server đồng ý, lease được reset về đầu từ thời điểm ACK mới.",
+    "5": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.4.5\">RFC 2131 §4.4.5</a> định nghĩa T2 = 0.875 × lease_time (87.5%): khi T1 renewal không nhận được phản hồi, client broadcast DHCPREQUEST để bất kỳ DHCP server nào trong LAN có thể gia hạn. Broadcast vì client không còn ràng buộc với server gốc. Cơ chế T1/T2 tạo 2 lớp buffer trước khi client mất IP hoàn toàn ở 100% lease.",
+    "6": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.1.2\">RFC 2131 §4.1.2</a> và <a href=\"https://datatracker.ietf.org/doc/html/rfc3046\">RFC 3046</a> định nghĩa DHCP Relay Agent: router nghe DHCP broadcast trên interface nội bộ, thêm option 82 (relay agent information), chuyển thành unicast gửi tới DHCP server. Broadcast không vượt được router theo thiết kế L2/L3 boundary — relay agent là cơ chế duy nhất để phục vụ nhiều subnet từ 1 DHCP server trung tâm."
+  },
+  "walkthroughWhyPatches": {
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.1\">RFC 2131 §4.3.1</a> quy định client phải broadcast DHCPDISCOVER với src IP = 0.0.0.0 (INADDR_ANY) khi chưa có địa chỉ — đây là trạng thái INIT của DHCP state machine. Không thể unicast vì không có src IP hợp lệ; không thể gửi trực tiếp cho server vì chưa biết server IP. Đây là điểm khởi đầu bắt buộc của toàn bộ DORA flow.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.2\">RFC 2131 §4.3.2</a> quy định DHCPREQUEST sau Offer phải được gửi broadcast (không phải unicast tới server đã chọn), kèm Server Identifier option (option 54) để các DHCP server khác biết server nào được chọn. Các server không được chọn nhận Request và giải phóng IP đã hold — cơ chế này ngăn IP leak khi có nhiều server trong LAN.",
+    "5": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.4.5\">RFC 2131 §4.4.5</a> định nghĩa T1 (50% lease) và T2 (87.5% lease) là 2 checkpoint gia hạn trước khi IP bị thu hồi. Không gia hạn được ở cả T1 lẫn T2 → tại 100% lease, client phải giải phóng IP và bắt đầu lại từ INIT state. Mạng bị mất đột ngột sau vài giờ thường do lease expire trong khi DHCP server không đạt được — biết T1/T2 giúp debug đúng thời điểm."
+  },
+  "misconceptions": [
+    {
+      "wrong": "DHCP ACK luôn được gửi broadcast tới 255.255.255.255",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.1\">RFC 2131 §4.1</a> quy định ACK mặc định là unicast tới địa chỉ MAC + IP mới được cấp cho client; chỉ broadcast khi client set BROADCAST flag (bit B) trong DHCPREQUEST. Hầu hết client hiện đại không set flag này.",
+      "why": "Debug Wireshark với filter broadcast sẽ bỏ sót DHCP ACK unicast — dẫn đến kết luận sai 'không có ACK'. Phải dùng filter rộng hơn: udp port 67 or udp port 68 để bắt cả unicast lẫn broadcast."
+    },
+    {
+      "wrong": "Sau khi nhận DHCP Offer, IP đã được gán chính thức cho client",
+      "right": "Offer chỉ là đề xuất; server chưa commit vào lease database. IP chỉ được gán chính thức sau khi client gửi Request và nhận ACK (<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.1\">RFC 2131 §4.3.1</a>). Nếu client crash sau Offer nhưng trước Request, server thu hồi IP sau timeout.",
+      "why": "Hiểu sai dẫn đến debug DHCP fail không đúng hướng: thấy Offer trong tcpdump tưởng IP đã cấp, không tìm hiểu tại sao Request hoặc ACK bị thiếu. DORA phải đủ 4 bước mới hoàn tất."
+    },
+    {
+      "wrong": "Một DHCP server đủ để phục vụ mọi subnet trong hệ thống",
+      "right": "Broadcast DHCPDISCOVER không vượt qua router — mỗi subnet cần có DHCP server riêng hoặc Relay Agent cấu hình ip helper-address trỏ tới server trung tâm (<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.1.2\">RFC 2131 §4.1.2</a>).",
+      "why": "Thêm VLAN mới mà không config relay agent → toàn bộ VM trong VLAN đó không lấy được IP, hiển thị 169.254.x.x (APIPA). Lỗi im lặng, không có error message rõ ràng — chỉ thấy Discover broadcast mà không có Offer."
+    },
+    {
+      "wrong": "Lease hết hạn = client mất IP ngay lập tức",
+      "right": "Client có 2 cơ hội gia hạn trước khi mất IP: T1=50% lease (unicast renew) và T2=87.5% lease (broadcast rebind) theo <a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.4.5\">RFC 2131 §4.4.5</a>. Chỉ mất IP khi 100% lease expire mà không có DHCP server nào phản hồi cả T1 lẫn T2.",
+      "why": "Thấy log 'T1 renewal failed' mà panic là sai — client vẫn còn cơ hội rebind ở T2. Chỉ cần alert khi thấy T2 rebind fail liên tục, đó là dấu hiệu DHCP infrastructure có vấn đề thật sự."
+    },
+    {
+      "wrong": "DHCP Request sau Offer được gửi unicast tới server đã chọn",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.2\">RFC 2131 §4.3.2</a> quy định DHCPREQUEST vẫn phải broadcast với Server Identifier option — để TẤT CẢ DHCP server trong LAN biết kết quả và giải phóng IP đã hold. Unicast DHCPREQUEST chỉ dùng cho renewal (T1 phase), không phải lần đầu sau Offer.",
+      "why": "Hiểu sai khiến không giải thích được tại sao có nhiều DHCP server trong LAN vẫn an toàn — vì cơ chế broadcast Request thông báo công khai cho tất cả, tránh IP leak từ server không được chọn."
+    }
+  ]
+}

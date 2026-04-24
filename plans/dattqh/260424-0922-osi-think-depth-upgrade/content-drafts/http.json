@@ -1,0 +1,45 @@
+{
+  "slug": "http",
+  "expected": { "tldr": 11, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-6\">RFC 9110 §6</a> định nghĩa HTTP request gồm method, request target (path), HTTP version, headers, và optional body. <a href=\"https://datatracker.ietf.org/doc/html/rfc9112#section-3\">RFC 9112 §3</a> quy định wire format cho HTTP/1.1: request-line theo sau bởi header fields (CRLF-separated), blank line, rồi body. 4 thành phần này là tất cả những gì server cần để xử lý yêu cầu — thiếu header quan trọng (Content-Type, Authorization) → server trả 400/401, không liên quan network.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15\">RFC 9110 §15</a> định nghĩa đầy đủ ngữ nghĩa của status codes: 1xx informational, 2xx success, 3xx redirection, 4xx client error, 5xx server error. Status code là contract giữa server và client về kết quả xử lý request. Debug API: đọc status trước, rồi mới đọc body error message — body error chỉ có ý nghĩa khi status code xác định được context.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15.4.2\">RFC 9110 §15.4.2</a> quy định 301 Moved Permanently: client và cache được phép cache redirect vĩnh viễn và không cần hỏi lại server. <a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15.4.3\">RFC 9110 §15.4.3</a> quy định 302 Found: không được cache, mỗi request phải hỏi lại server. Dùng 301 cho redirect permanent (HTTP→HTTPS); dùng 302 khi redirect có thể thay đổi (A/B test, maintenance page).",
+    "7": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9112#section-9.3\">RFC 9112 §9.3</a> định nghĩa persistent connections (keep-alive): sau khi response xong, TCP connection giữ lại để reuse cho request tiếp theo. HTTP/1.1 vẫn serialize request theo thứ tự — phải nhận response trước mới gửi request tiếp (head-of-line blocking). Browsers mở nhiều parallel connections per domain (số lượng cụ thể là browser heuristic, không phải giá trị RFC-mandated) để workaround giới hạn này.",
+    "8": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9113\">RFC 9113</a> định nghĩa HTTP/2 với binary framing layer: mỗi request/response là một stream, nhiều stream multiplexed trên 1 TCP connection — không có head-of-line blocking ở HTTP layer. <a href=\"https://datatracker.ietf.org/doc/html/rfc7541\">RFC 7541</a> định nghĩa HPACK header compression. Lợi ích tốc độ phụ thuộc vào số lượng asset, latency, và tỷ lệ header reuse — không có con số cố định có thể áp dụng cho mọi workload.",
+    "9": "<a href=\"https://datatracker.ietf.org/doc/html/rfc8446#section-1\">RFC 8446 §1</a> định nghĩa TLS 1.3 cung cấp 2 đảm bảo độc lập: confidentiality (encrypt payload bằng symmetric key sau handshake) và authentication (xác thực certificate để ngăn MITM). Thiếu certificate validation — ví dụ accept self-signed cert blindly — encrypt vẫn hoạt động nhưng không xác thực được identity, attacker vẫn có thể MITM.",
+    "10": "<a href=\"https://datatracker.ietf.org/doc/html/rfc8446#section-4\">RFC 8446 §4</a> định nghĩa TLS 1.3 handshake: ClientHello → ServerHello + Certificate + CertificateVerify → Finished. ECDHE key exchange tạo shared secret mà không truyền private key qua dây — forward secrecy đảm bảo session key cũ không bị compromise khi private key lộ sau này. Nếu cert expire, mismatch, hoặc CA không được tin → handshake fail ngay tại bước certificate verification, không có data nào được gửi."
+  },
+  "walkthroughWhyPatches": {
+    "1": "curl -v hiện chính xác HTTP request được gửi và response nhận được, bao gồm tất cả headers. Khi debug 400 Bad Request, đây là cách duy nhất chắc chắn header đã đúng format chưa — xem dòng '>' là request headers gửi đi, dòng '<' là response headers server trả về. Bỏ qua curl -v và chỉ đọc error message từ SDK/framework → không biết header thực sự gửi gì.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc7301\">RFC 7301</a> định nghĩa ALPN (Application-Layer Protocol Negotiation): TLS extension cho phép client và server negotiate application protocol trong TLS handshake. HTTP/2 yêu cầu ALPN với value 'h2'; nếu server không advertise 'h2' trong ALPN → client fallback về HTTP/1.1. HTTP/2 không tự động bật khi upgrade nginx — phải thêm http2 vào listen directive và server phải có TLS.",
+    "4": "Khi thấy 'certificate verify failed', cần xác định: cert của CA nào issue, expire lúc nào, SAN có match domain không. openssl s_client -connect domain:443 -servername domain trả về full certificate chain và verify result — không cần browser. <a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-4.3.4\">RFC 9110 §4.3.4</a> quy định certificate validation bao gồm kiểm tra SAN (Subject Alternative Names) match với request target."
+  },
+  "misconceptions": [
+    {
+      "wrong": "HTTP/2 tự động bật khi cài nginx phiên bản mới",
+      "right": "HTTP/2 yêu cầu thêm tham số http2 vào listen directive và negotiate qua ALPN (<a href=\"https://datatracker.ietf.org/doc/html/rfc7301\">RFC 7301</a>) trong TLS handshake; browsers chỉ hỗ trợ HTTP/2 over TLS trên thực tế — không có TLS thì không có HTTP/2.",
+      "why": "Deploy nginx mới không thấy lợi ích multiplexing vì thiếu config — kiểm tra bằng curl -I --http2 domain.com, dòng đầu phải là HTTP/2 200. Nếu thấy HTTP/1.1 200 → ALPN chưa negotiate được h2."
+    },
+    {
+      "wrong": "301 redirect có thể rollback dễ dàng bằng cách thay đổi config server",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15.4.2\">RFC 9110 §15.4.2</a> quy định 301 được cache vĩnh viễn bởi browser — một khi đã cache, browser không hỏi lại server cho đến khi user clear cache. Server không thể force-expire 301 đã cache ở phía client.",
+      "why": "Redirect sai path dùng 301 thay vì 302 → user bị stuck ở destination sai kể cả sau khi đã fix server config. Luôn test redirect logic với 302 trước khi chuyển sang 301 sau khi xác nhận đúng."
+    },
+    {
+      "wrong": "4xx error nghĩa là server bị lỗi và cần restart",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15.5\">RFC 9110 §15.5</a> định nghĩa 4xx là lỗi do client request sai (sai format, thiếu auth, không có quyền, không tìm thấy resource). <a href=\"https://datatracker.ietf.org/doc/html/rfc9110#section-15.6\">RFC 9110 §15.6</a> định nghĩa 5xx mới là lỗi server. Debug 4xx = fix request, không restart server.",
+      "why": "Restart server khi gặp 401/404 là sai hướng hoàn toàn và gây downtime không cần thiết. 401 → kiểm tra token/credentials; 403 → kiểm tra IAM/RBAC; 404 → kiểm tra URL và route config; 400 → kiểm tra body/header format."
+    },
+    {
+      "wrong": "HTTPS chỉ encrypt data, không làm gì khác",
+      "right": "TLS cung cấp 2 đảm bảo độc lập theo <a href=\"https://datatracker.ietf.org/doc/html/rfc8446#section-1\">RFC 8446 §1</a>: (1) confidentiality — encrypt payload; (2) authentication — xác thực certificate chống MITM. Accept self-signed cert blindly → encrypt hoạt động nhưng không xác thực identity → attacker vẫn MITM được.",
+      "why": "Internal service dùng self-signed cert với certificate validation disabled → traffic encrypted nhưng không authenticated. Attacker trong cùng network có thể MITM toàn bộ internal traffic — false sense of security."
+    },
+    {
+      "wrong": "HTTP/1.1 keep-alive và HTTP/2 multiplexing là cùng tính năng",
+      "right": "Keep-alive (<a href=\"https://datatracker.ietf.org/doc/html/rfc9112#section-9.3\">RFC 9112 §9.3</a>) reuse TCP connection nhưng vẫn serialize request — chỉ 1 request/response active tại 1 thời điểm. HTTP/2 multiplexing (<a href=\"https://datatracker.ietf.org/doc/html/rfc9113#section-5\">RFC 9113 §5</a>) cho phép nhiều stream song song trên 1 TCP connection, không blocking lẫn nhau.",
+      "why": "Nhầm lẫn dẫn đến không biết khi nào cần upgrade từ HTTP/1.1 lên HTTP/2: nếu trang có nhiều asset nhỏ (CSS, JS, images), HTTP/2 multiplexing giảm latency đáng kể vì không cần chờ response trước xong mới gửi request tiếp."
+    }
+  ]
+}

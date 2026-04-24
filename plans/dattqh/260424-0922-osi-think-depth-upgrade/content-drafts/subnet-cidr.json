@@ -1,0 +1,40 @@
+{
+  "slug": "subnet-cidr",
+  "expected": { "tldr": 14, "walkthrough": 7 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a> định nghĩa classful addressing: Class A có high-order bit=0, network ID 8 bit (octet đầu 1–126), host 24 bit — mỗi block Class A chứa 2²⁴−2 = 16,777,214 host usable. Phân bổ nguyên Class A /8 cho một tổ chức là đặc trưng của classful era trước khi CIDR ra đời; ngày nay không còn IP Class A chưa phân bổ.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a> định nghĩa Class B có high-order bits=10, network ID 16 bit (octet đầu 128–191), host 16 bit — mỗi block Class B chứa 2¹⁶−2 = 65,534 host usable. Dải 172.16.0.0–172.31.255.255 thuộc Class B nhưng được RFC 1918 §3 reserve cho private use — không route trên internet.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a> định nghĩa Class C có high-order bits=110, network ID 24 bit (octet đầu 192–223), host 8 bit — mỗi block Class C chứa 2⁸−2 = 254 host usable. Class C chỉ là range địa chỉ; CIDR cho phép chia nhỏ hơn /24 (VLSM) hoặc gộp nhiều /24 thành supernet — không đồng nghĩa Class C = /24.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1918#section-3\">RFC 1918 §3</a> định nghĩa 3 private address range không routable trên internet: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Bất kỳ tổ chức nào cũng có thể dùng các range này mà không cần đăng ký — chúng không unique toàn cầu. Host trong private range muốn ra internet phải qua NAT.",
+    "5": "<a href=\"https://datatracker.ietf.org/doc/html/rfc3022\">RFC 3022</a> định nghĩa NAT (Network Address Translation): router/firewall thay source IP từ private → public trong IP header khi packet ra internet; khi reply về, NAT tra bảng để đổi ngược destination IP về địa chỉ private gốc. Khi curl từ laptop ra internet, server log ghi IP public của NAT gateway — không phải IP private của laptop.",
+    "9": "<a href=\"https://datatracker.ietf.org/doc/html/rfc4632#section-3\">RFC 4632 §3</a> định nghĩa CIDR (Classless Inter-Domain Routing): địa chỉ viết theo notation address/prefix-length, trong đó prefix-length là số bit dành cho network part. /24 nghĩa là 24 bit đầu là network, 8 bit còn lại là host — thay thế hoàn toàn khái niệm classful A/B/C. CIDR cho phép prefix bất kỳ từ /0 đến /32."
+  },
+  "walkthroughWhyPatches": {},
+  "misconceptions": [
+    {
+      "wrong": "Class C đồng nghĩa với /24 — luôn luôn",
+      "right": "Class C là range địa chỉ (octet đầu 192–223) theo <a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a>; prefix length là khái niệm riêng của CIDR theo <a href=\"https://datatracker.ietf.org/doc/html/rfc4632\">RFC 4632</a>. Một block Class C (192.168.1.0) có thể chia thành /25, /26, /27 bằng VLSM.",
+      "why": "Nhầm lẫn classful với CIDR dẫn đến không thiết kế được subnet tùy ý — cứ nghĩ subnet phải là /8, /16, /24 theo classful boundary, bỏ qua khả năng /22, /26, /28 cho các use case cụ thể."
+    },
+    {
+      "wrong": "Private IP không thể trùng nhau giữa các công ty vì đã được cấp phát riêng",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc1918#section-3\">RFC 1918 §3</a> quy định private ranges không routable trên internet và không unique toàn cầu — bất kỳ tổ chức nào cũng dùng cùng range độc lập. IP overlap là vấn đề thực khi kết nối 2 công ty qua VPN site-to-site.",
+      "why": "Thiết kế VPN site-to-site mà không kiểm tra IP overlap trước → tunnel up nhưng routing bị ambiguous → traffic đi sai đích. Phải dùng CIDR notation khác nhau cho mỗi site hoặc dùng NAT-over-VPN để resolve conflict."
+    },
+    {
+      "wrong": "Số host usable trong subnet = 2^(32-n)",
+      "right": "Usable = 2^(32-n) − 2 vì phải trừ network address (host bits all-0) và broadcast address (host bits all-1). Trên AWS VPC, mỗi subnet reserved thêm 5 địa chỉ (network, router, DNS, future, broadcast) → usable thực tế = 2^(32-n) − 5 theo <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html\">AWS VPC subnet sizing docs</a>.",
+      "why": "Chọn /28 cho production subnet (16 − 5 = 11 usable trên AWS) rồi scale thêm service → hết IP → re-subnetting rất tốn công. Tính đủ trước khi tạo VPC, vì AWS không cho thay đổi CIDR của subnet đã tạo."
+    },
+    {
+      "wrong": "NAT gateway nhìn thấy IP private thật của từng máy trong LAN",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc3022\">RFC 3022</a> định nghĩa NAT thay source IP từ private → public — server bên ngoài chỉ thấy IP public của NAT gateway, không biết IP private nào là nguồn gốc. Chỉ NAT gateway mới có bảng mapping port để tra ngược.",
+      "why": "Logging và audit compliance: server log ghi IP của NAT gateway, không phải IP máy thật. Cần enable VPC Flow Logs (AWS) hoặc tương đương để trace ngược IP private khi điều tra security incident."
+    },
+    {
+      "wrong": "127.x.x.x là dải Class A usable bình thường",
+      "right": "127.0.0.0/8 là loopback range theo <a href=\"https://datatracker.ietf.org/doc/html/rfc5735#section-3\">RFC 5735 §3</a> — reserved, không phân bổ cho host hay network thông thường. Class A usable bắt đầu từ 1.0.0.0; 0.0.0.0/8 cũng reserved (RFC 1122 §3.2.1.3), không dùng được.",
+      "why": "Cấu hình bind server lên 127.x.x.x (không phải 127.0.0.1) tưởng là IP LAN → service chỉ accessible từ loopback, không có host nào trong LAN connect được — lỗi khó phát hiện nếu không biết loopback range."
+    }
+  ]
+}

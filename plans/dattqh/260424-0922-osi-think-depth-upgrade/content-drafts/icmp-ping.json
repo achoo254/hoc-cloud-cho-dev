@@ -1,0 +1,42 @@
+{
+  "slug": "icmp-ping",
+  "expected": { "tldr": 6, "walkthrough": 6 },
+  "tldrWhyPatches": {
+    "0": "<a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> định nghĩa ICMP Echo Request (Type 8) và Echo Reply (Type 0) là cặp message dùng để kiểm tra L3 reachability. ping gửi ICMP Echo Request và đo RTT tới khi nhận Echo Reply. ICMP không dùng port, không cần process listen — chỉ kiểm tra IP stack có đáp ứng không. Firewall có thể block ICMP độc lập với TCP/UDP — ping OK không đồng nghĩa service hoạt động.",
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> quy định router nhận packet có TTL=0 phải gửi ICMP Time Exceeded (Type 11) về sender, kèm IP của chính router đó trong source address. Đây là cơ chế bắt buộc — traceroute khai thác điều này bằng cách gửi packet với TTL tăng dần (1, 2, 3...) để lần lượt nhử từng router tự khai IP.",
+    "2": "<a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> định nghĩa ICMP Destination Unreachable (Type 3) với nhiều code: code 0 = Network Unreachable (routing fail), code 1 = Host Unreachable, code 3 = Port Unreachable (UDP port đóng), code 4 = Fragmentation Needed (PMTU Discovery). Router gửi Type 3 để báo lý do cụ thể tại sao packet không thể forward được.",
+    "3": "<a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a> định nghĩa TTL (Time To Live) là hop counter — mỗi router decrements TTL đi 1 khi forward packet; khi TTL=0 thì drop và gửi ICMP Time Exceeded. TTL không liên quan đến thời gian thực. traceroute dùng TTL để map đường đi: TTL=1 để router đầu tiên báo IP, TTL=2 để router thứ hai báo IP, và tiếp tục."
+  },
+  "walkthroughWhyPatches": {
+    "1": "<a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> xác định ping hoạt động ở L3 (Network layer) dùng ICMP — không cần port, không cần process listen trên destination. Ping chỉ test ICMP Echo; TCP service trên cùng host có thể fail trong khi ping thành công, và ngược lại. Phân biệt: ping test L3 (ICMP), nc -zv test L4 (TCP/UDP), curl test L7 (HTTP) — debug đúng layer để không bỏ qua tầng có vấn đề.",
+    "4": "<a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> định nghĩa ICMP Destination Unreachable Type 3 với các code phân biệt lý do: code 0 = net unreachable (routing table không có route), code 1 = host unreachable, code 3 = port unreachable (UDP port đóng — traceroute dùng điều này để detect destination). Firewall DROP im lặng thay vì REJECT bằng ICMP Unreachable → UDP client phải chờ timeout thay vì fail ngay.",
+    "5": "RTT = thời gian round-trip từ lúc gửi ICMP Echo Request tới khi nhận Echo Reply, đo bằng millisecond. RTT cao ở intermediate hop không nhất thiết là bottleneck — router ưu tiên forward traffic hơn xử lý ICMP (rate limiting/deprioritization). ping -s 1472 -M do (DF bit set) fail với 'Frag needed' theo <a href=\"https://datatracker.ietf.org/doc/html/rfc1191\">RFC 1191</a> → MTU mismatch trên đường đi, không phải firewall block."
+  },
+  "misconceptions": [
+    {
+      "wrong": "Ping fail = server bị down",
+      "right": "Ping test ICMP Echo (L3 reachability only); firewall có thể block ICMP inbound (GCP và AWS security group block ICMP theo mặc định) → ping fail nhưng TCP/UDP service vẫn hoạt động bình thường. <a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a> không bắt buộc host phải reply ICMP Echo.",
+      "why": "Monitoring chỉ dùng ping → false alarm liên tục với VPS trên cloud. Kiểm tra đúng: curl -sf http://host/health (L7) hoặc nc -zv host port (L4) để xác nhận service thật sự down."
+    },
+    {
+      "wrong": "Dấu * trong traceroute nghĩa là mạng đứt tại hop đó",
+      "right": "* nghĩa là router đó không gửi ICMP Time Exceeded — có thể do firewall policy hoặc router cấu hình không reply; không phải packet bị drop. Nếu các hop sau đó phản hồi bình thường → đường thông, router đó chỉ im lặng theo <a href=\"https://datatracker.ietf.org/doc/html/rfc792\">RFC 792</a>.",
+      "why": "Kết luận sai 'mạng đứt tại hop X' khi thấy * → escalate sai, leo thang sự cố nhầm. Chỉ kết luận đứt khi tất cả hop sau hop đó đều * VÀ destination không trả lời."
+    },
+    {
+      "wrong": "TTL trong ping output là thời gian sống tính bằng giây",
+      "right": "<a href=\"https://datatracker.ietf.org/doc/html/rfc791#section-3.2\">RFC 791 §3.2</a> định nghĩa TTL là hop counter — mỗi router decrement 1 khi forward, không liên quan đến thời gian thực. TTL trong ping reply là TTL còn lại của gói tin trả về — trừ cho TTL gốc của hệ điều hành đích (Linux=64, Windows=128) để tính số hop.",
+      "why": "Đọc sai TTL dẫn đến đọc sai traceroute output và debug sai số hop. Ví dụ: reply TTL=54 từ Linux host → 64-54=10 hop trên đường về."
+    },
+    {
+      "wrong": "RTT cao ở hop giữa traceroute = bottleneck tại router đó",
+      "right": "Router ưu tiên forward traffic hơn xử lý ICMP — nhiều router rate-limit hoặc de-prioritize ICMP. RTT cao ở intermediate hop nhưng hop cuối bình thường → router đó chỉ chậm xử lý ICMP, không phải congestion thật sự.",
+      "why": "Escalate vấn đề mạng tới router không phải bottleneck thật sự — sai hướng. Bottleneck thật: RTT cao bắt đầu từ hop X và duy trì cao cho tất cả hop tiếp theo, không phải chỉ một hop đơn lẻ."
+    },
+    {
+      "wrong": "ping -s 1500 fail = firewall chặn ICMP",
+      "right": "ping -s 1472 -M do fail với 'Frag needed and DF set' → ICMP Type 3 Code 4 theo <a href=\"https://datatracker.ietf.org/doc/html/rfc1191\">RFC 1191</a> (PMTU Discovery) — MTU mismatch trên đường đi, không phải firewall block ICMP. Thường gặp với VPN/tunnel thêm header overhead làm giảm effective MTU.",
+      "why": "Chẩn đoán nhầm là firewall → mở ICMP rule không giải quyết được vấn đề. Fix đúng: giảm MTU interface (sudo ip link set dev eth0 mtu 1400) hoặc clamp TCP MSS để tránh fragmentation."
+    }
+  ]
+}

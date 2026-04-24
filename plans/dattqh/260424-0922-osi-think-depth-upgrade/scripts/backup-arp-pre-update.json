@@ -1,0 +1,148 @@
+{
+  "slug": "arp",
+  "tldr": [
+    {
+      "what": "Tại sao cần ARP",
+      "why": "IP là địa chỉ logic (L3), MAC là địa chỉ vật lý (L2). Frame Ethernet yêu cầu MAC đích — app chỉ biết IP — ARP lấp khoảng trống đó. Thiếu ARP thì biết IP cũng không gửi được frame.",
+      "whyBreaks": "ARP cache corruption hoặc sai entry → host unreachable dù ping có thể pass (ICMP đi khác). Thường xảy ra sau khi thay NIC (MAC mới), VM migration, hoặc bị ARP spoof. Triệu chứng: kết nối đột ngột drop giữa chừng.",
+      "deploymentUse": "Khi deploy VM mới trong cùng subnet: đảm bảo ARP entry cũ (nếu có từ VM trước dùng IP đó) đã expire hoặc flush. Trong Kubernetes: khi pod restart và lấy IP mới, CNI plugin tự gửi Gratuitous ARP để update cache cả cluster."
+    },
+    {
+      "what": "ARP Request = broadcast",
+      "why": "Khi chưa biết MAC của IP đích, không thể unicast. Broadcast FF:FF:FF:FF:FF:FF đến mọi máy trong LAN để tìm đúng chủ. Chi phí: mọi máy phải ngắt CPU để đọc frame — đó là lý do ARP cache quan trọng để tránh broadcast liên tục.",
+      "whyBreaks": "LAN quá lớn (/16 = 65534 host) với nhiều máy ARP đồng thời → broadcast storm. Mọi máy liên tục bị ngắt CPU xử lý ARP → CPU spike, throughput giảm. Giải pháp: chia VLAN nhỏ hơn (/24 = 254 host per segment).",
+      "deploymentUse": "Khi thiết kế datacenter: giới hạn broadcast domain /24 mỗi VLAN. Hơn 500 host trong 1 subnet = nguy cơ ARP broadcast overhead đáng kể. Kubernetes node trong cùng /24 để ARP hoạt động, L3 routing giữa các /24."
+    },
+    {
+      "what": "ARP Reply = unicast",
+      "why": "Request chứa MAC của người hỏi → máy đích biết reply thẳng về không cần broadcast lại. Tiết kiệm bandwidth và CPU của cả LAN.",
+      "whyBreaks": "Không trực tiếp gây lỗi. Nhưng nếu ARP Reply bị block (một số strict firewall policy) → sender không nhận được MAC → gửi ARP Request liên tục (ARP retry) → tăng broadcast overhead.",
+      "deploymentUse": "Thường không cần cấu hình gì. Nhưng trong môi trường cloud với virtual switch (OVS, Hyper-V vSwitch): đôi khi cần enable ARP proxy hoặc ARP reflection để các VM giao tiếp được."
+    },
+    {
+      "what": "ARP Cache (ip neigh)",
+      "why": "Sau ARP thành công, MAC được lưu cache 1–5 phút. Tránh broadcast mỗi frame. Nếu cache hết hạn hoặc bị xóa → ARP lại từ đầu. Thấy 'STALE' trong ip neigh = cache sắp hết hạn.",
+      "whyBreaks": "ARP cache overflow ('neighbor table overflow' trong dmesg): kernel không lưu được entry mới → ARP fail → host unreachable. Xảy ra khi route nhiều /24 khác nhau qua cùng interface hoặc bị scan ARP từ attacker.",
+      "deploymentUse": "Tuning: net.ipv4.neigh.default.gc_thresh1/2/3 để tăng kích thước ARP cache nếu cần route nhiều subnet. Monitoring: watch -n5 'ip neigh show | wc -l' để phát hiện cache overflow sớm."
+    },
+    {
+      "what": "Ping cùng LAN → ARP IP đích trực tiếp",
+      "why": "192.168.1.10 cùng subnet → ARP trực tiếp IP đó để lấy MAC. Frame gửi thẳng MAC của đích. Không qua gateway.",
+      "whyBreaks": "Host cùng subnet nhưng không trả ARP → STALE → FAILED → ping fail với 'Destination Host Unreachable'. Nguyên nhân: host tắt, VLAN sai, hoặc host disable ARP. Kiểm tra: arping -I eth0 192.168.1.10 để debug.",
+      "deploymentUse": "Trong Kubernetes pod network: pod A và pod B cùng node → giao tiếp qua local ARP (veth pair). Pod A và C khác node → qua overlay network (VXLAN/Geneve), không phải ARP trực tiếp. Biết điều này giúp debug pod-to-pod latency."
+    },
+    {
+      "what": "Ping ngoài LAN → ARP IP của gateway",
+      "why": "8.8.8.8 khác subnet → kernel biết phải qua gateway (default route). ARP cho IP gateway (192.168.1.1), lấy MAC gateway. Frame gửi MAC gateway — KHÔNG phải MAC của 8.8.8.8. Gateway bóc IP gốc, đóng frame mới, tiếp tục định tuyến.",
+      "whyBreaks": "Gateway đổi MAC (thay thiết bị, failover) → ARP cache cũ → tất cả outbound traffic đi vào hư không → internet fail mặc dù IP gateway vẫn đúng. Fix: ip neigh flush dev eth0 để force ARP lại. Keepalived dùng Gratuitous ARP để tránh vấn đề này.",
+      "deploymentUse": "Khi VPS report 'no internet' đột ngột: check ip neigh show | grep gateway-IP. Nếu FAILED hoặc STALE lâu → flush và ARP lại. Trong cloud provider thay đổi underlying hardware → MAC gateway thay đổi → cần flush ARP cache."
+    },
+    {
+      "what": "ARP Spoofing",
+      "why": "Attacker gửi ARP Reply giả nhanh hơn, khai báo MAC của attacker ứng với IP gateway/victim → cả 2 máy lưu MAC sai vào cache → mọi traffic đi qua attacker (MITM). Không cần crack mật khẩu — chỉ cần ở cùng LAN.",
+      "whyBreaks": "Victim không detect được: mọi traffic vẫn đi được (attacker forward tiếp), latency tăng nhẹ. Dấu hiệu: 2 IP có cùng MAC trong ip neigh, hoặc latency đột biến trong LAN. Sau khi MITM: attacker đọc/sửa traffic không encrypt.",
+      "deploymentUse": "Phòng ngừa: Dynamic ARP Inspection (DAI) trên managed switch, dùng HTTPS/TLS cho mọi service (MITM không đọc được), VPN trong LAN không tin cậy (khách sạn, cafe). Trên cloud: security group ngăn VM khác spoof ARP nhờ hypervisor enforcement."
+    }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "what": "Bước 1 — Kiểm tra ARP cache trước khi gửi frame",
+      "why": "Kernel Linux kiểm tra bảng ARP (ip neigh) trước khi phát broadcast. Nếu cache còn hiệu lực → dùng ngay, không broadcast. Cache hit = tiết kiệm ~1ms và tránh làm phiền cả LAN.",
+      "whyBreaks": "ARP cache FAILED sau flush → ping fail với 'Destination Host Unreachable' dù host vẫn alive. Kernel sẽ thử ARP lại tự động nhưng có latency. Khi debug 'intermittent connection loss': check ip neigh state trước.",
+      "observeWith": "ip neigh show  # Xem toàn bộ cache với state\nip neigh show nud reachable  # Chỉ entries đang reliable\nwatch -n2 'ip neigh show'  # Real-time theo dõi thay đổi cache",
+      "code": "# Xem bảng ARP cache hiện tại\nip neigh show\n\n# Output mẫu:\n# 192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:01 REACHABLE\n# 192.168.1.10 dev eth0 lladdr aa:bb:cc:dd:ee:10 STALE"
+    },
+    {
+      "step": 2,
+      "what": "Bước 2 — Gửi ARP Request broadcast",
+      "why": "Cache miss → kernel phát frame broadcast (Eth dst=FF:FF:FF:FF:FF:FF) hỏi 'Ai có IP 192.168.1.10?'. Mọi máy trong LAN nhận nhưng chỉ máy có IP đó reply. Capture được bằng tcpdump để xem thực tế.",
+      "whyBreaks": "Không thấy ARP Reply sau Request → host không tồn tại, host tắt, hoặc host disable ARP (một số firewall config). Phân biệt: nếu thấy Request broadcast nhưng không có Reply → vấn đề ở phía đích, không phải sender.",
+      "observeWith": "sudo tcpdump -i eth0 -n arp  # Xem 'arp who-has' (request) và 'arp reply' (reply)\n# Request: Ethernet dst=ff:ff:ff:ff:ff:ff (broadcast)\n# Reply: Ethernet dst=<MAC của người hỏi> (unicast)\nsudo arping -I eth0 -c 1 192.168.1.10  # Test ARP thủ công, xem có reply không",
+      "code": "# Xem ARP broadcast trên dây bằng tcpdump\nsudo tcpdump -i eth0 -n arp\n\n# Hoặc dùng arping để thủ công gửi ARP request\nsudo arping -I eth0 -c 1 192.168.1.10",
+      "failModes": [
+        {
+          "symptom": "Mạng chậm đột ngột, mọi máy trong LAN bị ảnh hưởng dù không có traffic lớn",
+          "evidence": "dmesg hoặc /var/log/kern.log: 'net_ratelimit: X callbacks suppressed' kèm tcpdump thấy hàng trăm ARP Request/giây từ nhiều src MAC khác nhau — dấu hiệu ARP storm do loop hoặc misconfigured NIC bonding"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Xác định nguồn storm: đếm ARP rate trên switch port hoặc tcpdump",
+          "command": "sudo tcpdump -i eth0 -n arp | awk '{print $NF}' | sort | uniq -c | sort -rn | head -20"
+        },
+        {
+          "step": "Cô lập port nghi ngờ trên managed switch để dừng storm",
+          "command": "sudo ip link set eth0 down  # tạm thời isolate interface đang bị flood"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "what": "Bước 3 — Nhận ARP Reply unicast",
+      "why": "Máy đích gửi Reply unicast về: 'IP 192.168.1.10 có MAC aa:bb:cc:dd:ee:10'. Unicast vì Request đã cung cấp MAC người hỏi — không cần broadcast. Kernel lưu vào cache ngay.",
+      "whyBreaks": "Sau khi flush cache và ping thành công: ip neigh show phải hiện entry mới với state REACHABLE. Nếu vẫn FAILED sau ping thành công → ARP hoạt động nhưng có gì đó sai với neighbor subsystem (hiếm, thường do kernel bug hoặc container network misconfiguration).",
+      "observeWith": "ip neigh flush all && ping -c 1 192.168.1.10 && ip neigh show\n# Sau lệnh này: thấy entry 192.168.1.10 REACHABLE với MAC đúng\n# Timing: ARP resolve xảy ra trong <1ms khi host alive",
+      "code": "# Quan sát cache được cập nhật sau khi ping\nip neigh flush all           # Xóa cache\nping -c 1 192.168.1.10       # Trigger ARP\nip neigh show                # Xem entry mới thêm vào"
+    },
+    {
+      "step": 4,
+      "what": "Bước 4 — Ping ra Internet: ARP for gateway",
+      "why": "Khi ping 8.8.8.8, kernel so sánh với routing table — 8.8.8.8 không cùng subnet → next hop là default gateway (192.168.1.1). ARP cho 192.168.1.1, không phải 8.8.8.8. Frame gửi với MAC gateway. Dev hay nhầm điểm này khi debug MITM.",
+      "whyBreaks": "ip neigh flush + ping 8.8.8.8: tcpdump phải thấy ARP request cho 192.168.1.1, không phải 8.8.8.8. Nếu không thấy ARP cho gateway → routing table sai (không có default route) → 'Network unreachable' thay vì ARP timeout.",
+      "observeWith": "ip route  # Xem 'default via X.X.X.X' — đây là IP sẽ bị ARP\nsudo tcpdump -i eth0 arp -n  # Capture song song khi ping 8.8.8.8\n# Confirm: ARP request hỏi gateway IP, không phải 8.8.8.8",
+      "code": "# Xem routing table để hiểu kernel quyết định next hop thế nào\nip route\n# Output: default via 192.168.1.1 dev eth0\n\n# Khi ping 8.8.8.8 → ARP xảy ra cho 192.168.1.1\nsudo tcpdump -i eth0 arp &\nping -c 1 8.8.8.8\nkill %1"
+    },
+    {
+      "step": 5,
+      "what": "Bước 5 — ARP Spoofing: đầu độc cache",
+      "why": "Attacker gửi gratuitous ARP Reply (không được yêu cầu): '192.168.1.1 có MAC là attacker_mac'. Nạn nhân cập nhật cache với MAC sai → gửi traffic tới attacker thay vì gateway. Dùng arpspoof (dsniff) hoặc Scapy. Phòng: DAI trên managed switch.",
+      "whyBreaks": "ARP không authenticate sender — bất kỳ máy nào cũng có thể claim bất kỳ IP nào. Đây là lỗ hổng by design của <a href=\"https://datatracker.ietf.org/doc/html/rfc826\" target=\"_blank\">RFC 826</a>. Không thể 'patch' ARP — phải phòng ở tầng khác (DAI switch, VPN, TLS).",
+      "observeWith": "ip neigh show | awk '{print $5}' | sort | uniq -d  # Tìm MAC trùng lặp\n# Nếu có output → 2 IP chia sẻ 1 MAC → dấu hiệu spoofing hoặc NIC bonding\narp-scan --localnet  # Scan ARP toàn LAN, so sánh MAC với expected",
+      "code": "# Phát hiện ARP spoofing bằng arp-scan hoặc xem bất thường\n# (trên Linux - chỉ để học, KHÔNG dùng tấn công thật)\narp -a | sort -t'.' -k4 -n  # Xem toàn bộ cache, tìm MAC trùng lặp\n\n# Phát hiện: 2 IP có cùng MAC = dấu hiệu spoofing\n# ip neigh | awk '{print $5}' | sort | uniq -d",
+      "failModes": [
+        {
+          "symptom": "Traffic đến gateway bị mất hoặc đi sai hướng, latency LAN tăng đột biến ~2-5ms",
+          "evidence": "ip neigh show | awk '/192.168.1.1/{print}' trả ra MAC không khớp với MAC thật của gateway — ví dụ: '192.168.1.1 dev eth0 lladdr de:ad:be:ef:00:01 REACHABLE' trong khi MAC thật gateway là aa:bb:cc:dd:ee:01"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Xác nhận MAC gateway thật bằng cách hỏi trực tiếp switch hoặc so sánh với baseline",
+          "command": "sudo arping -I eth0 -c 2 192.168.1.1 | grep 'reply from'"
+        },
+        {
+          "step": "Xóa ARP cache entry bị nhiễm, buộc re-resolve",
+          "command": "sudo ip neigh del 192.168.1.1 dev eth0 && ping -c 1 192.168.1.1"
+        },
+        {
+          "step": "Thêm static ARP entry cho gateway để chặn spoof tiếp theo (tạm thời)",
+          "command": "sudo ip neigh add 192.168.1.1 lladdr aa:bb:cc:dd:ee:01 dev eth0 nud permanent"
+        }
+      ],
+      "automateScript": {
+        "lang": "bash",
+        "code": "#!/bin/bash\n# Phát hiện duplicate MAC (ARP spoofing indicator) trên LAN\n# Dùng arp-scan, chạy cron mỗi 5 phút\nINTERFACE=${1:-eth0}\nDUPS=$(sudo arp-scan --interface=\"$INTERFACE\" --localnet 2>/dev/null \\\n  | awk '/DUP/{print $1, $2}' | sort -u)\nif [ -n \"$DUPS\" ]; then\n  echo \"[ALERT $(date '+%Y-%m-%d %H:%M:%S')] Duplicate MAC detected on $INTERFACE:\"\n  echo \"$DUPS\"\n  logger -t arp-monitor \"ALERT: duplicate MAC — $DUPS\"\nfi",
+        "note": "Cron: */5 * * * * /usr/local/bin/arp-monitor.sh eth0. Cần gói arp-scan. Log vào syslog để alert tập trung."
+      }
+    },
+    {
+      "step": 6,
+      "what": "Bước 6 — Xem ARP trực tiếp bằng Wireshark/tcpdump",
+      "why": "Thực hành capture là cách duy nhất để thực sự thấy ARP hoạt động. Wireshark filter 'arp' sẽ tách biệt hoàn toàn. Quan sát: Dst broadcast → Request; Dst unicast → Reply. Đây là kiến thức cốt lõi khi debug 'host unreachable'.",
+      "whyBreaks": "Chạy tcpdump trên interface sai (vlan vs physical, docker0 vs eth0) → không thấy ARP dù nó đang xảy ra. Trong Docker/Kubernetes: ARP xảy ra trên virtual interface (veth, docker0, cni0) không phải eth0.",
+      "observeWith": "sudo tcpdump -i eth0 -n -vvv arp  # -vvv để thấy full ARP fields\n# Đọc: 'arp who-has TARGET tell SENDER' = Request\n# Đọc: 'arp reply TARGET is-at MAC' = Reply\nip link show  # List all interfaces — chọn đúng interface",
+      "code": "# Terminal 1: Capture ARP\nsudo tcpdump -i eth0 -n -vvv arp\n\n# Terminal 2: Flush cache rồi ping để trigger ARP\nip neigh flush all\nping -c 1 192.168.1.10\n\n# Wireshark filter: arp\n# Xem: Who has 192.168.1.10? Tell 192.168.1.5"
+    },
+    {
+      "step": 7,
+      "what": "Bước 7 — Gratuitous ARP và IP conflict detection",
+      "why": "Khi interface up, Linux tự gửi Gratuitous ARP: broadcast '192.168.1.5 có MAC là ...'. Mục đích: (1) cập nhật cache mọi máy với MAC mới, (2) phát hiện IP conflict — nếu có ai reply thì có 2 máy cùng IP. Đây cũng là cơ chế failover VIP (VRRP/keepalived) dùng.",
+      "whyBreaks": "Sau keepalived failover mà không gửi Gratuitous ARP → các host trong LAN giữ cache cũ (MAC node primary) → traffic đến VIP vẫn đi tới node đã down → downtime kéo dài đến khi cache expire (~5 phút). Gratuitous ARP là bước bắt buộc trong failover.",
+      "observeWith": "sudo tcpdump -i eth0 arp  # Xem Gratuitous ARP khi arping -A\n# Gratuitous: sender IP = target IP (host tự hỏi chính địa chỉ của nó)\narping -D -I eth0 192.168.1.5  # Duplicate Address Detection: exit 1 = conflict",
+      "code": "# Gửi Gratuitous ARP thủ công (ví dụ sau failover)\narping -A -I eth0 -c 3 192.168.1.5\n\n# Hoặc dùng arping để kiểm tra IP conflict:\narping -D -I eth0 192.168.1.5\n# Exit code 1 = có conflict"
+    }
+  ],
+  "misconceptions": null,
+  "contentHash": "2fa08fadeab9ba991b40b4ba124f059b383c11f5"
+}

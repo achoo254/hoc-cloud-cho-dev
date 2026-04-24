@@ -1,0 +1,178 @@
+{
+  "slug": "dns",
+  "tldr": [
+    {
+      "what": "Stub resolver (client)",
+      "why": "Là DNS client đơn giản nhất — nằm ngay trong OS. Nó không tự recursive, chỉ forward query tới recursive resolver được cấu hình (thường là /etc/resolv.conf). Nếu stub resolver hỏng thì mọi domain đều fail dù mạng ổn.",
+      "whyBreaks": "Nếu /etc/resolv.conf trỏ sai IP resolver (ví dụ sau khi đổi network) → mọi DNS query timeout, toàn bộ service phụ thuộc hostname đều down dù network ping IP vẫn thông.",
+      "deploymentUse": "Trên VPS Ubuntu, sau khi cài đặt cần kiểm tra /etc/resolv.conf hoặc /etc/systemd/resolved.conf để đảm bảo stub resolver trỏ đúng upstream (8.8.8.8 hoặc resolver của cloud provider)."
+    },
+    {
+      "what": "Recursive resolver (8.8.8.8, ISP)",
+      "why": "Đây là 'thám tử DNS' thật sự — nó tự đi hỏi Root → TLD → Authoritative thay cho client. Google 8.8.8.8, Cloudflare 1.1.1.1 là recursive resolver công cộng. ISP hay cấp resolver riêng nhưng đôi khi inject quảng cáo vào NXDOMAIN.",
+      "whyBreaks": "Nếu dùng resolver ISP mà ISP redirect NXDOMAIN → trang quảng cáo, code backend nhận HTML thay vì lỗi DNS → bug khó debug. Hoặc nếu resolver bị block port 53 outbound thì mọi DNS query fail.",
+      "deploymentUse": "Khi deploy VPS, cấu hình resolver uy tín (1.1.1.1 hoặc 8.8.8.8) thay vì dùng mặc định ISP. Đặc biệt quan trọng khi app gọi external API theo hostname."
+    },
+    {
+      "what": "Root server (.)",
+      "why": "Đỉnh của cây DNS. Root chỉ biết 1 việc: TLD nào do nameserver nào quản lý. Có 13 cụm root server (a.root-servers.net … m.root-servers.net) nhưng thực tế có hàng trăm anycast instance khắp thế giới.",
+      "whyBreaks": "Nếu root server unreachable (hiếm nhưng xảy ra do firewall corporate chặn outbound UDP 53 tới anycast IPs) → mọi cold DNS lookup fail, chỉ cache hit vẫn hoạt động.",
+      "deploymentUse": "Không cần cấu hình trực tiếp — nhưng hiểu root server giúp giải thích tại sao DNS phân tán và tại sao không có 'central DNS database' để query."
+    },
+    {
+      "what": "TLD server (.com, .net, .vn)",
+      "why": "Biết nameserver của từng domain trong TLD đó. .com TLD biết ns1.example.com thuộc về ai. Nếu TLD bị outage thì mọi .com domain đều không resolve được — đây từng xảy ra với .cn năm 2014.",
+      "whyBreaks": "Khi mua domain mới và trỏ nameserver → TLD cần 24-48h để propagate NS record mới. Trong thời gian này domain không resolve được — không phải bug code.",
+      "deploymentUse": "Khi đổi nhà đăng ký domain hoặc chuyển sang Cloudflare DNS, NS record được thay đổi tại registrar → TLD cập nhật → mọi resolver trên thế giới dần học NS mới theo TTL."
+    },
+    {
+      "what": "Authoritative server (ns1.example.com)",
+      "why": "Server cuối cùng, nắm giữ record thật (A, MX, CNAME…). Đây là server được cấu hình tại nhà đăng ký domain. Response từ đây có AA=1 (Authoritative Answer) trong DNS packet.",
+      "whyBreaks": "Nếu authoritative server down hoặc không có record → recursive resolver nhận SERVFAIL hoặc NXDOMAIN → toàn bộ domain unreachable kể cả web, email, API.",
+      "deploymentUse": "Khi dùng Cloudflare/Route53 làm DNS provider, đây chính là authoritative server. Mọi A record, CNAME, TXT tạo trong dashboard đều nằm trên authoritative server này."
+    },
+    {
+      "what": "TTL (Time To Live)",
+      "why": "Số giây resolver được phép cache record trước khi phải hỏi lại authoritative. TTL cao = ít query hơn nhưng đổi IP chậm lan truyền. Best practice: hạ TTL 24h trước khi migration.",
+      "whyBreaks": "Đổi IP server khi TTL=86400 mà không hạ TTL trước → user bị stuck ở IP cũ tối đa 24h → downtime hoặc split-brain (một số user thấy server mới, số khác server cũ).",
+      "deploymentUse": "Quy trình migration VPS: (1) Hạ TTL về 300s, chờ 24h. (2) Chuyển traffic sang server mới. (3) Sau khi ổn định, tăng TTL lại 3600-86400. Bước 1 bắt buộc, không được bỏ qua."
+    },
+    {
+      "what": "Record A / AAAA",
+      "why": "A ánh xạ domain → IPv4 (<a href=\"https://datatracker.ietf.org/doc/html/rfc1035\" target=\"_blank\">RFC 1035</a>), AAAA → IPv6. Mọi web request đều cần ít nhất một trong hai record này. Browser ưu tiên hỏi AAAA trước (Happy Eyeballs), nếu không có thì fall back sang A.",
+      "whyBreaks": "Nếu thêm AAAA record trỏ sai IP IPv6 (ví dụ server chưa enable IPv6) → khoảng 30-40% user IPv6 bị timeout 2-3 giây trước khi fallback A record — UX tệ khó trace.",
+      "deploymentUse": "Khi thuê VPS, lấy IPv4 public IP → tạo A record. Nếu VPS có IPv6 → thêm AAAA. Cả hai đều trỏ về cùng server. Cloudflare proxy tự động handle dual-stack."
+    },
+    {
+      "what": "Record CNAME",
+      "why": "Alias: trỏ một tên về tên khác. www.example.com CNAME example.com. Không dùng CNAME ở root zone vì CNAME không được đặt cùng record khác — vi phạm <a href=\"https://datatracker.ietf.org/doc/html/rfc2181\" target=\"_blank\">RFC 2181</a>.",
+      "whyBreaks": "Đặt CNAME ở apex domain (example.com thay vì www.example.com) → vi phạm <a href=\"https://datatracker.ietf.org/doc/html/rfc2181\" target=\"_blank\">RFC 2181</a>, nhiều DNS provider từ chối hoặc hành vi không xác định → website down hoặc email fail.",
+      "deploymentUse": "Dùng CNAME cho: www.yourdomain.com → yourdomain.com, hoặc subdomain trỏ về Heroku/Vercel/CDN hostname. Không dùng CNAME cho apex — dùng A record hoặc ALIAS record (Cloudflare hỗ trợ)."
+    },
+    {
+      "what": "Record MX",
+      "why": "Chỉ mail server nhận email cho domain. Thiếu MX thì email gửi đến domain sẽ fail hoặc bị bounce. MX có priority (số nhỏ = ưu tiên cao hơn).",
+      "whyBreaks": "Thiếu MX hoặc MX trỏ sai hostname → email gửi đến @yourdomain.com bị bounce ngay. Priority sai (ví dụ backup server priority thấp hơn primary) → email luôn đi qua backup dù primary ổn.",
+      "deploymentUse": "Khi dùng Google Workspace hay Zoho Mail cho email doanh nghiệp, họ cấp sẵn MX record cần tạo. Ví dụ Gmail: ASPMX.L.GOOGLE.COM priority 1, ALT1... priority 5."
+    },
+    {
+      "what": "Record TXT (SPF/DKIM/DMARC)",
+      "why": "SPF liệt kê server được phép gửi email thay domain, DKIM thêm chữ ký số, DMARC chỉ định policy xử lý email fail. Thiếu 3 cái này → email hay vào spam hoặc bị reject thẳng.",
+      "whyBreaks": "Thiếu SPF → Gmail/Outlook mark email là suspected spam. SPF quá tight (hardFail -all) mà quên list server → email từ server hợp lệ bị reject. Thiếu DMARC → domain dễ bị spoof.",
+      "deploymentUse": "Mỗi lần thêm email provider mới (SendGrid, SES, Mailchimp) → phải cập nhật SPF TXT record thêm include. Khi dựng VPS gửi email → thêm IP VPS vào SPF, cấu hình DKIM key pair."
+    },
+    {
+      "what": "Negative cache (NXDOMAIN)",
+      "why": "Khi domain không tồn tại, resolver cache lại kết quả NXDOMAIN theo TTL của SOA record. Dùng khi test: tạo domain giả → bị NXDOMAIN cache → thêm record thật → vẫn fail trong TTL window.",
+      "whyBreaks": "Tạo subdomain mới (api.yourdomain.com) nhưng trước đó đã query một lần khi chưa có record → resolver cache NXDOMAIN → sau khi tạo record vẫn báo lỗi vài phút → dev tưởng cấu hình sai.",
+      "deploymentUse": "Khi deploy feature mới cần subdomain mới, tạo DNS record TRƯỚC khi deploy code. Nếu đã bị negative cache, dùng dig +trace hoặc flush DNS để bypass, hoặc chờ SOA minimum TTL hết."
+    },
+    {
+      "what": "DoH (DNS over HTTPS)",
+      "why": "Encrypt DNS query qua HTTPS port 443 — ISP không thấy domain đang được hỏi. Firefox bật DoH mặc định. Vấn đề: tập trung hóa (hầu hết dùng Cloudflare) và bypass corporate DNS filter.",
+      "whyBreaks": "App dùng DoH hardcode Cloudflare trong môi trường corporate → bypass DNS filter → bị firewall chặn kết nối outbound port 443 tới 1.1.1.1 → app không resolve được domain nào.",
+      "deploymentUse": "Trên VPS production không cần DoH — resolver 1.1.1.1 qua UDP 53 là đủ. DoH hữu ích cho dev machine khi muốn bypass ISP hoặc kiểm tra DNS record từ góc nhìn Cloudflare."
+    }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "what": "dig cơ bản — xem A record",
+      "why": "dig là công cụ debug DNS số 1. Hiểu output của dig = hiểu được DNS response thật, biết TTL còn bao nhiêu, ai là authoritative server. Không có dig thì debug DNS chỉ là đoán mò.",
+      "code": "# Query A record mặc định\ndig example.com\n\n# Output quan trọng:\n# QUESTION SECTION: domain đang hỏi\n# ANSWER SECTION: kết quả (IP)\n# Query time: latency\n# SERVER: resolver đang dùng",
+      "whyBreaks": "Nếu bỏ qua dig và chỉ dùng ping/curl để debug DNS → không thấy được TTL, không biết resolver nào đang dùng, không phân biệt được cache hit vs authoritative response → debug blind.",
+      "observeWith": "dig example.com — nhìn cột TTL trong ANSWER SECTION và dòng SERVER để xác định resolver đang dùng. So sánh Query time: <5ms là cache hit, >50ms là fresh lookup.",
+      "failModes": [
+        {
+          "symptom": "DNS trả NXDOMAIN dù domain vừa được tạo, hoặc app không resolve được domain nội bộ",
+          "evidence": "dig api.internal.example.com cho thấy: 'status: NXDOMAIN' — và dig api.internal.example.com +search cũng không thấy, do /etc/resolv.conf thiếu 'search internal.example.com' nên query không append domain suffix"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Kiểm tra /etc/resolv.conf có search domain không",
+          "command": "cat /etc/resolv.conf | grep -E 'nameserver|search|domain'"
+        },
+        {
+          "step": "Thêm search domain tạm thời để test (không persistent qua reboot)",
+          "command": "echo 'search internal.example.com' | sudo tee -a /etc/resolv.conf && dig api.internal.example.com"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "what": "dig +trace — xem toàn bộ recursive path",
+      "why": "+trace bắt dig tự làm recursive từ root, không dùng cache của resolver. Đây là cách xác nhận 'record đã cập nhật chưa' — nếu +trace trả đúng nhưng resolver vẫn sai thì đó là cache issue.",
+      "code": "# Trace từng hop: Root → TLD → Authoritative\ndig example.com +trace\n\n# Kết quả mẫu:\n# .       518400  IN  NS  a.root-servers.net.\n# com.    172800  IN  NS  a.gtld-servers.net.\n# example.com. 86400 IN NS ns1.example.com.\n# example.com. 3600  IN A  93.184.216.34",
+      "whyBreaks": "Không dùng +trace khi debug propagation → không phân biệt được 'authoritative đã cập nhật chưa' vs 'resolver còn cache cũ' → mất hàng giờ chờ vô ích hoặc rollback nhầm.",
+      "observeWith": "dig example.com +trace — đọc từng dòng NS delegation từ root xuống. Nếu thấy IP mới ở authoritative nhưng dig example.com (không +trace) vẫn trả IP cũ → xác nhận là cache issue, không phải config lỗi."
+    },
+    {
+      "step": 3,
+      "what": "Xem các record type khác",
+      "why": "Mỗi record type giải quyết 1 vấn đề riêng. Khi email vào spam → check TXT record SPF/DKIM. Khi subdomain không hoạt động → check CNAME. Khi không nhận được email → check MX.",
+      "code": "# MX record — mail server\ndig example.com MX\n\n# TXT record — SPF/DKIM\ndig example.com TXT\n\n# NS record — nameservers\ndig example.com NS\n\n# AAAA record — IPv6\ndig example.com AAAA",
+      "whyBreaks": "Chỉ biết query A record → mù về email (MX/TXT), mù về nameserver delegation (NS), mù về IPv6 (AAAA). Khi email vào spam mà không check TXT SPF/DKIM → debug sai hướng.",
+      "observeWith": "dig example.com TXT | grep -i spf — xem SPF value. dig example.com MX +short — liệt kê mail servers và priority. dig example.com NS +short — xác nhận nameserver đang active."
+    },
+    {
+      "step": 4,
+      "what": "TTL và cache — kiểm chứng thực tế",
+      "why": "TTL giảm mỗi lần hỏi (vì resolver cache đã có). Query lần 1 TTL=3600, query lần 2 vài phút sau TTL=3540. Khi TTL về 0 thì resolver hỏi lại authoritative. Hiểu điều này để tránh nhầm 'tại sao đổi IP mà vẫn không thấy'.",
+      "code": "# Hỏi 2 lần, nhìn TTL giảm dần\ndig example.com | grep -A2 'ANSWER'\n# Chờ 5 giây\nsleep 5\ndig example.com | grep -A2 'ANSWER'\n# TTL sẽ giảm ~5",
+      "whyBreaks": "Không kiểm tra TTL trước migration → đổi A record khi TTL còn 86400 → user stuck IP cũ 24h → perceived downtime dù server mới hoàn toàn ổn.",
+      "observeWith": "watch -n 5 'dig example.com +short' — chạy liên tục mỗi 5s để xem thời điểm cache expire và IP mới xuất hiện. Hoặc dig example.com | grep -i ttl để xem TTL hiện tại.",
+      "failModes": [
+        {
+          "symptom": "Sau migration IP, user vẫn bị redirect về server cũ dù đã đổi A record hàng giờ trước",
+          "evidence": "dig example.com cho thấy TTL còn lớn (ví dụ: 'example.com. 82800 IN A 1.1.1.1') — TTL lúc đổi record còn 86400s, resolver đang cache IP cũ cho đến khi TTL hết"
+        }
+      ],
+      "fixSteps": [
+        {
+          "step": "Kiểm tra TTL hiện tại của record đang được cache",
+          "command": "dig example.com | awk '/ANSWER SECTION/{getline; print \"TTL remaining:\", $2, \"seconds\"}'"
+        },
+        {
+          "step": "Bypass cache bằng +trace để xác nhận authoritative đã cập nhật",
+          "command": "dig example.com +trace +short | tail -5"
+        },
+        {
+          "step": "Cho lần migration tiếp theo: hạ TTL xuống 300s ít nhất 24h trước khi đổi IP",
+          "command": "dig example.com | grep -E 'IN\\s+A' | awk '{print \"Current TTL:\", $2, \"seconds — wait this long for full propagation\"}'"
+        }
+      ],
+      "automateScript": {
+        "lang": "bash",
+        "code": "#!/bin/bash\n# Batch check nhiều DNS records, alert nếu IP khác expected hoặc TTL thấp\n# Dùng sau migration để monitor propagation\nRESOLVER=${1:-8.8.8.8}\nINPUT_FILE=${2:-/etc/dns-check.conf}  # format: domain expected_ip\necho \"=== DNS Batch Check $(date '+%Y-%m-%d %H:%M:%S') ===\"\nwhile IFS=' ' read -r DOMAIN EXPECTED; do\n  [ -z \"$DOMAIN\" ] || [[ \"$DOMAIN\" == \\#* ]] && continue\n  RESULT=$(dig \"$DOMAIN\" A @\"$RESOLVER\" +short | head -1)\n  TTL=$(dig \"$DOMAIN\" A @\"$RESOLVER\" | awk '/ANSWER SECTION/{getline; print $2}')\n  STATUS=\"OK\"\n  [ \"$RESULT\" != \"$EXPECTED\" ] && STATUS=\"MISMATCH (got $RESULT)\"\n  [ -z \"$TTL\" ] && TTL=\"N/A\"\n  echo \"[$STATUS] $DOMAIN → $RESULT (TTL:${TTL}s expected:$EXPECTED)\"\ndone < \"$INPUT_FILE\"",
+        "note": "Tạo /etc/dns-check.conf với mỗi dòng: 'example.com 93.184.216.34'. Chạy sau migration để theo dõi propagation. Cron: */5 * * * * /usr/local/bin/dns-batch-check.sh 8.8.8.8"
+      }
+    },
+    {
+      "step": 5,
+      "what": "Hỏi trực tiếp authoritative — bypass cache",
+      "why": "Khi nghi ngờ resolver đang cache cũ, hỏi thẳng authoritative server để xem record thật sự là gì. Nếu authoritative đúng mà resolver sai = cache cũ, chờ TTL hết. Nếu authoritative cũng sai = chưa publish record.",
+      "code": "# Tìm authoritative server\ndig example.com NS +short\n\n# Hỏi thẳng authoritative (không qua cache)\ndig example.com @ns1.example.com A\n\n# So sánh với resolver thông thường:\ndig example.com @8.8.8.8 A",
+      "whyBreaks": "Chỉ query qua resolver thông thường → không biết authoritative đã cập nhật chưa → có thể chờ vô ích hoặc nghĩ DNS provider có vấn đề trong khi thực ra chỉ là cache chưa hết.",
+      "observeWith": "diff <(dig example.com @ns1.example.com A +short) <(dig example.com @8.8.8.8 A +short) — nếu output khác nhau thì resolver 8.8.8.8 đang cache record cũ."
+    },
+    {
+      "step": 6,
+      "what": "Reverse DNS lookup (PTR record)",
+      "why": "Reverse DNS ánh xạ IP → domain. Mail server hay check PTR để anti-spam: nếu IP không có PTR hoặc PTR không match → email bị reject. Hosting server thường phải cấu hình PTR (rDNS) trong control panel VPS.",
+      "code": "# Reverse lookup cho IP\ndig -x 93.184.216.34\n# Hoặc\nnslookup 93.184.216.34\n\n# Output:\n# 34.216.184.93.in-addr.arpa. PTR example.com.",
+      "whyBreaks": "VPS gửi email mà không cấu hình PTR record (rDNS) → Outlook, Gmail check PTR fail → email bị reject hoặc spam. Nhiều email provider từ chối nhận từ IP không có PTR.",
+      "observeWith": "dig -x $(curl -s https://ipinfo.io/ip) — kiểm tra PTR record của IP VPS hiện tại. Nếu trả về NXDOMAIN hoặc địa chỉ generic của hosting → cần vào control panel VPS để cấu hình rDNS."
+    },
+    {
+      "step": 7,
+      "what": "DoH — DNS over HTTPS kiểm tra",
+      "why": "Kiểm tra DoH giúp xác nhận record trực tiếp từ Cloudflare/Google mà không qua OS resolver. Hữu ích khi nghi ngờ ISP đang tamper DNS hoặc khi đang debug từ corporate network có DNS filtering.",
+      "code": "# Query Cloudflare DoH bằng curl\ncurl -s -H 'accept: application/dns-json' \\\n  'https://cloudflare-dns.com/dns-query?name=example.com&type=A' \\\n  | python3 -m json.tool\n\n# Query Google DoH\ncurl -s 'https://dns.google/resolve?name=example.com&type=A' \\\n  | python3 -m json.tool",
+      "whyBreaks": "App hardcode DoH endpoint (1.1.1.1:443) trong môi trường có firewall restrictive → connection blocked → DNS fail hoàn toàn dù UDP 53 vẫn hoạt động. Khó debug vì error message thường là generic timeout.",
+      "observeWith": "curl -s 'https://dns.google/resolve?name=example.com&type=A' | python3 -m json.tool | grep -E 'data|TTL' — so sánh kết quả DoH với dig example.com @8.8.8.8 để xác nhận ISP có tamper không."
+    }
+  ],
+  "misconceptions": null,
+  "contentHash": "9967d2ac4a5d9f558ca4aeb165d2d0c206bf6396"
+}

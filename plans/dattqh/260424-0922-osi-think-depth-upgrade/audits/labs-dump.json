@@ -1,0 +1,1168 @@
+{
+  "arp": {
+    "slug": "arp",
+    "title": "Giao thức ARP",
+    "tldr": [
+      {
+        "what": "Tại sao cần ARP",
+        "why": "IP là địa chỉ logic (L3), MAC là địa chỉ vật lý (L2). Frame Ethernet yêu cầu MAC đích — app chỉ biết IP — ARP lấp khoảng trống đó. Thiếu ARP thì biết IP cũng không gửi được frame.",
+        "whyBreaks": "ARP cache corruption hoặc sai entry → host unreachable dù ping có thể pass (ICMP đi khác). Thường xảy ra sau khi thay NIC (MAC mới), VM migration, hoặc bị ARP spoof. Triệu chứng: kết nối đột ngột drop giữa chừng.",
+        "deploymentUse": "Khi deploy VM mới trong cùng subnet: đảm bảo ARP entry cũ (nếu có từ VM trước dùng IP đó) đã expire hoặc flush. Trong Kubernetes: khi pod restart và lấy IP mới, CNI plugin tự gửi Gratuitous ARP để update cache cả cluster."
+      },
+      {
+        "what": "ARP Request = broadcast",
+        "why": "Khi chưa biết MAC của IP đích, không thể unicast. Broadcast FF:FF:FF:FF:FF:FF đến mọi máy trong LAN để tìm đúng chủ. Chi phí: mọi máy phải ngắt CPU để đọc frame — đó là lý do ARP cache quan trọng để tránh broadcast liên tục.",
+        "whyBreaks": "LAN quá lớn (/16 = 65534 host) với nhiều máy ARP đồng thời → broadcast storm. Mọi máy liên tục bị ngắt CPU xử lý ARP → CPU spike, throughput giảm. Giải pháp: chia VLAN nhỏ hơn (/24 = 254 host per segment).",
+        "deploymentUse": "Khi thiết kế datacenter: giới hạn broadcast domain /24 mỗi VLAN. Hơn 500 host trong 1 subnet = nguy cơ ARP broadcast overhead đáng kể. Kubernetes node trong cùng /24 để ARP hoạt động, L3 routing giữa các /24."
+      },
+      {
+        "what": "ARP Reply = unicast",
+        "why": "Request chứa MAC của người hỏi → máy đích biết reply thẳng về không cần broadcast lại. Tiết kiệm bandwidth và CPU của cả LAN.",
+        "whyBreaks": "Không trực tiếp gây lỗi. Nhưng nếu ARP Reply bị block (một số strict firewall policy) → sender không nhận được MAC → gửi ARP Request liên tục (ARP retry) → tăng broadcast overhead.",
+        "deploymentUse": "Thường không cần cấu hình gì. Nhưng trong môi trường cloud với virtual switch (OVS, Hyper-V vSwitch): đôi khi cần enable ARP proxy hoặc ARP reflection để các VM giao tiếp được."
+      },
+      {
+        "what": "ARP Cache (ip neigh)",
+        "why": "Sau ARP thành công, MAC được lưu cache 1–5 phút. Tránh broadcast mỗi frame. Nếu cache hết hạn hoặc bị xóa → ARP lại từ đầu. Thấy 'STALE' trong ip neigh = cache sắp hết hạn.",
+        "whyBreaks": "ARP cache overflow ('neighbor table overflow' trong dmesg): kernel không lưu được entry mới → ARP fail → host unreachable. Xảy ra khi route nhiều /24 khác nhau qua cùng interface hoặc bị scan ARP từ attacker.",
+        "deploymentUse": "Tuning: net.ipv4.neigh.default.gc_thresh1/2/3 để tăng kích thước ARP cache nếu cần route nhiều subnet. Monitoring: watch -n5 'ip neigh show | wc -l' để phát hiện cache overflow sớm."
+      },
+      {
+        "what": "Ping cùng LAN → ARP IP đích trực tiếp",
+        "why": "192.168.1.10 cùng subnet → ARP trực tiếp IP đó để lấy MAC. Frame gửi thẳng MAC của đích. Không qua gateway.",
+        "whyBreaks": "Host cùng subnet nhưng không trả ARP → STALE → FAILED → ping fail với 'Destination Host Unreachable'. Nguyên nhân: host tắt, VLAN sai, hoặc host disable ARP. Kiểm tra: arping -I eth0 192.168.1.10 để debug.",
+        "deploymentUse": "Trong Kubernetes pod network: pod A và pod B cùng node → giao tiếp qua local ARP (veth pair). Pod A và C khác node → qua overlay network (VXLAN/Geneve), không phải ARP trực tiếp. Biết điều này giúp debug pod-to-pod latency."
+      },
+      {
+        "what": "Ping ngoài LAN → ARP IP của gateway",
+        "why": "8.8.8.8 khác subnet → kernel biết phải qua gateway (default route). ARP cho IP gateway (192.168.1.1), lấy MAC gateway. Frame gửi MAC gateway — KHÔNG phải MAC của 8.8.8.8. Gateway bóc IP gốc, đóng frame mới, tiếp tục định tuyến.",
+        "whyBreaks": "Gateway đổi MAC (thay thiết bị, failover) → ARP cache cũ → tất cả outbound traffic đi vào hư không → internet fail mặc dù IP gateway vẫn đúng. Fix: ip neigh flush dev eth0 để force ARP lại. Keepalived dùng Gratuitous ARP để tránh vấn đề này.",
+        "deploymentUse": "Khi VPS report 'no internet' đột ngột: check ip neigh show | grep gateway-IP. Nếu FAILED hoặc STALE lâu → flush và ARP lại. Trong cloud provider thay đổi underlying hardware → MAC gateway thay đổi → cần flush ARP cache."
+      },
+      {
+        "what": "ARP Spoofing",
+        "why": "Attacker gửi ARP Reply giả nhanh hơn, khai báo MAC của attacker ứng với IP gateway/victim → cả 2 máy lưu MAC sai vào cache → mọi traffic đi qua attacker (MITM). Không cần crack mật khẩu — chỉ cần ở cùng LAN.",
+        "whyBreaks": "Victim không detect được: mọi traffic vẫn đi được (attacker forward tiếp), latency tăng nhẹ. Dấu hiệu: 2 IP có cùng MAC trong ip neigh, hoặc latency đột biến trong LAN. Sau khi MITM: attacker đọc/sửa traffic không encrypt.",
+        "deploymentUse": "Phòng ngừa: Dynamic ARP Inspection (DAI) trên managed switch, dùng HTTPS/TLS cho mọi service (MITM không đọc được), VPN trong LAN không tin cậy (khách sạn, cafe). Trên cloud: security group ngăn VM khác spoof ARP nhờ hypervisor enforcement."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "Bước 1 — Kiểm tra ARP cache trước khi gửi frame",
+        "why": "Kernel Linux kiểm tra bảng ARP (ip neigh) trước khi phát broadcast. Nếu cache còn hiệu lực → dùng ngay, không broadcast. Cache hit = tiết kiệm ~1ms và tránh làm phiền cả LAN.",
+        "whyBreaks": "ARP cache FAILED sau flush → ping fail với 'Destination Host Unreachable' dù host vẫn alive. Kernel sẽ thử ARP lại tự động nhưng có latency. Khi debug 'intermittent connection loss': check ip neigh state trước.",
+        "observeWith": "ip neigh show  # Xem toàn bộ cache với state\nip neigh show nud reachable  # Chỉ entries đang reliable\nwatch -n2 'ip neigh show'  # Real-time theo dõi thay đổi cache",
+        "code": "# Xem bảng ARP cache hiện tại\nip neigh show\n\n# Output mẫu:\n# 192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:01 REACHABLE\n# 192.168.1.10 dev eth0 lladdr aa:bb:cc:dd:ee:10 STALE"
+      },
+      {
+        "step": 2,
+        "what": "Bước 2 — Gửi ARP Request broadcast",
+        "why": "Cache miss → kernel phát frame broadcast (Eth dst=FF:FF:FF:FF:FF:FF) hỏi 'Ai có IP 192.168.1.10?'. Mọi máy trong LAN nhận nhưng chỉ máy có IP đó reply. Capture được bằng tcpdump để xem thực tế.",
+        "whyBreaks": "Không thấy ARP Reply sau Request → host không tồn tại, host tắt, hoặc host disable ARP (một số firewall config). Phân biệt: nếu thấy Request broadcast nhưng không có Reply → vấn đề ở phía đích, không phải sender.",
+        "observeWith": "sudo tcpdump -i eth0 -n arp  # Xem 'arp who-has' (request) và 'arp reply' (reply)\n# Request: Ethernet dst=ff:ff:ff:ff:ff:ff (broadcast)\n# Reply: Ethernet dst=<MAC của người hỏi> (unicast)\nsudo arping -I eth0 -c 1 192.168.1.10  # Test ARP thủ công, xem có reply không",
+        "code": "# Xem ARP broadcast trên dây bằng tcpdump\nsudo tcpdump -i eth0 -n arp\n\n# Hoặc dùng arping để thủ công gửi ARP request\nsudo arping -I eth0 -c 1 192.168.1.10",
+        "failModes": [
+          {
+            "symptom": "Mạng chậm đột ngột, mọi máy trong LAN bị ảnh hưởng dù không có traffic lớn",
+            "evidence": "dmesg hoặc /var/log/kern.log: 'net_ratelimit: X callbacks suppressed' kèm tcpdump thấy hàng trăm ARP Request/giây từ nhiều src MAC khác nhau — dấu hiệu ARP storm do loop hoặc misconfigured NIC bonding"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Xác định nguồn storm: đếm ARP rate trên switch port hoặc tcpdump",
+            "command": "sudo tcpdump -i eth0 -n arp | awk '{print $NF}' | sort | uniq -c | sort -rn | head -20"
+          },
+          {
+            "step": "Cô lập port nghi ngờ trên managed switch để dừng storm",
+            "command": "sudo ip link set eth0 down  # tạm thời isolate interface đang bị flood"
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "what": "Bước 3 — Nhận ARP Reply unicast",
+        "why": "Máy đích gửi Reply unicast về: 'IP 192.168.1.10 có MAC aa:bb:cc:dd:ee:10'. Unicast vì Request đã cung cấp MAC người hỏi — không cần broadcast. Kernel lưu vào cache ngay.",
+        "whyBreaks": "Sau khi flush cache và ping thành công: ip neigh show phải hiện entry mới với state REACHABLE. Nếu vẫn FAILED sau ping thành công → ARP hoạt động nhưng có gì đó sai với neighbor subsystem (hiếm, thường do kernel bug hoặc container network misconfiguration).",
+        "observeWith": "ip neigh flush all && ping -c 1 192.168.1.10 && ip neigh show\n# Sau lệnh này: thấy entry 192.168.1.10 REACHABLE với MAC đúng\n# Timing: ARP resolve xảy ra trong <1ms khi host alive",
+        "code": "# Quan sát cache được cập nhật sau khi ping\nip neigh flush all           # Xóa cache\nping -c 1 192.168.1.10       # Trigger ARP\nip neigh show                # Xem entry mới thêm vào"
+      },
+      {
+        "step": 4,
+        "what": "Bước 4 — Ping ra Internet: ARP for gateway",
+        "why": "Khi ping 8.8.8.8, kernel so sánh với routing table — 8.8.8.8 không cùng subnet → next hop là default gateway (192.168.1.1). ARP cho 192.168.1.1, không phải 8.8.8.8. Frame gửi với MAC gateway. Dev hay nhầm điểm này khi debug MITM.",
+        "whyBreaks": "ip neigh flush + ping 8.8.8.8: tcpdump phải thấy ARP request cho 192.168.1.1, không phải 8.8.8.8. Nếu không thấy ARP cho gateway → routing table sai (không có default route) → 'Network unreachable' thay vì ARP timeout.",
+        "observeWith": "ip route  # Xem 'default via X.X.X.X' — đây là IP sẽ bị ARP\nsudo tcpdump -i eth0 arp -n  # Capture song song khi ping 8.8.8.8\n# Confirm: ARP request hỏi gateway IP, không phải 8.8.8.8",
+        "code": "# Xem routing table để hiểu kernel quyết định next hop thế nào\nip route\n# Output: default via 192.168.1.1 dev eth0\n\n# Khi ping 8.8.8.8 → ARP xảy ra cho 192.168.1.1\nsudo tcpdump -i eth0 arp &\nping -c 1 8.8.8.8\nkill %1"
+      },
+      {
+        "step": 5,
+        "what": "Bước 5 — ARP Spoofing: đầu độc cache",
+        "why": "Attacker gửi gratuitous ARP Reply (không được yêu cầu): '192.168.1.1 có MAC là attacker_mac'. Nạn nhân cập nhật cache với MAC sai → gửi traffic tới attacker thay vì gateway. Dùng arpspoof (dsniff) hoặc Scapy. Phòng: DAI trên managed switch.",
+        "whyBreaks": "ARP không authenticate sender — bất kỳ máy nào cũng có thể claim bất kỳ IP nào. Đây là lỗ hổng by design của <a href=\"https://datatracker.ietf.org/doc/html/rfc826\" target=\"_blank\">RFC 826</a>. Không thể 'patch' ARP — phải phòng ở tầng khác (DAI switch, VPN, TLS).",
+        "observeWith": "ip neigh show | awk '{print $5}' | sort | uniq -d  # Tìm MAC trùng lặp\n# Nếu có output → 2 IP chia sẻ 1 MAC → dấu hiệu spoofing hoặc NIC bonding\narp-scan --localnet  # Scan ARP toàn LAN, so sánh MAC với expected",
+        "code": "# Phát hiện ARP spoofing bằng arp-scan hoặc xem bất thường\n# (trên Linux - chỉ để học, KHÔNG dùng tấn công thật)\narp -a | sort -t'.' -k4 -n  # Xem toàn bộ cache, tìm MAC trùng lặp\n\n# Phát hiện: 2 IP có cùng MAC = dấu hiệu spoofing\n# ip neigh | awk '{print $5}' | sort | uniq -d",
+        "failModes": [
+          {
+            "symptom": "Traffic đến gateway bị mất hoặc đi sai hướng, latency LAN tăng đột biến ~2-5ms",
+            "evidence": "ip neigh show | awk '/192.168.1.1/{print}' trả ra MAC không khớp với MAC thật của gateway — ví dụ: '192.168.1.1 dev eth0 lladdr de:ad:be:ef:00:01 REACHABLE' trong khi MAC thật gateway là aa:bb:cc:dd:ee:01"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Xác nhận MAC gateway thật bằng cách hỏi trực tiếp switch hoặc so sánh với baseline",
+            "command": "sudo arping -I eth0 -c 2 192.168.1.1 | grep 'reply from'"
+          },
+          {
+            "step": "Xóa ARP cache entry bị nhiễm, buộc re-resolve",
+            "command": "sudo ip neigh del 192.168.1.1 dev eth0 && ping -c 1 192.168.1.1"
+          },
+          {
+            "step": "Thêm static ARP entry cho gateway để chặn spoof tiếp theo (tạm thời)",
+            "command": "sudo ip neigh add 192.168.1.1 lladdr aa:bb:cc:dd:ee:01 dev eth0 nud permanent"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# Phát hiện duplicate MAC (ARP spoofing indicator) trên LAN\n# Dùng arp-scan, chạy cron mỗi 5 phút\nINTERFACE=${1:-eth0}\nDUPS=$(sudo arp-scan --interface=\"$INTERFACE\" --localnet 2>/dev/null \\\n  | awk '/DUP/{print $1, $2}' | sort -u)\nif [ -n \"$DUPS\" ]; then\n  echo \"[ALERT $(date '+%Y-%m-%d %H:%M:%S')] Duplicate MAC detected on $INTERFACE:\"\n  echo \"$DUPS\"\n  logger -t arp-monitor \"ALERT: duplicate MAC — $DUPS\"\nfi",
+          "note": "Cron: */5 * * * * /usr/local/bin/arp-monitor.sh eth0. Cần gói arp-scan. Log vào syslog để alert tập trung."
+        }
+      },
+      {
+        "step": 6,
+        "what": "Bước 6 — Xem ARP trực tiếp bằng Wireshark/tcpdump",
+        "why": "Thực hành capture là cách duy nhất để thực sự thấy ARP hoạt động. Wireshark filter 'arp' sẽ tách biệt hoàn toàn. Quan sát: Dst broadcast → Request; Dst unicast → Reply. Đây là kiến thức cốt lõi khi debug 'host unreachable'.",
+        "whyBreaks": "Chạy tcpdump trên interface sai (vlan vs physical, docker0 vs eth0) → không thấy ARP dù nó đang xảy ra. Trong Docker/Kubernetes: ARP xảy ra trên virtual interface (veth, docker0, cni0) không phải eth0.",
+        "observeWith": "sudo tcpdump -i eth0 -n -vvv arp  # -vvv để thấy full ARP fields\n# Đọc: 'arp who-has TARGET tell SENDER' = Request\n# Đọc: 'arp reply TARGET is-at MAC' = Reply\nip link show  # List all interfaces — chọn đúng interface",
+        "code": "# Terminal 1: Capture ARP\nsudo tcpdump -i eth0 -n -vvv arp\n\n# Terminal 2: Flush cache rồi ping để trigger ARP\nip neigh flush all\nping -c 1 192.168.1.10\n\n# Wireshark filter: arp\n# Xem: Who has 192.168.1.10? Tell 192.168.1.5"
+      },
+      {
+        "step": 7,
+        "what": "Bước 7 — Gratuitous ARP và IP conflict detection",
+        "why": "Khi interface up, Linux tự gửi Gratuitous ARP: broadcast '192.168.1.5 có MAC là ...'. Mục đích: (1) cập nhật cache mọi máy với MAC mới, (2) phát hiện IP conflict — nếu có ai reply thì có 2 máy cùng IP. Đây cũng là cơ chế failover VIP (VRRP/keepalived) dùng.",
+        "whyBreaks": "Sau keepalived failover mà không gửi Gratuitous ARP → các host trong LAN giữ cache cũ (MAC node primary) → traffic đến VIP vẫn đi tới node đã down → downtime kéo dài đến khi cache expire (~5 phút). Gratuitous ARP là bước bắt buộc trong failover.",
+        "observeWith": "sudo tcpdump -i eth0 arp  # Xem Gratuitous ARP khi arping -A\n# Gratuitous: sender IP = target IP (host tự hỏi chính địa chỉ của nó)\narping -D -I eth0 192.168.1.5  # Duplicate Address Detection: exit 1 = conflict",
+        "code": "# Gửi Gratuitous ARP thủ công (ví dụ sau failover)\narping -A -I eth0 -c 3 192.168.1.5\n\n# Hoặc dùng arping để kiểm tra IP conflict:\narping -D -I eth0 192.168.1.5\n# Exit code 1 = có conflict"
+      }
+    ],
+    "misconceptions": null
+  },
+  "dhcp": {
+    "slug": "dhcp",
+    "title": "Giao thức DHCP",
+    "tldr": [
+      {
+        "step": "D",
+        "name": "Discover",
+        "src_dst": "0.0.0.0 → 255.255.255.255",
+        "port": "68 → 67",
+        "payload": "xid, MAC client",
+        "why": "Client chưa có IP → chỉ có cách broadcast. src=0.0.0.0 vì chưa có địa chỉ, dst=255.255.255.255 để đến tất cả host trong LAN.",
+        "whyBreaks": "Nếu không có DHCP server nào trả lời Discover (timeout), client sẽ gán IP tự động 169.254.x.x (APIPA) — dấu hiệu nhận biết DHCP fail hoàn toàn. Kiểm tra: tcpdump port 67 xem Discover có đi ra không.",
+        "deploymentUse": "Trên VPS cloud mới tạo, DHCP Discover là bước đầu tiên khi boot. AWS/GCP dùng DHCP server tại 169.254.169.254 (link-local). Nếu security group block UDP 67/68 → VM không lấy được IP → SSH không vào được."
+      },
+      {
+        "step": "O",
+        "name": "Offer",
+        "src_dst": "192.168.1.1 → 255.255.255.255",
+        "port": "67 → 68",
+        "payload": "IP đề xuất, lease time, gateway, DNS",
+        "why": "Server vẫn broadcast vì client chưa có IP để unicast tới. Server đề xuất IP từ pool, cùng các tham số mạng.",
+        "whyBreaks": "Có Discover nhưng không có Offer → DHCP server chưa chạy, pool cạn, hoặc relay agent không config đúng. Kiểm tra: systemctl status isc-dhcp-server và cat /var/lib/dhcp/dhcpd.leases xem pool còn không.",
+        "deploymentUse": "Khi Terraform tạo VPC subnet, cần chỉ định enable_dhcp=true (AWS) hoặc đặt DHCP options set đúng — không thì VM boot lên không có IP, health check fail, auto-scaling group bị stuck."
+      },
+      {
+        "step": "R",
+        "name": "Request",
+        "src_dst": "0.0.0.0 → 255.255.255.255",
+        "port": "68 → 67",
+        "payload": "IP được chọn, server identifier",
+        "why": "Client broadcast để các DHCP server khác biết nó chọn server nào. Tại thời điểm này IP vẫn chưa chính thức được gán.",
+        "whyBreaks": "Nếu Wireshark thấy Discover → Offer → Request nhưng không có Ack → IP client muốn đã bị conflict hoặc hết lease validity. Server sẽ gửi DHCPNAK. Client phải restart DORA từ đầu.",
+        "deploymentUse": "Trong Kubernetes, kubelet dùng DHCP Request để lấy IP cho node. Nếu DHCP server trả NACK (pool hết hoặc conflict) → node không join cluster, pod scheduling fail."
+      },
+      {
+        "step": "A",
+        "name": "Ack",
+        "src_dst": "192.168.1.1 → 192.168.1.100 (unicast mặc định)",
+        "port": "67 → 68",
+        "payload": "IP xác nhận, lease time, options đầy đủ",
+        "why": "Server xác nhận chính thức bằng unicast tới MAC + IP mới cấp cho client (RFC 2131). Chỉ broadcast khi client set BROADCAST flag trong Request. Client nhận ACK mới bắt đầu dùng IP. Nếu server trả NACK → client phải Discover lại. [sửa theo audio 18/04/2026 — ACK mặc định là unicast, không phải broadcast]",
+        "whyBreaks": "Có ACK nhưng client vẫn không lên mạng: (1) gateway option sai → no routing, (2) DNS option sai → domain không resolve, (3) DHCP client service crash sau khi nhận ACK. Verify: ip addr, ip route, cat /etc/resolv.conf sau khi DORA xong.",
+        "deploymentUse": "Cloud init script chạy sau DHCP ACK. Nếu ACK cung cấp DNS server sai → cloud-init không download package → provisioning fail. AWS metadata server (169.254.169.254) cũng cần DHCP cấp đúng route."
+      },
+      {
+        "step": "T1",
+        "name": "Renew (50%)",
+        "src_dst": "client → server (unicast)",
+        "port": "68 → 67",
+        "payload": "Request gia hạn",
+        "why": "Tại T1=50% lease, client unicast tới server gốc để gia hạn. Nếu thành công, lease được reset về đầu.",
+        "whyBreaks": "DHCP server bị thay thế hoặc di chuyển IP trong khi lease đang active → client unicast T1 đến IP cũ không còn tồn tại → fail silent đến T2 rồi broadcast rebind. Trong thời gian này service vẫn chạy nhưng IP sắp hết hạn.",
+        "deploymentUse": "Staging environment thường restart DHCP server khi deploy. Nếu VM có lease 24h và T1 fail do DHCP server restart, client sẽ tự phục hồi ở T2 — biết điều này tránh panic khi thấy log 'T1 renewal failed'."
+      },
+      {
+        "step": "T2",
+        "name": "Rebind (87.5%)",
+        "src_dst": "client → 255.255.255.255",
+        "port": "68 → 67",
+        "payload": "Request rebind",
+        "why": "Server gốc không phản hồi T1 → client broadcast rebind. Bất kỳ DHCP server nào cũng có thể xác nhận.",
+        "whyBreaks": "Nếu T2 rebind cũng fail (không DHCP server nào phản hồi) → đến 100% lease, client mất IP → network down đột ngột. Triệu chứng: 'mạng tự mất sau vài giờ'. Debug: check DHCP server uptime vs lease expiry time.",
+        "deploymentUse": "Monitoring DHCP trên production: alert khi thấy nhiều T2 rebind request — đây là early warning DHCP infrastructure có vấn đề trước khi client thực sự mất IP và service down."
+      },
+      {
+        "step": "Relay",
+        "name": "Relay Agent",
+        "src_dst": "client → server (qua router)",
+        "port": "67 → 67",
+        "payload": "Forward broadcast thành unicast",
+        "why": "Broadcast không vượt được router. Relay agent (router) nhận broadcast, đổi thành unicast gửi tới DHCP server ở subnet khác.",
+        "whyBreaks": "Quên config relay agent (ip helper-address) khi thêm subnet mới → toàn bộ VM trong subnet đó không lấy được IP. Lỗi im lặng: client loop Discover vô hạn, không có error message rõ ràng.",
+        "deploymentUse": "Khi mở rộng VPC thêm subnet mới (Terraform aws_subnet), phải đảm bảo route table và DHCP relay config đúng. AWS tự xử lý relay nội bộ, nhưng on-prem/hybrid cloud cần config tay trên router."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "DHCPDISCOVER — Client kêu cứu trong LAN",
+        "why": "Client vừa boot, chỉ có MAC address. Nó phải broadcast vì chưa có IP — đây là điểm khởi đầu bắt buộc. Không có Discover thì không có gì xảy ra tiếp theo.",
+        "code": "# Capture DHCP traffic trên VM Linux\nsudo tcpdump -i eth0 -n 'udp port 67 or udp port 68'\n\n# Hoặc bằng Wireshark filter:\n# udp.port == 67 || udp.port == 68\n\n# Force client gửi Discover ngay (Debian/Ubuntu):\nsudo dhclient -v eth0",
+        "whyBreaks": "Nếu không thấy Discover trên tcpdump → interface chưa UP hoặc dhclient chưa chạy. Nếu thấy Discover nhưng không có Offer → DHCP server không nghe trên interface đó hoặc firewall block UDP 67. Đây là 2 failure mode hoàn toàn khác nhau cần debug khác nhau.",
+        "observeWith": "sudo tcpdump -i any port 67 or port 68 -n — xem src=0.0.0.0 dst=255.255.255.255 cho Discover. Chạy song song sudo dhclient -v eth0 ở terminal khác để trigger DORA. journalctl -u dhclient -f xem log real-time."
+      },
+      {
+        "step": 2,
+        "what": "DHCPOFFER — Server đề xuất IP",
+        "why": "Server nhận Discover, chọn IP trống từ pool, rồi broadcast Offer. Tại sao vẫn broadcast? Vì client chưa có IP để unicast tới. Server có thể nhớ IP đề xuất trong thời gian ngắn chờ Request từ client.",
+        "code": "# Xem DHCP pool configuration (isc-dhcp-server)\ncat /etc/dhcp/dhcpd.conf\n\n# Xem lease hiện tại của server\ncat /var/lib/dhcp/dhcpd.leases\n\n# Ví dụ cấu hình pool:\n# subnet 192.168.1.0 netmask 255.255.255.0 {\n#   range 192.168.1.50 192.168.1.200;\n#   option routers 192.168.1.1;\n#   option domain-name-servers 8.8.8.8;\n#   default-lease-time 86400;\n# }",
+        "whyBreaks": "Pool cạn là lý do thường gặp nhất khi server không gửi Offer. Mỗi VM dev clone không release lease → sau vài tháng pool .50-.200 đầy hết. Dấu hiệu: dhcpd.leases có hàng trăm entry, nhiều đã expired nhưng server chưa reap.",
+        "observeWith": "cat /var/lib/dhcp/dhcpd.leases | grep -c 'lease' — đếm số lease. grep 'binding state active' /var/lib/dhcp/dhcpd.leases | wc -l — đếm lease đang active. So sánh với kích thước pool để biết còn bao nhiêu IP trống.",
+        "failModes": [
+          {
+            "symptom": "Client không lấy được IP — máy mới boot hiển thị 169.254.x.x (APIPA), mọi DHCPDISCOVER không nhận Offer",
+            "evidence": "grep 'no free leases' /var/log/syslog cho thấy: 'dhcpd: no free leases on subnet 192.168.1.0' — pool .50-.200 (151 địa chỉ) đã hết sạch"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Đếm số lease active và so sánh với pool size để xác nhận pool hết",
+            "command": "grep -c 'binding state active' /var/lib/dhcp/dhcpd.leases"
+          },
+          {
+            "step": "Tìm lease đã expired nhưng chưa được reap (thường từ VM clone không release)",
+            "command": "awk '/lease/{ip=$2} /binding state active/{print ip}' /var/lib/dhcp/dhcpd.leases | sort -u | wc -l"
+          },
+          {
+            "step": "Restart dhcpd để force reap expired lease (ngắn hạn) hoặc mở rộng pool range trong dhcpd.conf",
+            "command": "sudo systemctl restart isc-dhcp-server && sudo journalctl -u isc-dhcp-server -n 20"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# Monitor DHCP pool usage, alert khi > 80% đầy\n# Chạy cron mỗi 15 phút\nLEASE_FILE=\"/var/lib/dhcp/dhcpd.leases\"\nPOOL_SIZE=${1:-151}  # range .50-.200\nACTIVE=$(grep -c 'binding state active' \"$LEASE_FILE\" 2>/dev/null || echo 0)\nPCT=$(( ACTIVE * 100 / POOL_SIZE ))\necho \"[$(date '+%Y-%m-%d %H:%M')] DHCP pool: $ACTIVE/$POOL_SIZE leases active ($PCT%)\"\nif [ \"$PCT\" -gt 80 ]; then\n  logger -t dhcp-monitor \"WARN: DHCP pool ${PCT}% full ($ACTIVE/$POOL_SIZE)\"\n  echo \"WARN: Pool ${PCT}% full — consider expanding range in dhcpd.conf\"\nfi",
+          "note": "Cron: */15 * * * * /usr/local/bin/dhcp-pool-monitor.sh 151. Điều chỉnh POOL_SIZE khớp với range trong dhcpd.conf."
+        }
+      },
+      {
+        "step": 3,
+        "what": "DHCPREQUEST — Client xác nhận chọn IP",
+        "why": "Client broadcast Request để tất cả DHCP server trong LAN biết nó đã chọn server nào. Các server không được chọn sẽ giải phóng IP đã dự trữ. Đây là bước 'thông báo công khai' để tránh IP conflict.",
+        "code": "# Xem IP hiện tại của interface (sau khi hoàn thành DORA)\nip addr show eth0\n\n# Xem DHCP lease client đang giữ (NetworkManager)\nnmcli device show eth0 | grep -E 'IP4|DHCP'\n\n# Xem lease file của client\ncat /var/lib/dhcp/dhclient.leases",
+        "whyBreaks": "Nếu Wireshark thấy Discover → Offer → Request nhưng không có Ack: IP client chọn có thể đã bị conflict (máy khác đang dùng) hoặc server state không nhất quán sau restart. Server sẽ gửi DHCPNAK — tìm packet type DHCPNAK trong capture.",
+        "observeWith": "sudo tcpdump -i any port 67 or port 68 -n -vv | grep -E 'DHCP|Discover|Offer|Request|ACK|NAK' — lọc ra các bước DORA. Xem field 'DHCP-Message Option 53' trong output verbose để phân biệt từng loại message."
+      },
+      {
+        "step": 4,
+        "what": "DHCPACK — Server xác nhận chính thức (unicast)",
+        "why": "Server ghi lease vào database rồi gửi Ack bằng unicast tới MAC + IP mới cấp cho client — vì client đã được assign IP, server có thể trả lời trực tiếp qua ARP table (RFC 2131 §4.1). Chỉ broadcast khi client set BROADCAST flag. Chỉ khi nhận được Ack, client mới thực sự cấu hình IP, gateway, DNS vào interface. Trước Ack, IP vẫn chỉ là 'đang đàm phán'. [sửa theo audio 18/04/2026]",
+        "code": "# Verify IP được gán sau DORA\nip addr show eth0\nip route  # Gateway đã có chưa?\ncat /etc/resolv.conf  # DNS đã config chưa?\n\n# Ping gateway để verify kết nối\nping -c 1 $(ip route | awk '/default/ {print $3}')",
+        "whyBreaks": "Nhận ACK nhưng ip addr không thấy IP: dhclient crash sau khi nhận ACK (check journalctl -u dhclient). Hoặc gateway trong ACK là sai subnet → ip route không tạo được default route → có IP nhưng không reach internet.",
+        "observeWith": "ip addr show eth0 | grep 'inet ' — phải thấy IP với flag 'dynamic'. ip route show default — phải có default route qua gateway. cat /etc/resolv.conf — phải có nameserver. Ping cả 3 cấp: gateway, 8.8.8.8, google.com."
+      },
+      {
+        "step": 5,
+        "what": "Lease renewal — Gia hạn trước khi hết hạn",
+        "why": "Không gia hạn = IP bị thu hồi = mất kết nối mạng đột ngột. T1 và T2 là buffer tránh gián đoạn dịch vụ. Hiểu cơ chế này giúp debug 'mạng tự mất sau vài giờ/ngày'.",
+        "code": "# Xem lease time còn lại (dhclient)\nsudo dhclient -v -r eth0  # Release\nsudo dhclient -v eth0     # Renew (DORA lại)\n\n# Xem lease details\ncat /var/lib/dhcp/dhclient.leases | grep -A10 'lease'\n\n# Kiểm tra thời điểm expire\nip -details addr show eth0",
+        "whyBreaks": "VM để ngủ (suspend) qua đêm rồi wake up: lease đã expired trong khi ngủ. Khi wake, client cố gắng rebind bằng IP cũ nhưng server đã thu hồi và cấp cho máy khác → DHCPNAK → DORA lại. Dấu hiệu: mạng mất 2-5 giây khi wake from sleep.",
+        "observeWith": "journalctl -u dhclient --since '1 hour ago' | grep -E 'DHCP|bound|renew|expire' — xem lịch sử renewal. cat /var/lib/dhcp/dhclient.leases | grep -A5 'expire' — xem thời điểm expire của lease hiện tại."
+      },
+      {
+        "step": 6,
+        "what": "DHCP Relay — khi server ở subnet khác",
+        "why": "Enterprise network thường có 1 DHCP server trung tâm phục vụ nhiều subnet. Relay agent (interface ip helper) trên router đóng vai trò 'phiên dịch viên' giữa broadcast và unicast. Không có relay → DHCP chỉ hoạt động trong 1 subnet.",
+        "code": "# Cấu hình relay agent (isc-dhcp-relay)\nsudo apt install isc-dhcp-relay\n\n# /etc/default/isc-dhcp-relay\n# SERVERS=\"10.0.0.1\"  # DHCP server IP\n# INTERFACES=\"eth0 eth1\"  # Interfaces cần relay\n\n# Verify relay đang chạy\nsudo systemctl status isc-dhcp-relay\n\n# Cisco router (ip helper-address)\n# interface GigabitEthernet0/1\n#   ip helper-address 10.0.0.1",
+        "whyBreaks": "Thêm VLAN mới mà quên config ip helper-address trên router → toàn bộ VM trong VLAN mới không lấy được IP. Debug: ping từ router đến DHCP server trước, rồi check relay config. Lỗi hay gặp: SERVERS trong relay config trỏ sai IP server.",
+        "observeWith": "sudo tcpdump -i eth0 port 67 -n trên relay agent — xem DHCP packet đến interface và relay forward đi. Trên DHCP server: sudo tcpdump -i any port 67 -n xem có nhận packet từ relay agent IP không (src sẽ là IP relay, không phải IP client).",
+        "failModes": [
+          {
+            "symptom": "VM trong VLAN mới không lấy được IP, tcpdump trên relay agent không thấy DHCP packet đến từ VLAN đó",
+            "evidence": "sudo tcpdump -i eth0.20 port 67 -n không có output dù client gửi Discover — interface VLAN trunk chưa được thêm vào INTERFACES trong /etc/default/isc-dhcp-relay"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Kiểm tra INTERFACES trong relay config có bao gồm VLAN interface mới không",
+            "command": "cat /etc/default/isc-dhcp-relay | grep INTERFACES"
+          },
+          {
+            "step": "Thêm VLAN interface vào relay và restart",
+            "command": "sed -i 's/INTERFACES=\"/INTERFACES=\"eth0.20 /' /etc/default/isc-dhcp-relay && sudo systemctl restart isc-dhcp-relay"
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "what": "Debug DHCP fail — không lấy được IP",
+        "why": "Mục tiêu thực tế của lab DHCP: debug được khi có sự cố. Biết DORA flow → biết lỗi ở bước nào. Không có Offer → server chết hoặc pool hết. Có Offer nhưng không có Ack → conflict hoặc server config sai.",
+        "code": "# 1. Check interface có UP không (L1/L2)\nip link show eth0\n\n# 2. Force DORA, xem verbose output\nsudo dhclient -v eth0 2>&1\n\n# 3. Capture để thấy bước nào fail\nsudo tcpdump -i eth0 -n -vv 'udp port 67 or udp port 68'\n\n# 4. Nếu không có Offer: check DHCP server running\n# sudo systemctl status isc-dhcp-server\n\n# 5. Fallback: set static IP tạm\nsudo ip addr add 192.168.1.99/24 dev eth0\nsudo ip route add default via 192.168.1.1",
+        "whyBreaks": "Debug checklist theo thứ tự: (1) Interface UP? → ip link. (2) Discover đi ra? → tcpdump. (3) Offer về? → nếu không, server/pool problem. (4) Ack về? → nếu không, NACK/conflict. (5) IP được apply? → ip addr. Bỏ qua bước nào là debug mù.",
+        "observeWith": "journalctl -u dhclient -f — log real-time của DHCP client, thấy từng bước DORA và error message rõ ràng. Kết hợp sudo tcpdump -i any port 67 or port 68 -n ở terminal khác để thấy packet level đồng thời."
+      }
+    ],
+    "misconceptions": null
+  },
+  "dns": {
+    "slug": "dns",
+    "title": "Tìm hiểu giao thức DNS",
+    "tldr": [
+      {
+        "what": "Stub resolver (client)",
+        "why": "Là DNS client đơn giản nhất — nằm ngay trong OS. Nó không tự recursive, chỉ forward query tới recursive resolver được cấu hình (thường là /etc/resolv.conf). Nếu stub resolver hỏng thì mọi domain đều fail dù mạng ổn.",
+        "whyBreaks": "Nếu /etc/resolv.conf trỏ sai IP resolver (ví dụ sau khi đổi network) → mọi DNS query timeout, toàn bộ service phụ thuộc hostname đều down dù network ping IP vẫn thông.",
+        "deploymentUse": "Trên VPS Ubuntu, sau khi cài đặt cần kiểm tra /etc/resolv.conf hoặc /etc/systemd/resolved.conf để đảm bảo stub resolver trỏ đúng upstream (8.8.8.8 hoặc resolver của cloud provider)."
+      },
+      {
+        "what": "Recursive resolver (8.8.8.8, ISP)",
+        "why": "Đây là 'thám tử DNS' thật sự — nó tự đi hỏi Root → TLD → Authoritative thay cho client. Google 8.8.8.8, Cloudflare 1.1.1.1 là recursive resolver công cộng. ISP hay cấp resolver riêng nhưng đôi khi inject quảng cáo vào NXDOMAIN.",
+        "whyBreaks": "Nếu dùng resolver ISP mà ISP redirect NXDOMAIN → trang quảng cáo, code backend nhận HTML thay vì lỗi DNS → bug khó debug. Hoặc nếu resolver bị block port 53 outbound thì mọi DNS query fail.",
+        "deploymentUse": "Khi deploy VPS, cấu hình resolver uy tín (1.1.1.1 hoặc 8.8.8.8) thay vì dùng mặc định ISP. Đặc biệt quan trọng khi app gọi external API theo hostname."
+      },
+      {
+        "what": "Root server (.)",
+        "why": "Đỉnh của cây DNS. Root chỉ biết 1 việc: TLD nào do nameserver nào quản lý. Có 13 cụm root server (a.root-servers.net … m.root-servers.net) nhưng thực tế có hàng trăm anycast instance khắp thế giới.",
+        "whyBreaks": "Nếu root server unreachable (hiếm nhưng xảy ra do firewall corporate chặn outbound UDP 53 tới anycast IPs) → mọi cold DNS lookup fail, chỉ cache hit vẫn hoạt động.",
+        "deploymentUse": "Không cần cấu hình trực tiếp — nhưng hiểu root server giúp giải thích tại sao DNS phân tán và tại sao không có 'central DNS database' để query."
+      },
+      {
+        "what": "TLD server (.com, .net, .vn)",
+        "why": "Biết nameserver của từng domain trong TLD đó. .com TLD biết ns1.example.com thuộc về ai. Nếu TLD bị outage thì mọi .com domain đều không resolve được — đây từng xảy ra với .cn năm 2014.",
+        "whyBreaks": "Khi mua domain mới và trỏ nameserver → TLD cần 24-48h để propagate NS record mới. Trong thời gian này domain không resolve được — không phải bug code.",
+        "deploymentUse": "Khi đổi nhà đăng ký domain hoặc chuyển sang Cloudflare DNS, NS record được thay đổi tại registrar → TLD cập nhật → mọi resolver trên thế giới dần học NS mới theo TTL."
+      },
+      {
+        "what": "Authoritative server (ns1.example.com)",
+        "why": "Server cuối cùng, nắm giữ record thật (A, MX, CNAME…). Đây là server được cấu hình tại nhà đăng ký domain. Response từ đây có AA=1 (Authoritative Answer) trong DNS packet.",
+        "whyBreaks": "Nếu authoritative server down hoặc không có record → recursive resolver nhận SERVFAIL hoặc NXDOMAIN → toàn bộ domain unreachable kể cả web, email, API.",
+        "deploymentUse": "Khi dùng Cloudflare/Route53 làm DNS provider, đây chính là authoritative server. Mọi A record, CNAME, TXT tạo trong dashboard đều nằm trên authoritative server này."
+      },
+      {
+        "what": "TTL (Time To Live)",
+        "why": "Số giây resolver được phép cache record trước khi phải hỏi lại authoritative. TTL cao = ít query hơn nhưng đổi IP chậm lan truyền. Best practice: hạ TTL 24h trước khi migration.",
+        "whyBreaks": "Đổi IP server khi TTL=86400 mà không hạ TTL trước → user bị stuck ở IP cũ tối đa 24h → downtime hoặc split-brain (một số user thấy server mới, số khác server cũ).",
+        "deploymentUse": "Quy trình migration VPS: (1) Hạ TTL về 300s, chờ 24h. (2) Chuyển traffic sang server mới. (3) Sau khi ổn định, tăng TTL lại 3600-86400. Bước 1 bắt buộc, không được bỏ qua."
+      },
+      {
+        "what": "Record A / AAAA",
+        "why": "A ánh xạ domain → IPv4 (<a href=\"https://datatracker.ietf.org/doc/html/rfc1035\" target=\"_blank\">RFC 1035</a>), AAAA → IPv6. Mọi web request đều cần ít nhất một trong hai record này. Browser ưu tiên hỏi AAAA trước (Happy Eyeballs), nếu không có thì fall back sang A.",
+        "whyBreaks": "Nếu thêm AAAA record trỏ sai IP IPv6 (ví dụ server chưa enable IPv6) → khoảng 30-40% user IPv6 bị timeout 2-3 giây trước khi fallback A record — UX tệ khó trace.",
+        "deploymentUse": "Khi thuê VPS, lấy IPv4 public IP → tạo A record. Nếu VPS có IPv6 → thêm AAAA. Cả hai đều trỏ về cùng server. Cloudflare proxy tự động handle dual-stack."
+      },
+      {
+        "what": "Record CNAME",
+        "why": "Alias: trỏ một tên về tên khác. www.example.com CNAME example.com. Không dùng CNAME ở root zone vì CNAME không được đặt cùng record khác — vi phạm <a href=\"https://datatracker.ietf.org/doc/html/rfc2181\" target=\"_blank\">RFC 2181</a>.",
+        "whyBreaks": "Đặt CNAME ở apex domain (example.com thay vì www.example.com) → vi phạm <a href=\"https://datatracker.ietf.org/doc/html/rfc2181\" target=\"_blank\">RFC 2181</a>, nhiều DNS provider từ chối hoặc hành vi không xác định → website down hoặc email fail.",
+        "deploymentUse": "Dùng CNAME cho: www.yourdomain.com → yourdomain.com, hoặc subdomain trỏ về Heroku/Vercel/CDN hostname. Không dùng CNAME cho apex — dùng A record hoặc ALIAS record (Cloudflare hỗ trợ)."
+      },
+      {
+        "what": "Record MX",
+        "why": "Chỉ mail server nhận email cho domain. Thiếu MX thì email gửi đến domain sẽ fail hoặc bị bounce. MX có priority (số nhỏ = ưu tiên cao hơn).",
+        "whyBreaks": "Thiếu MX hoặc MX trỏ sai hostname → email gửi đến @yourdomain.com bị bounce ngay. Priority sai (ví dụ backup server priority thấp hơn primary) → email luôn đi qua backup dù primary ổn.",
+        "deploymentUse": "Khi dùng Google Workspace hay Zoho Mail cho email doanh nghiệp, họ cấp sẵn MX record cần tạo. Ví dụ Gmail: ASPMX.L.GOOGLE.COM priority 1, ALT1... priority 5."
+      },
+      {
+        "what": "Record TXT (SPF/DKIM/DMARC)",
+        "why": "SPF liệt kê server được phép gửi email thay domain, DKIM thêm chữ ký số, DMARC chỉ định policy xử lý email fail. Thiếu 3 cái này → email hay vào spam hoặc bị reject thẳng.",
+        "whyBreaks": "Thiếu SPF → Gmail/Outlook mark email là suspected spam. SPF quá tight (hardFail -all) mà quên list server → email từ server hợp lệ bị reject. Thiếu DMARC → domain dễ bị spoof.",
+        "deploymentUse": "Mỗi lần thêm email provider mới (SendGrid, SES, Mailchimp) → phải cập nhật SPF TXT record thêm include. Khi dựng VPS gửi email → thêm IP VPS vào SPF, cấu hình DKIM key pair."
+      },
+      {
+        "what": "Negative cache (NXDOMAIN)",
+        "why": "Khi domain không tồn tại, resolver cache lại kết quả NXDOMAIN theo TTL của SOA record. Dùng khi test: tạo domain giả → bị NXDOMAIN cache → thêm record thật → vẫn fail trong TTL window.",
+        "whyBreaks": "Tạo subdomain mới (api.yourdomain.com) nhưng trước đó đã query một lần khi chưa có record → resolver cache NXDOMAIN → sau khi tạo record vẫn báo lỗi vài phút → dev tưởng cấu hình sai.",
+        "deploymentUse": "Khi deploy feature mới cần subdomain mới, tạo DNS record TRƯỚC khi deploy code. Nếu đã bị negative cache, dùng dig +trace hoặc flush DNS để bypass, hoặc chờ SOA minimum TTL hết."
+      },
+      {
+        "what": "DoH (DNS over HTTPS)",
+        "why": "Encrypt DNS query qua HTTPS port 443 — ISP không thấy domain đang được hỏi. Firefox bật DoH mặc định. Vấn đề: tập trung hóa (hầu hết dùng Cloudflare) và bypass corporate DNS filter.",
+        "whyBreaks": "App dùng DoH hardcode Cloudflare trong môi trường corporate → bypass DNS filter → bị firewall chặn kết nối outbound port 443 tới 1.1.1.1 → app không resolve được domain nào.",
+        "deploymentUse": "Trên VPS production không cần DoH — resolver 1.1.1.1 qua UDP 53 là đủ. DoH hữu ích cho dev machine khi muốn bypass ISP hoặc kiểm tra DNS record từ góc nhìn Cloudflare."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "dig cơ bản — xem A record",
+        "why": "dig là công cụ debug DNS số 1. Hiểu output của dig = hiểu được DNS response thật, biết TTL còn bao nhiêu, ai là authoritative server. Không có dig thì debug DNS chỉ là đoán mò.",
+        "code": "# Query A record mặc định\ndig example.com\n\n# Output quan trọng:\n# QUESTION SECTION: domain đang hỏi\n# ANSWER SECTION: kết quả (IP)\n# Query time: latency\n# SERVER: resolver đang dùng",
+        "whyBreaks": "Nếu bỏ qua dig và chỉ dùng ping/curl để debug DNS → không thấy được TTL, không biết resolver nào đang dùng, không phân biệt được cache hit vs authoritative response → debug blind.",
+        "observeWith": "dig example.com — nhìn cột TTL trong ANSWER SECTION và dòng SERVER để xác định resolver đang dùng. So sánh Query time: <5ms là cache hit, >50ms là fresh lookup.",
+        "failModes": [
+          {
+            "symptom": "DNS trả NXDOMAIN dù domain vừa được tạo, hoặc app không resolve được domain nội bộ",
+            "evidence": "dig api.internal.example.com cho thấy: 'status: NXDOMAIN' — và dig api.internal.example.com +search cũng không thấy, do /etc/resolv.conf thiếu 'search internal.example.com' nên query không append domain suffix"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Kiểm tra /etc/resolv.conf có search domain không",
+            "command": "cat /etc/resolv.conf | grep -E 'nameserver|search|domain'"
+          },
+          {
+            "step": "Thêm search domain tạm thời để test (không persistent qua reboot)",
+            "command": "echo 'search internal.example.com' | sudo tee -a /etc/resolv.conf && dig api.internal.example.com"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "what": "dig +trace — xem toàn bộ recursive path",
+        "why": "+trace bắt dig tự làm recursive từ root, không dùng cache của resolver. Đây là cách xác nhận 'record đã cập nhật chưa' — nếu +trace trả đúng nhưng resolver vẫn sai thì đó là cache issue.",
+        "code": "# Trace từng hop: Root → TLD → Authoritative\ndig example.com +trace\n\n# Kết quả mẫu:\n# .       518400  IN  NS  a.root-servers.net.\n# com.    172800  IN  NS  a.gtld-servers.net.\n# example.com. 86400 IN NS ns1.example.com.\n# example.com. 3600  IN A  93.184.216.34",
+        "whyBreaks": "Không dùng +trace khi debug propagation → không phân biệt được 'authoritative đã cập nhật chưa' vs 'resolver còn cache cũ' → mất hàng giờ chờ vô ích hoặc rollback nhầm.",
+        "observeWith": "dig example.com +trace — đọc từng dòng NS delegation từ root xuống. Nếu thấy IP mới ở authoritative nhưng dig example.com (không +trace) vẫn trả IP cũ → xác nhận là cache issue, không phải config lỗi."
+      },
+      {
+        "step": 3,
+        "what": "Xem các record type khác",
+        "why": "Mỗi record type giải quyết 1 vấn đề riêng. Khi email vào spam → check TXT record SPF/DKIM. Khi subdomain không hoạt động → check CNAME. Khi không nhận được email → check MX.",
+        "code": "# MX record — mail server\ndig example.com MX\n\n# TXT record — SPF/DKIM\ndig example.com TXT\n\n# NS record — nameservers\ndig example.com NS\n\n# AAAA record — IPv6\ndig example.com AAAA",
+        "whyBreaks": "Chỉ biết query A record → mù về email (MX/TXT), mù về nameserver delegation (NS), mù về IPv6 (AAAA). Khi email vào spam mà không check TXT SPF/DKIM → debug sai hướng.",
+        "observeWith": "dig example.com TXT | grep -i spf — xem SPF value. dig example.com MX +short — liệt kê mail servers và priority. dig example.com NS +short — xác nhận nameserver đang active."
+      },
+      {
+        "step": 4,
+        "what": "TTL và cache — kiểm chứng thực tế",
+        "why": "TTL giảm mỗi lần hỏi (vì resolver cache đã có). Query lần 1 TTL=3600, query lần 2 vài phút sau TTL=3540. Khi TTL về 0 thì resolver hỏi lại authoritative. Hiểu điều này để tránh nhầm 'tại sao đổi IP mà vẫn không thấy'.",
+        "code": "# Hỏi 2 lần, nhìn TTL giảm dần\ndig example.com | grep -A2 'ANSWER'\n# Chờ 5 giây\nsleep 5\ndig example.com | grep -A2 'ANSWER'\n# TTL sẽ giảm ~5",
+        "whyBreaks": "Không kiểm tra TTL trước migration → đổi A record khi TTL còn 86400 → user stuck IP cũ 24h → perceived downtime dù server mới hoàn toàn ổn.",
+        "observeWith": "watch -n 5 'dig example.com +short' — chạy liên tục mỗi 5s để xem thời điểm cache expire và IP mới xuất hiện. Hoặc dig example.com | grep -i ttl để xem TTL hiện tại.",
+        "failModes": [
+          {
+            "symptom": "Sau migration IP, user vẫn bị redirect về server cũ dù đã đổi A record hàng giờ trước",
+            "evidence": "dig example.com cho thấy TTL còn lớn (ví dụ: 'example.com. 82800 IN A 1.1.1.1') — TTL lúc đổi record còn 86400s, resolver đang cache IP cũ cho đến khi TTL hết"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Kiểm tra TTL hiện tại của record đang được cache",
+            "command": "dig example.com | awk '/ANSWER SECTION/{getline; print \"TTL remaining:\", $2, \"seconds\"}'"
+          },
+          {
+            "step": "Bypass cache bằng +trace để xác nhận authoritative đã cập nhật",
+            "command": "dig example.com +trace +short | tail -5"
+          },
+          {
+            "step": "Cho lần migration tiếp theo: hạ TTL xuống 300s ít nhất 24h trước khi đổi IP",
+            "command": "dig example.com | grep -E 'IN\\s+A' | awk '{print \"Current TTL:\", $2, \"seconds — wait this long for full propagation\"}'"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# Batch check nhiều DNS records, alert nếu IP khác expected hoặc TTL thấp\n# Dùng sau migration để monitor propagation\nRESOLVER=${1:-8.8.8.8}\nINPUT_FILE=${2:-/etc/dns-check.conf}  # format: domain expected_ip\necho \"=== DNS Batch Check $(date '+%Y-%m-%d %H:%M:%S') ===\"\nwhile IFS=' ' read -r DOMAIN EXPECTED; do\n  [ -z \"$DOMAIN\" ] || [[ \"$DOMAIN\" == \\#* ]] && continue\n  RESULT=$(dig \"$DOMAIN\" A @\"$RESOLVER\" +short | head -1)\n  TTL=$(dig \"$DOMAIN\" A @\"$RESOLVER\" | awk '/ANSWER SECTION/{getline; print $2}')\n  STATUS=\"OK\"\n  [ \"$RESULT\" != \"$EXPECTED\" ] && STATUS=\"MISMATCH (got $RESULT)\"\n  [ -z \"$TTL\" ] && TTL=\"N/A\"\n  echo \"[$STATUS] $DOMAIN → $RESULT (TTL:${TTL}s expected:$EXPECTED)\"\ndone < \"$INPUT_FILE\"",
+          "note": "Tạo /etc/dns-check.conf với mỗi dòng: 'example.com 93.184.216.34'. Chạy sau migration để theo dõi propagation. Cron: */5 * * * * /usr/local/bin/dns-batch-check.sh 8.8.8.8"
+        }
+      },
+      {
+        "step": 5,
+        "what": "Hỏi trực tiếp authoritative — bypass cache",
+        "why": "Khi nghi ngờ resolver đang cache cũ, hỏi thẳng authoritative server để xem record thật sự là gì. Nếu authoritative đúng mà resolver sai = cache cũ, chờ TTL hết. Nếu authoritative cũng sai = chưa publish record.",
+        "code": "# Tìm authoritative server\ndig example.com NS +short\n\n# Hỏi thẳng authoritative (không qua cache)\ndig example.com @ns1.example.com A\n\n# So sánh với resolver thông thường:\ndig example.com @8.8.8.8 A",
+        "whyBreaks": "Chỉ query qua resolver thông thường → không biết authoritative đã cập nhật chưa → có thể chờ vô ích hoặc nghĩ DNS provider có vấn đề trong khi thực ra chỉ là cache chưa hết.",
+        "observeWith": "diff <(dig example.com @ns1.example.com A +short) <(dig example.com @8.8.8.8 A +short) — nếu output khác nhau thì resolver 8.8.8.8 đang cache record cũ."
+      },
+      {
+        "step": 6,
+        "what": "Reverse DNS lookup (PTR record)",
+        "why": "Reverse DNS ánh xạ IP → domain. Mail server hay check PTR để anti-spam: nếu IP không có PTR hoặc PTR không match → email bị reject. Hosting server thường phải cấu hình PTR (rDNS) trong control panel VPS.",
+        "code": "# Reverse lookup cho IP\ndig -x 93.184.216.34\n# Hoặc\nnslookup 93.184.216.34\n\n# Output:\n# 34.216.184.93.in-addr.arpa. PTR example.com.",
+        "whyBreaks": "VPS gửi email mà không cấu hình PTR record (rDNS) → Outlook, Gmail check PTR fail → email bị reject hoặc spam. Nhiều email provider từ chối nhận từ IP không có PTR.",
+        "observeWith": "dig -x $(curl -s https://ipinfo.io/ip) — kiểm tra PTR record của IP VPS hiện tại. Nếu trả về NXDOMAIN hoặc địa chỉ generic của hosting → cần vào control panel VPS để cấu hình rDNS."
+      },
+      {
+        "step": 7,
+        "what": "DoH — DNS over HTTPS kiểm tra",
+        "why": "Kiểm tra DoH giúp xác nhận record trực tiếp từ Cloudflare/Google mà không qua OS resolver. Hữu ích khi nghi ngờ ISP đang tamper DNS hoặc khi đang debug từ corporate network có DNS filtering.",
+        "code": "# Query Cloudflare DoH bằng curl\ncurl -s -H 'accept: application/dns-json' \\\n  'https://cloudflare-dns.com/dns-query?name=example.com&type=A' \\\n  | python3 -m json.tool\n\n# Query Google DoH\ncurl -s 'https://dns.google/resolve?name=example.com&type=A' \\\n  | python3 -m json.tool",
+        "whyBreaks": "App hardcode DoH endpoint (1.1.1.1:443) trong môi trường có firewall restrictive → connection blocked → DNS fail hoàn toàn dù UDP 53 vẫn hoạt động. Khó debug vì error message thường là generic timeout.",
+        "observeWith": "curl -s 'https://dns.google/resolve?name=example.com&type=A' | python3 -m json.tool | grep -E 'data|TTL' — so sánh kết quả DoH với dig example.com @8.8.8.8 để xác nhận ISP có tamper không."
+      }
+    ],
+    "misconceptions": null
+  },
+  "http": {
+    "slug": "http",
+    "title": "Tìm hiểu HTTP",
+    "tldr": [
+      {
+        "what": "HTTP Request = method + path + headers + body",
+        "why": "4 thành phần này là tất cả những gì server cần để xử lý yêu cầu. Thiếu header quan trọng (Content-Type, Authorization) → server trả 400/401, không liên quan network.",
+        "whyBreaks": "Thiếu Content-Type trong POST JSON request → nhiều framework (Express, FastAPI, Spring) từ chối parse body hoặc parse sai → trả 400/422. Thiếu Authorization → 401. Debug bằng curl -v để thấy chính xác bytes gửi đi.",
+        "deploymentUse": "Khi viết reverse proxy (nginx, Caddy) hay API gateway, cần forward đúng headers từ client (đặc biệt Host, X-Forwarded-For, Authorization). Thiếu proxy_set_header trong nginx config → backend nhận header sai → auth fail hoặc rate limit apply nhầm IP."
+      },
+      {
+        "what": "HTTP Response = status line + headers + body",
+        "why": "Status code nói 'chuyện gì xảy ra'. Header nói 'như thế nào'. Body là kết quả. Debug API: đọc status trước, rồi mới đọc body error message.",
+        "whyBreaks": "API trả 200 với error trong body → monitoring (Datadog, CloudWatch) không alert được vì chỉ track status code. Kết quả: production lỗi silent hàng giờ trước khi ai phát hiện qua user report.",
+        "deploymentUse": "Health check endpoint (GET /health) phải trả 200 khi healthy, 503 khi unhealthy. Load balancer (ALB, nginx upstream) dựa vào status code này để remove instance bị lỗi. Trả 200 dù service chết → LB không remove → user bị lỗi."
+      },
+      {
+        "what": "1xx Informational — request đang xử lý",
+        "why": "100 Continue: server nói 'ok gửi tiếp body đi' sau khi check header. Tránh upload file lớn mà server reject ngay từ header.",
+        "whyBreaks": "Client gửi Expect: 100-continue nhưng server không hỗ trợ → client timeout chờ 100 → upload fail dù server vẫn sẵn sàng nhận. Một số proxy strip header Expect → hành vi không dự đoán được.",
+        "deploymentUse": "S3/GCS multipart upload dùng 100 Continue để tránh gửi chunk lớn lên rồi mới biết authentication fail. Khi debug upload timeout, kiểm tra xem proxy (nginx, ALB) có pass Expect header không."
+      },
+      {
+        "what": "2xx Success — server xử lý thành công",
+        "why": "200 OK ≠ 201 Created ≠ 204 No Content. API design tốt phân biệt rõ để client biết có cần đọc body không (204 = không có body).",
+        "whyBreaks": "API DELETE trả 200 với body thay vì 204 → client cố parse body → lỗi nếu body rỗng. API POST tạo resource trả 200 thay vì 201 → client không biết resource đã tạo, không check Location header để lấy ID mới.",
+        "deploymentUse": "REST API design convention: POST /resources → 201 + Location header. DELETE /resources/{id} → 204 no body. PUT update → 200 + updated object. Đúng status code giúp client cache, retry logic, và monitoring đúng."
+      },
+      {
+        "what": "3xx Redirect — tài nguyên đã chuyển đi",
+        "why": "301 Permanent redirect: browser/bot sẽ cache và không hỏi lại. 302 Temporary: không cache. Dùng sai → SEO penalty hoặc cache stale redirect.",
+        "whyBreaks": "HTTP → HTTPS redirect dùng 302 thay 301 → browser không cache → mỗi request đến HTTP vẫn có thêm 1 round trip redirect → latency tăng, không bật HSTS được. Ngược lại: 301 redirect sai URL → bị cache vĩnh viễn, khó rollback.",
+        "deploymentUse": "nginx config: return 301 https://$host$request_uri; để redirect HTTP→HTTPS permanent. Kết hợp HSTS header (Strict-Transport-Security: max-age=31536000) để browser không thử HTTP nữa. Kiểm tra redirect chain bằng curl -L -v trước khi deploy."
+      },
+      {
+        "what": "4xx Client Error — lỗi do request",
+        "why": "4xx = lỗi của client, không phải server. 400=sai format, 401=chưa auth, 403=không có quyền, 404=không tồn tại. Debug: sửa request, không restart server.",
+        "whyBreaks": "4xx rate cao trên API → thường là client code bug hoặc docs sai. 401 spike → token expired hoặc secret rotation chưa deploy đều. 404 nhiều trên resource có thật → route config sai hoặc ID format mismatch. Monitor 4xx rate riêng với 5xx.",
+        "deploymentUse": "API gateway (Kong, AWS API GW) có thể trả 429 Too Many Requests khi rate limit. Client phải handle 429 với exponential backoff + jitter, không retry ngay. Thiếu logic này → cascade failure khi service bị stress."
+      },
+      {
+        "what": "5xx Server Error — lỗi do server",
+        "why": "5xx = server fail, không phải client. 500=exception chưa handle, 502=upstream chết, 503=overload. Cần check server log ngay, không phải sửa client.",
+        "whyBreaks": "502 Bad Gateway từ nginx thường nghĩa là app server crash hoặc không lắng nghe đúng port. 503 trong deployment nghĩa là health check fail — new version chưa ready. Debug: check app log, không phải nginx log. nginx error log chỉ nói 'connect() failed', không nói tại sao.",
+        "deploymentUse": "Blue-green deployment: khi switch traffic sang green, LB check health endpoint trả 200 trước khi route traffic. Nếu app khởi động chậm (JVM warm-up, DB connection pool) → trả 503 trong 10-30s → LB giữ blue thêm. Cần config initialDelaySeconds trong Kubernetes readiness probe."
+      },
+      {
+        "what": "HTTP/1.1: text, keep-alive, nhưng head-of-line blocking",
+        "why": "Keep-alive cho phép dùng lại TCP conn nhưng vẫn phải đợi response trước mới gửi request tiếp (pipelining broken trong thực tế). 6 conn/domain là workaround browser hay dùng.",
+        "whyBreaks": "Một request chậm (slow DB query) block tất cả request sau trên cùng connection. Browser mở 6 conn/domain là workaround nhưng 6 conn cũng có giới hạn. Kết quả: waterfall dài trên DevTools khi trang nhiều resource.",
+        "deploymentUse": "nginx default keepalive_timeout 75s — đủ tốt cho hầu hết trường hợp. Với upstream app server, cần keepalive directive trong upstream block để reuse connection thay vì tạo mới mỗi request. Thiếu → TCP handshake overhead tăng lên dưới load."
+      },
+      {
+        "what": "HTTP/2: binary frames, multiplexing, HPACK compression",
+        "why": "Multiplexing = nhiều request song song trên 1 TCP conn → không cần 6 conn nữa. HPACK nén header giảm overhead. Cùng resource, HTTP/2 nhanh hơn H1 ~30-50% trên nhiều asset.",
+        "whyBreaks": "HTTP/2 server push (server chủ động push resource) đôi khi gây negative cache interaction — push resource đã có trong browser cache. HTTP/2 vẫn có TCP-level HOL blocking (khác với stream-level). HTTP/3/QUIC giải quyết điều này.",
+        "deploymentUse": "nginx: thêm http2 vào listen directive — listen 443 ssl http2. Kiểm tra bằng curl -I --http2 https://yourdomain.com | head — thấy HTTP/2 200 là thành công. Cloudflare tự bật H2 cho tất cả traffic qua proxy."
+      },
+      {
+        "what": "HTTPS = HTTP + TLS: encrypt + verify identity",
+        "why": "TLS làm 2 việc: (1) mã hoá để không bị nghe lén, (2) xác thực domain để không bị MITM. Thiếu HTTPS → password/cookie gửi plaintext → bị đánh cắp trên public WiFi.",
+        "whyBreaks": "Cert hết hạn → TLS handshake fail → toàn bộ site/API down, không chỉ HTTPS. Nguyên nhân downtime thường gặp có thể phòng tránh được. Thiết lập auto-renewal (Let's Encrypt certbot) và alert 30 ngày trước expiry là bắt buộc.",
+        "deploymentUse": "Let's Encrypt + certbot: certbot renew chạy trong cron hoặc systemd timer. Cloudflare Universal SSL: miễn phí, auto-renew, không cần quản lý cert. Với internal services: dùng cert từ private CA (HashiCorp Vault PKI, AWS Private CA)."
+      },
+      {
+        "what": "TLS handshake: ClientHello → cert verify → key exchange → Finished",
+        "why": "Handshake tạo shared secret mà không truyền key qua dây (ECDHE). Nếu cert expire/mismatch/CA không tin → handshake fail ngay bước 2, không có gì được gửi tiếp.",
+        "whyBreaks": "SNI mismatch: server host nhiều domain trên 1 IP, client gửi SNI sai hoặc không gửi → server trả cert sai → handshake fail. Hay gặp khi config nginx server_name sai hoặc TLS termination ở LB không pass SNI đúng đến backend.",
+        "deploymentUse": "AWS ALB terminate TLS tại LB, forward HTTP đến EC2/container. EC2 không cần cert — đơn giản hơn. Nhưng internal traffic (ALB→EC2) unencrypted — với compliance requirement cần TLS end-to-end → dùng NLB với TCP passthrough hoặc mTLS."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "Gửi HTTP request — nhìn raw wire format bằng curl -v",
+        "why": "Dev thường chỉ thấy code, không thấy raw request. <code>curl -v</code> hiện chính xác bytes gửi đi. Khi debug 400 Bad Request, đây là cách duy nhất chắc chắn header đã đúng format chưa.",
+        "code": "# Xem toàn bộ request + response headers\ncurl -v https://httpbin.org/get\n\n# Thêm custom header và body POST\ncurl -v -X POST https://httpbin.org/post \\\n  -H 'Content-Type: application/json' \\\n  -H 'Authorization: Bearer mytoken123' \\\n  -d '{\"name\":\"Alice\"}'",
+        "whyBreaks": "Bỏ qua curl -v và chỉ đọc error message từ SDK/framework → không biết header thực sự gửi gì, body có đúng format không. Debug API fail mà không dùng curl -v là debug mù — mất hàng giờ chỉ vì thiếu 1 header.",
+        "observeWith": "curl -v output: dòng '>' là request headers gửi đi, dòng '<' là response headers server trả về. Tìm dòng '< HTTP/1.1 XXX' để thấy status code đầu tiên. Dòng '*' là curl metadata (TLS info, redirect, etc). nghttp -v https://domain.com để xem HTTP/2 frames chi tiết."
+      },
+      {
+        "step": 2,
+        "what": "Đọc và hiểu status code trong response",
+        "why": "Status code là ngôn ngữ giao tiếp giữa server và client. 3 chữ số đầu quyết định hướng debug. Đọc sai hoặc ignore status code → mất hàng giờ debug sai chỗ.",
+        "code": "# Chỉ lấy status code\ncurl -o /dev/null -s -w '%{http_code}' https://httpbin.org/status/404\n\n# Follow redirect và xem chain\ncurl -v -L https://httpbin.org/redirect/2\n\n# Xem response headers cụ thể\ncurl -I https://httpbin.org/get",
+        "whyBreaks": "Code kiểm tra response.ok (true nếu 200-299) nhưng không check status code cụ thể → bỏ qua sự khác biệt 200 vs 204 vs 201. Hay gặp: fetch() không throw error với 4xx — phải check response.ok hoặc response.status manually.",
+        "observeWith": "curl -o /dev/null -s -w '%{http_code}\\n%{time_total}\\n' URL — in status code và total time. Browser DevTools → Network tab: filter by status (4xx, 5xx), xem Timing tab để thấy TTFB. tcpdump port 80 để thấy raw HTTP/1.1 request/response không encrypt."
+      },
+      {
+        "step": 3,
+        "what": "So sánh HTTP/1.1 vs HTTP/2 thực tế",
+        "why": "HTTP/2 không tự động dùng — server phải hỗ trợ và negotiate qua ALPN trong TLS handshake. Cần biết để config nginx/nginx đúng và debug khi H2 không negotiate được.",
+        "code": "# Xem server dùng HTTP version nào\ncurl -I --http1.1 https://www.google.com 2>&1 | head -5\ncurl -I --http2 https://www.google.com 2>&1 | head -5\n\n# Xem ALPN negotiation trong TLS\nopenssl s_client -connect www.google.com:443 \\\n  -alpn h2,http/1.1 2>&1 | grep 'ALPN\\|Protocol'",
+        "whyBreaks": "nginx không bật http2 trong listen directive → client và server negotiate HTTP/1.1 qua ALPN → mất lợi ích multiplexing → trang load chậm dưới nhiều concurrent request. Dễ check: curl -I --http2 domain.com | head -1 phải thấy 'HTTP/2 200'.",
+        "observeWith": "curl -I --http2 https://yourdomain.com | head -2 — dòng đầu phải là 'HTTP/2 200' nếu H2 active. nghttp -v https://yourdomain.com để xem từng HTTP/2 frame (HEADERS, DATA, SETTINGS). Browser DevTools → Network → Protocol column để thấy h2 hay http/1.1."
+      },
+      {
+        "step": 4,
+        "what": "TLS handshake — dùng openssl để xem cert và handshake",
+        "why": "Khi thấy 'certificate verify failed' cần biết cert của CA nào, expire lúc nào, SAN có match domain không. <code>openssl s_client</code> cho tất cả thông tin này mà không cần browser.",
+        "code": "# Xem chi tiết TLS handshake\nopenssl s_client -connect example.com:443 \\\n  -servername example.com </dev/null 2>&1\n\n# Chỉ xem cert info\nopenssl s_client -connect example.com:443 \\\n  -servername example.com </dev/null 2>&1 | \\\n  openssl x509 -noout -text | grep -E 'Subject:|Not After:|DNS:'",
+        "whyBreaks": "Cert SANs (Subject Alternative Names) không include subdomain đang dùng → TLS verify fail → curl: SSL certificate problem: does not match. Hay gặp khi wildcard cert *.example.com không cover sub.sub.example.com (wildcard chỉ match 1 level).",
+        "observeWith": "echo | openssl s_client -connect domain.com:443 2>/dev/null | openssl x509 -noout -dates — xem Not Before và Not After. grep DNS: để thấy tất cả SAN. Kết quả 'Verify return code: 0 (ok)' nghĩa là cert valid. tcpdump port 443 để capture TLS handshake bytes (thấy ClientHello, ServerHello trong Wireshark).",
+        "failModes": [
+          {
+            "symptom": "Browser hiện ERR_CERT_DATE_INVALID, curl báo lỗi verify",
+            "evidence": "curl -v https://example.com 2>&1 | grep 'error' cho thấy: 'SSL certificate problem: certificate has expired' — hoặc openssl xác nhận: 'Verify return code: 10 (certificate has expired)'"
+          },
+          {
+            "symptom": "TLS handshake fail vì wildcard cert không cover sub-subdomain",
+            "evidence": "curl -v https://api.staging.example.com 2>&1 | grep 'error': 'SSL: no alternative certificate subject name matches target host name api.staging.example.com' — *.example.com không match 2 cấp subdomain"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Xác nhận cert hết hạn và thời điểm expire",
+            "command": "echo | openssl s_client -connect example.com:443 -servername example.com 2>/dev/null | openssl x509 -noout -dates"
+          },
+          {
+            "step": "Renew cert bằng certbot (Let's Encrypt) nếu dùng LE",
+            "command": "sudo certbot renew --cert-name example.com --dry-run && sudo certbot renew --cert-name example.com"
+          },
+          {
+            "step": "Reload nginx sau khi cert mới được deploy",
+            "command": "sudo nginx -t && sudo systemctl reload nginx"
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "what": "Debug 4xx: phân biệt 400 vs 401 vs 403 vs 404",
+        "why": "4 loại lỗi có 4 nguyên nhân khác nhau hoàn toàn. Biết phân biệt = tiết kiệm thời gian debug. 401 → kiểm tra token. 403 → kiểm tra permission. 404 → kiểm tra URL/route. 400 → kiểm tra body/header format.",
+        "code": "# Simulate các lỗi với httpbin\n# 400 Bad Request\ncurl -v -X POST https://httpbin.org/post \\\n  -H 'Content-Type: application/json' \\\n  -d 'invalid-json-{'\n\n# 401 Unauthorized\ncurl -v https://httpbin.org/basic-auth/user/pass\n\n# 404 Not Found\ncurl -v https://httpbin.org/status/404",
+        "whyBreaks": "Nhận 403 nhưng debug như 401 (kiểm tra token) → mất thời gian. 403 nghĩa là token valid nhưng role/permission không đủ → cần kiểm tra IAM policy, database permission, hoặc RBAC config. 401 vs 403 là 2 action khác nhau hoàn toàn.",
+        "observeWith": "curl -v URL 2>&1 | grep '< HTTP' — xem status code ngay. Browser DevTools → Network → lọc Fetch/XHR, click request, xem Response tab: body thường có error message rõ hơn. Dùng httpie (http GET url) cho output màu dễ đọc hơn curl."
+      },
+      {
+        "step": 6,
+        "what": "Debug 5xx: 502 Bad Gateway thường xảy ra khi nào?",
+        "why": "502 = nginx/load balancer nhận được request nhưng upstream (app server) trả lỗi hoặc không phản hồi. Không phải lỗi nginx — cần check app logs. 503 = upstream không available (quá tải hoặc chết).",
+        "code": "# Check nginx access log: tìm 5xx\nsudo tail -f /var/log/nginx/access.log | grep ' 5[0-9][0-9] '\n\n# Check nginx error log\nsudo tail -f /var/log/nginx/error.log\n\n# Xem upstream status với curl\ncurl -v http://localhost:8080/health  # trực tiếp tới app server\ncurl -v http://localhost:80/health    # qua nginx",
+        "whyBreaks": "502 từ nginx error log: 'connect() failed (111: Connection refused)' → app server không chạy trên port đó. '(110: Connection timed out)' → app server quá tải hoặc firewall block. Phân biệt 2 trường hợp này bằng netstat -tlnp | grep PORT.",
+        "observeWith": "sudo tail -f /var/log/nginx/error.log — xem error message chi tiết của 502/503. curl -v http://localhost:APP_PORT/health — test trực tiếp app server bypass nginx. journalctl -u your-app.service -f — xem app crash log real-time. netstat -tlnp | grep APP_PORT — verify app đang listen.",
+        "failModes": [
+          {
+            "symptom": "Client nhận 502 Bad Gateway, app server đang chạy nhưng tải cao",
+            "evidence": "sudo tail -f /var/log/nginx/error.log cho thấy: '2024/01/15 10:23:45 [error] 1234#0: *567 upstream timed out (110: Connection timed out) while reading response header from upstream, client: 10.0.0.5, upstream: \"http://127.0.0.1:8080/api/data\"'"
+          },
+          {
+            "symptom": "Client nhận 502, app server không chạy trên port đó",
+            "evidence": "sudo tail -f /var/log/nginx/error.log cho thấy: 'connect() failed (111: Connection refused) while connecting to upstream, upstream: \"http://127.0.0.1:8080/\"'"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Phân biệt timeout vs refused: timeout = app alive nhưng quá tải, refused = app không chạy",
+            "command": "sudo ss -tlnp | grep 8080  # nếu không có output → app không chạy trên port 8080"
+          },
+          {
+            "step": "Nếu app không chạy: restart service và verify",
+            "command": "sudo systemctl restart your-app.service && sudo journalctl -u your-app.service -n 30"
+          },
+          {
+            "step": "Nếu timeout do quá tải: tăng nginx proxy_read_timeout tạm thời và check app performance",
+            "command": "curl -w '%{time_total}\\n' -o /dev/null -s http://localhost:8080/health  # đo thực tế latency upstream"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# Health probe: check HTTP status code + latency, alert nếu fail hoặc chậm\n# Chạy cron mỗi 1 phút\nURL=${1:-\"http://localhost:8080/health\"}\nTHRESHOLD_MS=${2:-2000}  # alert nếu > 2s\nRESULT=$(curl -o /dev/null -s -w '%{http_code} %{time_total}' --max-time 5 \"$URL\")\nCODE=$(echo \"$RESULT\" | awk '{print $1}')\nTIME_S=$(echo \"$RESULT\" | awk '{print $2}')\nTIME_MS=$(echo \"$TIME_S * 1000\" | bc | cut -d. -f1)\nif [ \"$CODE\" != \"200\" ] || [ \"$TIME_MS\" -gt \"$THRESHOLD_MS\" ]; then\n  logger -t http-probe \"ALERT: $URL — HTTP $CODE, ${TIME_MS}ms (threshold ${THRESHOLD_MS}ms)\"\n  echo \"[$(date '+%Y-%m-%d %H:%M:%S')] ALERT: $URL HTTP $CODE ${TIME_MS}ms\"\nfi",
+          "note": "Cron: * * * * * /usr/local/bin/http-health-probe.sh http://localhost:8080/health 2000. Cần bc package."
+        }
+      },
+      {
+        "step": 7,
+        "what": "Dùng Wireshark xem TLS handshake + HTTP/2 frames",
+        "why": "Wireshark + SSLKEYLOGFILE cho phép decrypt HTTPS traffic locally để debug. Đây là kỹ thuật cần thiết khi curl/browser không đủ thông tin — thấy được từng TLS record và HTTP/2 frame.",
+        "code": "# Capture HTTPS traffic với SSLKEYLOGFILE để decrypt\nexport SSLKEYLOGFILE=/tmp/ssl-keys.log\ncurl https://example.com\n\n# Mở Wireshark:\n# Edit → Preferences → Protocols → TLS\n# → (Pre)-Master-Secret log filename: /tmp/ssl-keys.log\n# Sau đó lọc: http2 hoặc tls.handshake",
+        "whyBreaks": "Không có SSLKEYLOGFILE → Wireshark chỉ thấy 'Application Data' (encrypted) thay vì HTTP headers/body. SSLKEYLOGFILE chỉ hoạt động với curl, Firefox, Chrome — không hoạt động với binary không expose key export hook.",
+        "observeWith": "sudo tcpdump -i any -w /tmp/capture.pcap port 443 — capture raw bytes. Mở file trong Wireshark + load SSLKEYLOGFILE → filter 'http2' để thấy HEADERS frame, DATA frame. Wireshark → Statistics → HTTP2 → Requests để xem tất cả HTTP/2 stream summary. Browser DevTools → Security tab để xem TLS version và cipher suite đang dùng."
+      }
+    ],
+    "misconceptions": null
+  },
+  "icmp-ping": {
+    "slug": "icmp-ping",
+    "title": "Giao thức Ping",
+    "tldr": [
+      {
+        "what": "ICMP Echo Request / Reply (Type 8/0)",
+        "why": "Đây là những gì <code>ping</code> thực sự gửi. Không phải 'kiểm tra mạng dùng được không' — chỉ kiểm tra L3 reachability. Web dùng TCP port 80/443; firewall có thể block port nhưng vẫn cho ICMP qua → ping OK nhưng web chết.",
+        "whyBreaks": "Firewall chặn ICMP inbound → ping fail nhưng service vẫn hoạt động bình thường. Dùng ping để monitor → false alarm liên tục. Ngược lại: firewall allow ICMP nhưng block TCP 80 → ping OK nhưng web chết → nhầm 'server down'.",
+        "deploymentUse": "Dùng ping để kiểm tra L3 reachability ban đầu khi troubleshoot. Sau đó dùng nc -zv host port để test L4. Trong cloud: security group thường block ICMP by default — enable ICMP riêng nếu cần ping để debug."
+      },
+      {
+        "what": "ICMP Time Exceeded (Type 11)",
+        "why": "Router nhận packet có TTL=0 phải gửi ICMP Time Exceeded về sender kèm IP của chính nó. Đây là cơ sở của traceroute: gửi TTL=1,2,3... để 'nhử' từng router tự khai IP.",
+        "whyBreaks": "Firewall block ICMP outbound từ router → các hop đó im lặng (hiện * trong traceroute). Nếu toàn bộ path là * nhưng đích cuối phản hồi → tất cả intermediate router đã block Time Exceeded — đường vẫn thông.",
+        "deploymentUse": "Khi debug latency spike giữa VPS và user: traceroute pinpoint hop nào có RTT đột biến. Hop trong datacenter thường <1ms; hop ISP 5-20ms; hop xuyên lục địa 80-200ms. Bất thường = vấn đề ở router đó."
+      },
+      {
+        "what": "ICMP Destination Unreachable (Type 3)",
+        "why": "Khi router không tìm được đường (host unreachable), hoặc port đóng (port unreachable) → gửi loại này. Giúp phân biệt 'routing fail' vs 'app fail' khi debug.",
+        "whyBreaks": "Firewall DROP (im lặng) vs REJECT (trả ICMP Unreachable) ảnh hưởng trải nghiệm user khác nhau: DROP → connection timeout sau 30-60s; REJECT → fail ngay lập tức. Từ góc độ UX, REJECT tệ hơn (lỗi rõ) nhưng từ góc độ debug, REJECT nhanh hơn.",
+        "deploymentUse": "iptables -j REJECT trả ICMP Unreachable → client fail nhanh. iptables -j DROP → client chờ timeout. Trong firewall production: dùng DROP cho port không muốn expose (bảo mật), REJECT cho port nội bộ (debug dễ)."
+      },
+      {
+        "what": "TTL (Time To Live) trick của traceroute",
+        "why": "TTL không phải thời gian — là số hop. Mỗi router giảm 1. Traceroute tăng TTL từ 1 lên: hop 1 nhận TTL=1, drop packet, báo lại IP của nó. Hop 2 nhận TTL=2, rồi tương tự. Ta thu được bản đồ đường đi.",
+        "whyBreaks": "TTL mặc định Linux=64, Windows=128. Nếu destination cách hơn 64 hop (hiếm) → packet tự chết trước khi đến nơi. Phổ biến hơn: misconfigured router decrements TTL sai → loop detection giả → traceroute kỳ lạ.",
+        "deploymentUse": "Dùng mtr (My TraceRoute) thay traceroute cho monitoring liên tục: mtr --report 8.8.8.8 — hiển thị packet loss và RTT avg/best/worst trên từng hop. Hữu ích khi report vấn đề mạng với ISP."
+      },
+      {
+        "what": "Ping thành công ≠ dịch vụ hoạt động",
+        "why": "Ping chỉ test ICMP echo tại L3. Nếu server disable ICMP → ping fail nhưng web OK. Ngược lại, firewall chặn TCP:80 → ping OK nhưng web dead. Đừng dùng ping để kết luận 'server down'.",
+        "whyBreaks": "Nhiều cloud VPS disable ICMP inbound mặc định (GCP, AWS security group). Ping từ ngoài fail → dev tưởng VPS down → hoang mang. Thực tế VPS chạy bình thường, chỉ ICMP bị block.",
+        "deploymentUse": "Health check đúng cách: curl -sf http://host/health (L7), nc -zv host port (L4), ping host (L3). Chạy theo thứ tự từ dưới lên khi debug: L3 trước → L4 → L7. Mỗi layer thu hẹp phạm vi vấn đề."
+      },
+      {
+        "what": "RTT (Round Trip Time) đo gì?",
+        "why": "RTT = thời gian từ lúc gửi ICMP Echo Request tới khi nhận Echo Reply. Đo latency giữa 2 điểm ở L3. RTT tăng đột biến ở hop nào → vấn đề tập trung ở đó (tắc nghẽn/đường dài).",
+        "whyBreaks": "RTT đột biến không nhất thiết là hop đó có vấn đề — router ưu tiên forward traffic hơn xử lý ICMP (ICMP rate limiting). RTT cao của hop giữa nhưng hop cuối bình thường = router đó de-prioritize ICMP, không phải bottleneck thực sự.",
+        "deploymentUse": "Baseline RTT từ VPS → user region để set timeout hợp lý. Nếu ping Singapore→Europe ~200ms, timeout database query cross-region nên ít nhất 500ms. Dùng ping với -i 0.2 để stress test và tìm jitter."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "Ping gửi ICMP Echo Request — không phải TCP",
+        "why": "Nhiều người nhầm ping là 'test kết nối TCP'. Thực ra ping chỉ hoạt động ở L3 (IP), không cần port, không cần process listen. Kết quả ping OK chỉ nghĩa là IP reachable — không nói gì về dịch vụ.",
+        "whyBreaks": "ping OK nhưng curl fail → service không chạy hoặc firewall block port. Cần phân biệt: ping test L3 (ICMP), nc -zv test L4 (TCP), curl test L7 (HTTP). Nhảy cóc skip step thường bỏ qua tầng có vấn đề.",
+        "observeWith": "sudo tcpdump -i any -n icmp  # Xem ICMP packet: Type 8 (request), Type 0 (reply)\n# Trong output ping: TTL reply cho biết số hop ngược lại\n# Linux TTL gốc=64: reply TTL=54 → đã qua 10 hop",
+        "code": "# Ping cơ bản — gửi 4 ICMP Echo Request\nping -c 4 8.8.8.8\n\n# Xem TTL của reply — TTL giảm theo số hop\n# Nếu reply TTL=117 thì từ nguồn TTL=128, qua 11 hop\nping -c 1 -v 8.8.8.8"
+      },
+      {
+        "step": 2,
+        "what": "Wireshark — xem ICMP Echo Request/Reply",
+        "why": "Thấy tận mắt packet ICMP trong Wireshark giúp hiểu rằng KHÔNG có port, không có handshake. Chỉ có IP header + ICMP header với Type=8 (request) và Type=0 (reply). Đây là bằng chứng vật lý cho khái niệm.",
+        "whyBreaks": "Capture ICMP nhưng không thấy reply → ICMP bị block một chiều. Thấy request đi nhưng không có reply → remote block ICMP inbound. Không thấy cả request lẫn reply → block outbound tại local firewall.",
+        "observeWith": "sudo tcpdump -i any -n -v icmp  # -v để thấy type/code\n# Phân biệt:\n# 'ICMP echo request' = Type 8 (host gửi đi)\n# 'ICMP echo reply' = Type 0 (remote trả về)\n# Nếu chỉ thấy request không có reply = remote block ICMP",
+        "code": "# Capture ICMP trên Wireshark (Linux)\nsudo tcpdump -i any -n icmp\n\n# Trong terminal khác:\nping -c 3 8.8.8.8\n\n# Output tcpdump sẽ thấy dạng:\n# IP 192.168.x.x > 8.8.8.8: ICMP echo request\n# IP 8.8.8.8 > 192.168.x.x: ICMP echo reply"
+      },
+      {
+        "step": 3,
+        "what": "Traceroute — TTL trick hoạt động như thế nào",
+        "why": "Hiểu TTL trick là hiểu cách traceroute 'hack' cơ chế routing để lộ đường đi. Mỗi router phải báo lại khi drop packet TTL=0 — đây là nghĩa vụ theo <a href=\"https://datatracker.ietf.org/doc/html/rfc792\" target=\"_blank\">RFC 792</a>. Không cần cài software gì thêm, chỉ dùng tính năng có sẵn của IP stack.",
+        "whyBreaks": "Firewall outbound block UDP port cao (33434+) → UDP traceroute không hoạt động (toàn * nhưng đích cũng *). Switch sang ICMP traceroute -I hoặc TCP traceroute. Biết 3 flavor để chọn đúng khi bị block.",
+        "observeWith": "sudo tcpdump -i any -n icmp  # Capture song song khi chạy traceroute\n# Thấy: ICMP time-exceeded từ từng router trung gian\n# Mỗi router tự khai IP của nó qua Time Exceeded source address\nmtr -n 8.8.8.8  # Thay thế tốt hơn: real-time continuous trace",
+        "code": "# Traceroute chuẩn (dùng UDP trên Linux)\ntraceroute 8.8.8.8\n\n# Traceroute dùng ICMP (giống Windows tracert)\ntraceroute -I 8.8.8.8\n\n# Windows:\ntracert 8.8.8.8"
+      },
+      {
+        "step": 4,
+        "what": "Đọc output traceroute — dấu * nghĩa là gì?",
+        "why": "Dấu * xuất hiện khi router không trả ICMP Time Exceeded — có thể firewall block ICMP hoặc router cấu hình không gửi. KHÔNG có nghĩa là mạng đứt tại đó. Nếu các hop tiếp theo phản hồi bình thường → đường vẫn thông, router đó chỉ 'im lặng'.",
+        "whyBreaks": "Kết luận sai 'mạng đứt tại hop X' khi thấy * → escalate sai → lãng phí thời gian. Rule: chỉ kết luận 'đứt' khi tất cả hop sau hop đó đều * VÀ đích không trả lời.",
+        "observeWith": "traceroute -n 8.8.8.8  # -n: không resolve hostname, nhanh hơn\n# Sau hop *: nếu hop tiếp theo có RTT bình thường → router im lặng, đường thông\nmtr --report -n 8.8.8.8  # Report mode: tổng hợp loss% và avg RTT mỗi hop",
+        "code": "# Ví dụ output:\n# 1  192.168.1.1      1.2 ms   — router nhà\n# 2  10.0.0.1         5.1 ms   — router ISP\n# 3  * * *            — router không trả ICMP\n# 4  72.14.198.108   18.3 ms   — Google backbone\n# 5  8.8.8.8         19.1 ms   — đích đến\n\n# Dấu * = router không gửi Time Exceeded\n# Không có nghĩa đường đứt — xem hop tiếp theo"
+      },
+      {
+        "step": 5,
+        "what": "Phân biệt ICMP Destination Unreachable subtypes",
+        "why": "Code trong ICMP Destination Unreachable cho biết lý do cụ thể: code 0 = net unreachable (routing fail), code 1 = host unreachable, code 3 = port unreachable (UDP traceroute dùng điều này — khi đến đích, port UDP đóng → gửi port unreachable → traceroute biết đã đến nơi).",
+        "whyBreaks": "Thấy 'ICMP port unreachable' khi debug UDP service → đang dùng sai port hoặc service chưa chạy. Khác với TCP: TCP trả RST khi port đóng, UDP trả ICMP Port Unreachable. Khi firewall block ICMP → UDP client chờ timeout thay vì fail ngay.",
+        "observeWith": "sudo tcpdump -i any -n icmp  # Xem Type 3 Code X\n# Code 0=net unreachable, 1=host unreachable, 3=port unreachable\n# Test: nc -u 127.0.0.1 9999  # gửi UDP tới port đóng → ICMP port unreachable",
+        "code": "# UDP traceroute exploit Port Unreachable:\n# Gửi UDP tới port cao (33434+), mỗi router trả Time Exceeded\n# Khi tới đích: host trả Port Unreachable (vì port đó không có ai listen)\n# → traceroute biết đã đến đích!\n\n# ICMP traceroute (-I) thay vào đó dùng Echo Request\n# Khi đích trả Echo Reply → kết thúc",
+        "failModes": [
+          {
+            "symptom": "UDP client treo vô thời hạn thay vì báo lỗi ngay",
+            "evidence": "tcpdump: ICMP type 3 code 3 bị DROP bởi iptables INPUT rule"
+          },
+          {
+            "symptom": "Ứng dụng TCP hoạt động, UDP-based app (DNS, NTP) timeout",
+            "evidence": "dig @8.8.8.8 example.com → 'connection timed out; no servers could be reached' dù route OK"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Cho phép ICMP type 3 (Destination Unreachable) trên firewall — CẦN THIẾT cho PMTU Discovery + UDP error handling",
+            "command": "sudo iptables -A INPUT -p icmp --icmp-type destination-unreachable -j ACCEPT"
+          },
+          {
+            "step": "Verify bằng nc gửi UDP tới port đóng, phải thấy packet unreachable trả về",
+            "command": "nc -u -w2 127.0.0.1 9999; echo \"exit=$?\"   # exit != 0 nếu nhận ICMP unreachable"
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "what": "Ping thực tế — RTT và packet loss",
+        "why": "RTT tăng đột biến → latency vấn đề. Packet loss > 0% → mạng không ổn định. Ping với -i (interval) và -s (packet size) giúp test băng thông và phát hiện MTU issue. Đây là công cụ debug L3 nhanh nhất.",
+        "whyBreaks": "ping -s 1472 fail nhưng ping -s 100 OK → MTU mismatch trên đường đi (thường gặp VPN hoặc tunnel). Packet lớn cần fragment hoặc PMTUD. Dấu hiệu: DF (Don't Fragment) bit set + ICMP 'Fragmentation needed' từ router.",
+        "observeWith": "ping -c 10 8.8.8.8  # Xem packet loss % và rtt min/avg/max/mdev\nmtr --report -c 20 8.8.8.8  # Đo jitter và loss ổn định hơn\nping -s 1472 -M do 8.8.8.8  # Test MTU: -M do = Don't Fragment, fail nếu MTU < 1500",
+        "code": "# Ping liên tục, xem min/avg/max RTT\nping 8.8.8.8\n# Ctrl+C để dừng, xem tóm tắt\n\n# Test với packet lớn hơn (phát hiện MTU issue)\nping -s 1400 8.8.8.8\n\n# Nếu ping với size lớn fail nhưng size nhỏ OK\n# → có thể MTU mismatch trên đường đi",
+        "failModes": [
+          {
+            "symptom": "SSH/HTTPS stall sau khi authenticate, download vài MB rồi treo",
+            "evidence": "ping -s 1472 -M do <server> → 'Frag needed and DF set (mtu = 1400)'"
+          },
+          {
+            "symptom": "Nội mạng OK, qua VPN lag đột biến, packet loss 5-20%",
+            "evidence": "mtr report: loss% cao ở 1 hop cố định (thường là VPN gateway)"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Giảm MTU interface khi VPN/tunnel chèn header (IPsec, WireGuard, GRE) → tránh fragment ở router xa",
+            "command": "sudo ip link set dev eth0 mtu 1400"
+          },
+          {
+            "step": "Với TCP: clamp MSS xuống MTU-40 để tránh giao thức phải phụ thuộc PMTUD",
+            "command": "sudo iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/usr/bin/env bash\n# Monitor RTT + loss; alert nếu vượt ngưỡng. Chạy qua cron */5.\nTARGET=\"${1:-8.8.8.8}\"\nSTATS=$(ping -c 20 -W 2 \"$TARGET\" | tail -2)\nLOSS=$(echo \"$STATS\" | grep -oP '\\d+(?=% packet loss)')\nAVG=$(echo \"$STATS\" | grep -oP 'rtt [^=]+=\\K[\\d.]+(?=/[\\d.]+/[\\d.]+/[\\d.]+)' | cut -d/ -f2)\nLOSS=${LOSS:-100}; AVG=${AVG:-9999}\nif (( LOSS > 5 )) || (( $(echo \"$AVG > 100\" | bc -l) )); then\n  echo \"ALERT: $TARGET loss=$LOSS%, rtt=${AVG}ms\" | logger -t net-probe\nfi",
+          "note": "Cron entry: `*/5 * * * * /usr/local/bin/net-probe.sh 8.8.8.8` → alert khi loss > 5% hoặc RTT avg > 100ms."
+        }
+      }
+    ],
+    "misconceptions": null
+  },
+  "subnet-cidr": {
+    "slug": "subnet-cidr",
+    "title": "IPv4",
+    "tldr": [
+      {
+        "term": "IP Class A",
+        "value": "1.0.0.0 – 126.255.255.255 (octet đầu: 1–126)",
+        "why": "Nhận biết Class A: octet đầu từ 1–126. Network ID chỉ 8 bit đầu (1 octet), còn lại 24 bit cho host → mỗi mạng Class A chứa ~16 triệu host. Dành cho tổ chức cực lớn (ISP, chính phủ).",
+        "whyBreaks": "Nhầm 127.x.x.x là Class A → cấu hình sai. 127.0.0.0/8 là loopback (localhost), không phải Class A thông thường. Ngoài ra, cấp nguyên /8 cho 1 tổ chức = lãng phí IP → đây là lý do CIDR ra đời thay thế classful.",
+        "deploymentUse": "Ngày nay hiếm ai được cấp nguyên Class A. Tuy nhiên vẫn cần nhận biết: 10.0.0.0/8 (private Class A) rất phổ biến trong VPC AWS/GCP. Khi thấy IP 10.x.x.x, biết ngay đó là private range Class A."
+      },
+      {
+        "term": "IP Class B",
+        "value": "128.0.0.0 – 191.255.255.255 (octet đầu: 128–191)",
+        "why": "Nhận biết Class B: octet đầu từ 128–191. Network ID 16 bit đầu (2 octet), host 16 bit → mỗi mạng Class B chứa ~65,000 host. Dành cho tổ chức vừa (đại học, công ty lớn).",
+        "whyBreaks": "Nhầm 172.16.x.x – 172.31.x.x là public Class B → expose internal service ra internet. Dải 172.16.0.0/12 là private theo RFC 1918, không route trên internet. Kiểm tra kỹ trước khi mở firewall.",
+        "deploymentUse": "172.16.0.0/12 (private Class B) hay dùng cho VPN, office network. Docker default 172.17.0.0/16 cũng nằm trong range này → dễ conflict với office VPN. Khi thiết kế network, tránh overlap với các range phổ biến."
+      },
+      {
+        "term": "IP Class C",
+        "value": "192.0.0.0 – 223.255.255.255 (octet đầu: 192–223)",
+        "why": "Nhận biết Class C: octet đầu từ 192–223. Network ID 24 bit đầu (3 octet), host chỉ 8 bit → mỗi mạng Class C chứa 254 host. Dành cho tổ chức nhỏ, phổ biến nhất.",
+        "whyBreaks": "Nghĩ Class C = /24 luôn → không hiểu VLSM. Class C chỉ là range địa chỉ, có thể chia nhỏ hơn /24 (như /26, /28) hoặc gộp lớn hơn (/23, /22). Đừng nhầm lẫn classful với CIDR.",
+        "deploymentUse": "192.168.0.0/16 (private Class C) là range mặc định của router home/SMB. Khi dev test local, hay dùng 192.168.1.x. Trên cloud, tránh dùng 192.168.1.0/24 vì dễ conflict với home network khi VPN."
+      },
+      {
+        "term": "IP Class D & E",
+        "value": "D: 224–239 (multicast), E: 240–255 (reserved)",
+        "why": "Class D (224.0.0.0 – 239.255.255.255) dành cho multicast — gửi 1 packet tới nhiều host đăng ký nhận (video streaming, routing protocol OSPF). Class E (240.0.0.0 – 255.255.255.255) reserved cho nghiên cứu.",
+        "whyBreaks": "Gán IP Class D/E cho host → network không hoạt động. Đây là các địa chỉ đặc biệt, không dùng cho unicast thông thường. Nếu thấy IP 224.x.x.x trong config → sai hoàn toàn.",
+        "deploymentUse": "Multicast dùng trong nội bộ datacenter (VXLAN, PIM). Ít khi dev cần cấu hình trực tiếp. Biết để nhận diện khi debug tcpdump: thấy traffic tới 224.0.0.x là multicast protocol, không phải attack."
+      },
+      {
+        "term": "Private vs Public IP",
+        "value": "Private: nội bộ, không route internet. Public: toàn cầu, unique.",
+        "why": "Private IP (10/8, 172.16/12, 192.168/16) dùng trong LAN/VPC — ai cũng có thể dùng, không cần đăng ký. Public IP unique toàn cầu, phải thuê từ ISP/cloud. Máy private muốn ra internet phải qua NAT.",
+        "whyBreaks": "Expose private IP ra internet (firewall rule sai) → không ai ngoài LAN truy cập được vì private IP không route trên internet. Ngược lại, dùng public IP cho internal service → tốn tiền + security risk.",
+        "deploymentUse": "AWS/GCP: EC2/VM có private IP (10.x.x.x) + có thể gắn public IP (Elastic IP). Traffic giữa EC2 trong VPC dùng private IP (free, low latency). Traffic ra internet dùng public IP (có phí, qua NAT Gateway)."
+      },
+      {
+        "term": "NAT (Network Address Translation)",
+        "value": "Đổi IP nguồn từ private → public khi ra internet",
+        "why": "NAT cho phép nhiều máy private dùng chung 1 public IP để ra internet. Router/firewall thay đổi source IP trong packet header. Khi reply về, NAT đổi ngược destination IP để gửi đúng máy gốc.",
+        "whyBreaks": "Không hiểu NAT → không debug được 'tại sao server thấy IP khác với IP máy tôi'. Khi bạn curl từ laptop, server log ghi IP của NAT gateway (router nhà/công ty), không phải IP laptop. Kiểm tra bằng ipinfo.io.",
+        "deploymentUse": "AWS NAT Gateway cho private subnet ra internet. Giá ~$0.045/GB data processed. Kubernetes LoadBalancer dùng SNAT để pod reply đúng client. Docker port mapping (-p 80:3000) cũng là dạng NAT (DNAT)."
+      },
+      {
+        "term": "Network address",
+        "value": "Bit host toàn 0",
+        "why": "Như số nhà của cả tòa chung cư — đại diện cho toàn bộ subnet. Router dùng địa chỉ này để tìm đường đi. Không gán cho máy cụ thể.",
+        "whyBreaks": "Gán network address cho 1 host → ARP conflict, routing rối loạn. Tất cả packet gửi đến network address được coi là gửi cho 'cả subnet' theo nghĩa routing, không phải 1 máy cụ thể.",
+        "deploymentUse": "Khi tạo subnet trên AWS VPC hay Docker network, địa chỉ đầu tiên (.0) luôn là network address — không thể gán cho EC2 hay container. AWS còn giữ thêm 4 IP đầu và 1 IP cuối của mỗi subnet."
+      },
+      {
+        "term": "Broadcast address",
+        "value": "Bit host toàn 1",
+        "why": "Như loa phát thanh tòa nhà — gửi tin đến tất cả máy trong subnet cùng lúc. Dùng khi cần hỏi 'ai có MAC này?' (ARP) hoặc 'có DHCP server không?' (DHCP). Không gán cho máy cụ thể.",
+        "whyBreaks": "Broadcast storm: nếu nhiều máy gửi broadcast liên tục → mọi NIC trong subnet phải xử lý → CPU spike đồng loạt. Đây là lý do broadcast domain phải giới hạn, subnet nhỏ giúp khoanh vùng broadcast.",
+        "deploymentUse": "Hiểu broadcast giúp giải thích tại sao Docker/K8s mỗi pod/container cần subnet riêng nhỏ — giảm broadcast traffic. VPC cloud thường disable broadcast hoàn toàn, dùng unicast ARP thay thế."
+      },
+      {
+        "term": "Subnet mask",
+        "value": "Chuỗi bit 1 phần network, 0 phần host",
+        "why": "Như khuôn cắt — che phần network, lộ phần host. Máy dùng mask để biết: 'IP kia có cùng mạng với mình không?' Nếu cùng → gửi trực tiếp. Khác → phải đi qua gateway.",
+        "whyBreaks": "Sai subnet mask trên host → host nghĩ IP đích ở cùng LAN khi thực ra ở mạng khác (gửi ARP thay vì qua gateway) hoặc ngược lại → toàn bộ traffic drop. Đây là lỗi config hay gặp khi setup VPS thủ công.",
+        "deploymentUse": "Khi cấu hình static IP trên VPS: ip addr add 10.0.0.5/24 dev eth0. Số /24 sau là subnet mask. Sai số này = VPS không nói chuyện được với gateway = mất SSH ngay lập tức."
+      },
+      {
+        "term": "Wildcard mask",
+        "value": "Đảo bit của subnet mask",
+        "why": "Đảo ngược subnet mask: bit 0 thành 1, bit 1 thành 0. Thiết bị Cisco dùng wildcard thay vì subnet mask trong ACL và OSPF. VD: /24 mask là 255.255.255.0 → wildcard là 0.0.0.255.",
+        "whyBreaks": "Nhầm subnet mask và wildcard mask trong Cisco ACL → cho phép traffic sai hoặc block traffic đúng. Rất khó debug vì ACL apply tức thì và lỗi này không báo lỗi rõ ràng.",
+        "deploymentUse": "Ít gặp trong cloud modern (AWS/GCP dùng CIDR notation), nhưng vẫn gặp khi cấu hình VPN IPsec hoặc tích hợp với thiết bị Cisco của công ty."
+      },
+      {
+        "term": "CIDR /n",
+        "value": "n bit network ở đầu",
+        "why": "Cách viết gọn của subnet mask. /24 nghĩa là 24 bit đầu dành cho network, 8 bit còn lại cho host. Thay thế Class A/B/C cũ kỹ — cho phép chia mạng linh hoạt theo nhu cầu thực tế.",
+        "whyBreaks": "Không hiểu CIDR → không thể tự thiết kế VPC subnet, luôn phải nhờ người khác. Khi /n sai (ví dụ /25 thay vì /24) → mạng bị chia đôi mà không biết tại sao 2 máy không ping nhau.",
+        "deploymentUse": "Mọi cloud provider dùng CIDR: AWS VPC CIDR, GCP subnet, Azure VNet đều yêu cầu nhập CIDR notation. Cần chọn đúng /n để có đủ IP cho số lượng instance dự kiến, có buffer mở rộng sau."
+      },
+      {
+        "term": "Usable hosts",
+        "value": "2^(32−n) − 2",
+        "why": "Số máy thật sự gán được IP trong subnet. Phải trừ 2: địa chỉ đầu (network) và cuối (broadcast) không gán cho máy. VD: /24 có 256 địa chỉ, usable = 254.",
+        "whyBreaks": "Tính sai usable hosts → chọn subnet quá nhỏ → hết IP khi scale → phải re-IP toàn bộ hệ thống, cực kỳ tốn công. AWS còn trừ thêm 5 IP reserved mỗi subnet, cần tính vào kế hoạch.",
+        "deploymentUse": "Rule of thumb: chọn subnet có ít nhất 2x số host cần thiết hiện tại. Nếu cần 50 server, chọn /25 (126 usable) thay vì /26 (62 usable). Cloud re-subnetting rất đau — phòng từ đầu."
+      },
+      {
+        "term": "Private ranges",
+        "value": "10/8, 172.16/12, 192.168/16",
+        "why": "3 dải IP 'nội bộ' ai cũng được dùng — không cần đăng ký. Dùng trong công ty, nhà, Docker, VPC. Muốn ra internet phải qua NAT (đổi thành IP public).",
+        "whyBreaks": "Dùng private range trùng với VPN hoặc office network → IP conflict → VPN không kết nối được hoặc traffic bị route nhầm. Docker mặc định dùng 172.17/16 — hay conflict với office 172.16/12.",
+        "deploymentUse": "Khi tạo Docker network hoặc VPC, chọn private range ít dùng: 10.0.0.0/8 (16M địa chỉ) là range rộng nhất trong 3 private range của <a href=\"https://datatracker.ietf.org/doc/html/rfc1918#section-3\" target=\"_blank\">RFC 1918 §3</a>. Tránh 192.168.1.0/24 và 172.17.0.0/16 vì hay trùng với office/Docker mặc định."
+      },
+      {
+        "term": "VLSM",
+        "value": "Variable Length Subnet Masking",
+        "why": "Chia subnet không đều theo nhu cầu. VD: phòng 100 người cần /25 (126 IP), phòng 20 người chỉ cần /27 (30 IP). Tiết kiệm IP thay vì chia đều rồi phí.",
+        "whyBreaks": "Không dùng VLSM → phân bổ IP đồng đều → phí IP ở subnet nhu cầu thấp, thiếu IP ở subnet nhu cầu cao. Khi cloud tính phí theo IP allocation, phí IP không cần thiết là tiền thực.",
+        "deploymentUse": "Ví dụ thực tế AWS: Public subnet /24 (web servers, nhiều) + Private subnet /24 (app servers) + DB subnet /27 (chỉ 3-5 RDS). VLSM cho phép mỗi tier có đúng lượng IP cần thiết."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "Xác định số bit cần thêm",
+        "why": "/24 có 8 bit host. Muốn 4 subnet → cần 2 bit từ phần host chuyển sang network (2^2 = 4). Kết quả: /26.",
+        "code": "# Quy tắc: cần N subnet → lấy ceil(log2(N)) bit từ host\n# 4 subnet → 2 bit → /24 + 2 = /26",
+        "whyBreaks": "Tính sai số bit → chọn CIDR sai → hoặc quá ít subnet (không đủ phân chia phòng ban/tier) hoặc subnet quá nhỏ (không đủ IP cho host). Khi deploy cloud, subnetting sai ở bước này phải teardown toàn bộ VPC.",
+        "observeWith": "python3 -c \"import math; n=4; bits=math.ceil(math.log2(n)); print(f'Cần {bits} bit, CIDR mới: /24 + {bits} = /{24+bits}')\" — kiểm tra tính toán."
+      },
+      {
+        "step": 2,
+        "what": "Tính kích thước mỗi subnet /26",
+        "why": "/26 có 32−26 = 6 bit host → 2^6 = 64 địa chỉ/subnet → 62 usable host. Đủ cho ~60 host/phòng ban.",
+        "code": "# Block size = 256 / số subnet = 256 / 4 = 64\n# Hoặc: 2^(32 - CIDR) = 2^6 = 64",
+        "whyBreaks": "Nhầm 64 total addresses với 64 usable → planning thiếu 2 IP → subnet cuối cùng thiếu địa chỉ cho 1 host. Với AWS còn trừ thêm 5 IP reserved = /26 chỉ còn 57 usable thực tế.",
+        "observeWith": "python3 -c \"import ipaddress; n=ipaddress.ip_network('192.168.10.0/26'); print('Total:', n.num_addresses, '| Usable:', n.num_addresses-2, '| First:', next(n.hosts()), '| Last:', list(n.hosts())[-1])\" — xem đầy đủ thông tin subnet."
+      },
+      {
+        "step": 3,
+        "what": "Liệt kê 4 subnet",
+        "why": "Network bắt đầu từ bội số 64 (block size): 0, 64, 128, 192. Quy tắc này giúp nhẩm nhanh không cần giấy bút.",
+        "code": "Subnet 1: 192.168.10.0/26    (hosts .1 → .62,   broadcast .63)\nSubnet 2: 192.168.10.64/26   (hosts .65 → .126, broadcast .127)\nSubnet 3: 192.168.10.128/26  (hosts .129 → .190, broadcast .191)\nSubnet 4: 192.168.10.192/26  (hosts .193 → .254, broadcast .255)",
+        "whyBreaks": "Không nắm quy tắc 'boundary = bội của block size' → tính nhầm network/broadcast của từng subnet → gán IP conflict hoặc thiếu IP. Lỗi này chỉ phát hiện khi 2 máy không ping được nhau.",
+        "observeWith": "python3 -c \"import ipaddress; [print(str(s)) for s in ipaddress.ip_network('192.168.10.0/24').subnets(new_prefix=26)]\" — in ra 4 subnet /26 từ /24.",
+        "failModes": [
+          {
+            "symptom": "2 host trong cùng subnet không ping được nhau dù cùng LAN vật lý",
+            "evidence": "ip neigh show thấy cùng IP xuất hiện với 2 MAC khác nhau (ARP conflict): 192.168.10.65 dev eth0 lladdr aa:bb:cc:dd:ee:ff  và  192.168.10.65 dev eth0 lladdr 11:22:33:44:55:66 — duplicate IP"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Phát hiện IP conflict bằng arping — xem có 2 MAC reply không",
+            "command": "sudo arping -D -I eth0 192.168.10.65"
+          },
+          {
+            "step": "Xem ARP table để tìm duplicate",
+            "command": "ip neigh show | sort"
+          },
+          {
+            "step": "Đổi IP bị conflict sang IP chưa dùng trong subnet",
+            "command": "sudo ip addr del 192.168.10.65/26 dev eth0 && sudo ip addr add 192.168.10.70/26 dev eth0"
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "what": "Kiểm chứng bằng nhị phân",
+        "why": "2 bit thứ 25-26 là 'subnet ID'. 00/01/10/11 chính là 4 subnet. Khi phân vân /27 vs /28, nhìn bit này là thấy ngay.",
+        "code": "              bit 25-26↓\nS1: 192.168.10. 00 000000 = .0\nS2: 192.168.10. 01 000000 = .64\nS3: 192.168.10. 10 000000 = .128\nS4: 192.168.10. 11 000000 = .192",
+        "whyBreaks": "Bỏ qua kiểm tra nhị phân → khi gặp CIDR lạ (/19, /21) không tính được subnet boundary → phụ thuộc tool hoàn toàn → khi tool không có (VPS lúc sự cố) thì bị mù.",
+        "observeWith": "python3 -c \"ip='192.168.10.64'; print(' '.join([format(int(o),'08b') for o in ip.split('.')]))\" — xem representation nhị phân của bất kỳ IP nào."
+      },
+      {
+        "step": 5,
+        "what": "Subnet mask cho /26",
+        "why": "26 bit 1 + 6 bit 0 = 11111111.11111111.11111111.11000000 = 255.255.255.192. Số 192 đến từ 128+64 = 2 bit đầu của octet cuối.",
+        "code": "255.255.255.192\n# Quy tắc nhớ: octet cuối của mask cho các CIDR trong octet cuối:\n#   /25=128, /26=192, /27=224, /28=240, /29=248, /30=252",
+        "whyBreaks": "Nhập sai subnet mask khi config static IP trên server → host gửi traffic sai gateway → mất kết nối ngay. Đây là lỗi #1 khi admin cấu hình server thủ công mà không dùng DHCP.",
+        "observeWith": "python3 -c \"import ipaddress; n=ipaddress.ip_network('192.168.10.0/26'); print('Mask:', n.netmask, '| Wildcard:', n.hostmask)\" — xác nhận subnet mask và wildcard."
+      },
+      {
+        "step": 6,
+        "what": "Gán subnet cho phòng ban + gateway",
+        "why": "Quy ước: gateway thường là .1 của subnet. Đặt fix để dev/admin nhớ được. DHCP pool bắt đầu từ .2.",
+        "code": "Sales    : 192.168.10.0/26   GW 192.168.10.1\nEng      : 192.168.10.64/26  GW 192.168.10.65\nHR       : 192.168.10.128/26 GW 192.168.10.129\nGuest    : 192.168.10.192/26 GW 192.168.10.193",
+        "whyBreaks": "Gán gateway là IP ngoài subnet → host không ping được gateway → không ra được internet dù switch/cable OK. Ví dụ: subnet 192.168.10.64/26 mà gateway là 192.168.10.1 = gateway ở subnet khác.",
+        "observeWith": "ip route show — sau khi config, kiểm tra default route có via địa chỉ gateway đúng không. ping <gateway_ip> — nếu gateway ping được thì routing trong subnet OK."
+      },
+      {
+        "step": 7,
+        "what": "Verify bằng tool",
+        "why": "Tính tay xong phải cross-check. Sai 1 bit = cả subnet hỏng.",
+        "code": "# Dán vào ô input playground trên: 192.168.10.100/26\n# → sẽ thấy Network: 192.168.10.64, Broadcast: 192.168.10.127\n# Đúng: .100 thuộc subnet 2 (64-127)",
+        "whyBreaks": "Không verify → deploy với subnet sai → sự cố production. Verify tool cho kết quả ngay lập tức, không có lý do bỏ qua. Luôn cross-check bằng ít nhất 2 cách (manual + tool).",
+        "observeWith": "ipcalc 192.168.10.100/26 — nếu có cài (apt install ipcalc). Hoặc: python3 -c \"import ipaddress; h=ipaddress.ip_interface('192.168.10.100/26'); print('Network:', h.network, '| Host OK:', h.ip in h.network)\"",
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# subnet-info.sh — In thông tin subnet từ CIDR notation\n# Dùng: ./subnet-info.sh 192.168.10.100/26\n# Không cần cài ipcalc, chỉ cần python3 (có sẵn Ubuntu/Debian)\nCIDR=${1:?\"Usage: $0 <ip/prefix> — e.g. 192.168.10.100/26\"}\npython3 - <<EOF\nimport ipaddress, sys\ntry:\n    iface = ipaddress.ip_interface('$CIDR')\n    net   = iface.network\n    hosts = list(net.hosts())\n    print(f'Input    : $CIDR')\n    print(f'Network  : {net.network_address}/{net.prefixlen}')\n    print(f'Broadcast: {net.broadcast_address}')\n    print(f'Mask     : {net.netmask}')\n    print(f'Usable   : {len(hosts)}  ({hosts[0]} — {hosts[-1]})')\nexcept Exception as e:\n    print(f'Error: {e}'); sys.exit(1)\nEOF",
+          "note": "Dùng khi cần verify nhanh subnet trên server không có ipcalc. Chạy ad-hoc hoặc nhúng vào deploy script để validate CIDR input trước khi ip addr add."
+        }
+      }
+    ],
+    "misconceptions": null
+  },
+  "tcp-udp": {
+    "slug": "tcp-udp",
+    "title": "Tìm hiểu UDP/TCP",
+    "tldr": [
+      {
+        "what": "TCP — Transmission Control Protocol",
+        "why": "Dùng khi dữ liệu phải đến đủ và đúng thứ tự (web, SSH, DB). TCP đảm bảo bằng cách retransmit khi mất gói — không cần tự xử lý mất gói trong application code.",
+        "whyBreaks": "Dùng TCP cho game multiplayer real-time: retransmit gói cũ block gói mới → Head-of-Line blocking → lag spike không kiểm soát được, đặc biệt khi mạng có >1% packet loss.",
+        "deploymentUse": "Mọi service cần data integrity: HTTP/HTTPS (nginx), database (MySQL port 3306, Postgres 5432), SSH (port 22), file transfer. Nếu mất 1 byte là corrupt → dùng TCP."
+      },
+      {
+        "what": "UDP — User Datagram Protocol",
+        "why": "Dùng khi tốc độ quan trọng hơn độ chính xác (DNS, VoIP, game, streaming). Mỗi ms latency trong game = cảm giác lag rõ ràng — TCP overhead quá đắt.",
+        "whyBreaks": "Dùng UDP cho HTTP web thông thường mà không có reliability layer (như QUIC) → trang hiển thị thiếu/lỗi khi mạng kém, không có cơ chế retransmit tự động.",
+        "deploymentUse": "DNS (port 53), game server (Unity/Unreal thường UDP), video streaming (WebRTC), VoIP (SIP/RTP), monitoring (syslog UDP 514, SNMP UDP 161). Khi latency quan trọng hơn completeness."
+      },
+      {
+        "what": "3-way Handshake: SYN → SYN-ACK → ACK",
+        "why": "TCP cần xác nhận cả 2 chiều đều thông trước khi gửi data. Nếu bỏ qua bước này, 1 bên có thể gửi vào hư không khi mạng bất đối xứng.",
+        "whyBreaks": "SYN flood attack: attacker gửi hàng nghìn SYN giả, server tốn memory/CPU cho half-open connections đang chờ ACK → server không nhận được connection hợp lệ (DoS). Phòng: SYN cookies.",
+        "deploymentUse": "Khi debug connection slow: đo RTT của handshake bằng tcpdump timestamp. 3 RTT cho handshake + 1-2 RTT cho TLS → baseline latency trước khi data đi = lý do cần CDN/edge gần user."
+      },
+      {
+        "what": "Port 0–65535, well-known < 1024",
+        "why": "Port phân biệt nhiều service trên cùng 1 IP. Không có port, server không biết giao packet cho nginx hay ssh. Well-known cần root để bảo vệ khỏi giả mạo.",
+        "whyBreaks": "Bind service non-root trên port < 1024: Permission denied. Bind port đang dùng: Address already in use (TIME_WAIT chưa hết hoặc service chưa dừng hẳn). Cả hai là lỗi deploy phổ biến.",
+        "deploymentUse": "nginx production: chạy master process root để bind :80/:443, worker process drop xuống www-data. Node.js dev thường dùng :3000/:8080 (không cần root). Container: map host port 80 → container port 3000."
+      },
+      {
+        "what": "TCP header 20–60 byte vs UDP header 8 byte",
+        "why": "Overhead lớn = tốn bandwidth hơn. Với DNS (hàng tỷ query/giây), tiết kiệm 12 byte mỗi packet = tiết kiệm hàng GB/giây băng thông mạng toàn cầu.",
+        "whyBreaks": "Không liên quan trực tiếp đến lỗi — nhưng với IoT device gửi 100 byte payload, TCP header chiếm 20% overhead. Trên mạng cellular đắt tiền, UDP tiết kiệm chi phí bandwidth đáng kể.",
+        "deploymentUse": "Chọn giao thức IoT sensor: MQTT over TCP (reliable, overhead cao hơn) vs UDP custom protocol (minimal overhead). Khi battery và data plan quan trọng → UDP. Khi data phải đến đủ → TCP/MQTT."
+      },
+      {
+        "what": "HTTP/3 dùng UDP (QUIC)",
+        "why": "QUIC xây reliability ở tầng app trên UDP, tránh Head-of-Line blocking của TCP — khi mất 1 stream không chặn stream khác. Đây là lý do HTTP/3 nhanh hơn HTTP/2.",
+        "whyBreaks": "Corporate firewall block UDP outbound ngoài port 53/123 → HTTP/3 bị block → browser fallback sang HTTP/2 TCP → không gây lỗi visible nhưng performance tệ hơn kỳ vọng.",
+        "deploymentUse": "Cloudflare, nginx 1.25+, Caddy hỗ trợ HTTP/3. Bật bằng thêm Alt-Svc header. Cần mở port UDP 443 trên firewall/security group ngoài TCP 443. Verify bằng: curl --http3 https://yourdomain.com."
+      }
+    ],
+    "walkthrough": [
+      {
+        "step": 1,
+        "what": "Mở TCP listener với nc",
+        "why": "Hiểu port binding thực tế — nc tạo 1 process lắng nghe port 9000. Không có process listen thì TCP SYN nhận RST ngay (connection refused). Đây là nền tảng để debug 'connection refused'.",
+        "whyBreaks": "Nếu quên mở server trước khi connect → Connection refused ngay lập tức. Nếu port đang dùng bởi process khác → Address already in use. Cả 2 lỗi này chiếm >50% câu hỏi debug của junior dev.",
+        "observeWith": "ss -tlnp | grep 9000  # Xem process nào đang listen port 9000\nsudo tcpdump -i lo -n 'port 9000' -v  # Capture gói trên loopback khi connect",
+        "code": "# Terminal 1 — khởi động TCP server\nnc -l 9000\n\n# Terminal 2 — kết nối TCP client\nnc 127.0.0.1 9000\n# Gõ text bất kỳ → hiện ở Terminal 1\n# Ctrl+C để đóng"
+      },
+      {
+        "step": 2,
+        "what": "Capture 3-way handshake bằng tcpdump",
+        "why": "Nhìn tận mắt SYN/SYN-ACK/ACK là cách học nhanh nhất. Flag [S] = SYN, [S.] = SYN-ACK, [.] = ACK. Khi debug 'connection timeout', tcpdump cho biết SYN đi được không.",
+        "whyBreaks": "Nếu chỉ thấy SYN mà không thấy SYN-ACK → firewall hoặc server không listen. Nếu thấy SYN + RST → port đóng. Nếu không thấy gì → packet bị drop (firewall DROP). Phân biệt 3 pattern này là core network debug skill.",
+        "observeWith": "sudo tcpdump -i lo -n 'port 9000' -v  # Flag: [S]=SYN, [S.]=SYN-ACK, [.]=ACK, [R]=RST\n# Đọc output: client:port > server:port Flags [S], seq N",
+        "code": "# Terminal 1 — capture trên loopback\nsudo tcpdump -i lo -n 'port 9000' -v\n\n# Terminal 2 — tạo server\nnc -l 9000\n\n# Terminal 3 — connect để xem handshake\nnc 127.0.0.1 9000\n# tcpdump hiển thị: SYN → SYN-ACK → ACK"
+      },
+      {
+        "step": 3,
+        "what": "Thử UDP — không có handshake",
+        "why": "Thấy rõ sự khác biệt: UDP gửi thẳng không cần server sẵn sàng. Nếu server chưa lắng nghe, gói vẫn gửi đi — UDP không báo lỗi. Đây là lý do cần timeout ở tầng app khi dùng UDP.",
+        "whyBreaks": "Gửi UDP khi không có server listen → không báo lỗi ở phía gửi (khác TCP refused ngay). Kernel đích gửi ICMP Port Unreachable — nhưng nếu firewall block ICMP thì sender không biết gì. Debug UDP failure khó hơn TCP vì thiếu connection state.",
+        "observeWith": "sudo tcpdump -i lo -n 'port 9001' -v  # Xem UDP datagram không có handshake flags\nss -ulnp  # Kiểm tra UDP socket đang listen",
+        "code": "# Terminal 1 — UDP server\nnc -u -l 9000\n\n# Terminal 2 — UDP client (không handshake)\nnc -u 127.0.0.1 9000\n# Gõ text → hiện ở Terminal 1 ngay, không cần bắt tay trước\n\n# So sánh: gửi UDP khi không có server\nnc -u 127.0.0.1 9001  # port chưa mở\necho 'hello' | nc -u 127.0.0.1 9001  # gửi không báo lỗi",
+        "failModes": [
+          {
+            "symptom": "UDP client gửi data nhưng server không nhận — không có báo lỗi nào ở client",
+            "evidence": "sudo tcpdump -i lo -n 'port 9001' thấy UDP packet đi ra nhưng không có packet về. Server side không in gì. Không có error message ở client — đây là behavior by design của UDP best-effort"
+          },
+          {
+            "symptom": "UDP gửi không lỗi nhưng server log thiếu message",
+            "evidence": "Đếm số message gửi vs số nhận: client gửi 1000 gói, server log chỉ thấy 950 — 50 gói bị drop silently (packet loss 5%). Phát hiện bằng application-level sequence counter, UDP không tự báo"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Dùng tcpdump để xác nhận UDP packet có thực sự được gửi đi không",
+            "command": "sudo tcpdump -i lo -n 'udp port 9001' -c 5"
+          },
+          {
+            "step": "Nếu cần delivery guarantee với UDP, implement sequence number ở tầng app",
+            "command": "# Không có lệnh OS — đây là logic phải implement trong application code"
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "what": "So sánh TCP vs UDP với Wireshark / tcpdump",
+        "why": "Wireshark hiển thị đúng số RTT: TCP thấy 3 packet đầu là handshake trước khi data. UDP thấy data ngay packet đầu tiên. Đây là bằng chứng trực tiếp về trade-off latency.",
+        "whyBreaks": "Nếu chỉ capture một bên mà không thấy ACK → network asymmetric (gói một chiều bị block). Common khi debug cloud VM: inbound OK nhưng outbound bị chặn bởi security group → SYN đi nhưng không có SYN-ACK về.",
+        "observeWith": "sudo tcpdump -i lo -n 'port 9000 or port 9001'  # So sánh cùng lúc\n# TCP: thấy [S] [S.] [.] trước data | UDP: thấy data packet đầu tiên ngay",
+        "code": "# Capture cả TCP và UDP cùng lúc\nsudo tcpdump -i lo -n 'port 9000 or port 9001'\n\n# Mở 2 cặp server/client (TCP port 9000, UDP port 9001)\n# TCP: nc -l 9000  /  nc 127.0.0.1 9000\n# UDP: nc -u -l 9001  /  nc -u 127.0.0.1 9001\n\n# Quan sát: TCP bắt đầu bằng 3 dòng SYN/SYN-ACK/ACK\n# UDP bắt đầu thẳng bằng data packet"
+      },
+      {
+        "step": 5,
+        "what": "Kiểm tra port đang listen — phân biệt TCP/UDP",
+        "why": "ss/netstat phân biệt tcp vs udp trong output. Khi debug 'connection refused', bước đầu tiên là kiểm tra process nào đang listen port nào, bằng giao thức nào.",
+        "whyBreaks": "Service chạy trên UDP nhưng client connect TCP → refused ngay. Xảy ra khi cấu hình sai: DNS server (UDP 53) bị test bằng nc (TCP mặc định) → refused nhưng DNS vẫn hoạt động. Kiểm tra đúng protocol trước khi kết luận service down.",
+        "observeWith": "ss -tlunp  # t=TCP, u=UDP, l=listening, n=numeric, p=process\n# Output phân biệt rõ 'tcp' vs 'udp' ở cột đầu",
+        "code": "# Xem tất cả port đang listen (cả TCP lẫn UDP)\nss -tlunp\n\n# Xem riêng TCP\nss -tlnp | grep LISTEN\n\n# Xem riêng UDP\nss -ulnp\n\n# Xem process nào bind port cụ thể\nsudo ss -tlnp | grep ':80'"
+      },
+      {
+        "step": 6,
+        "what": "DNS query qua UDP — thấy tại sao không cần TCP",
+        "why": "DNS là ví dụ kinh điển nhất cho UDP: query và response fit vào 1 packet &lt;512 byte. Dùng dig với +tcp để so sánh latency — TCP thêm handshake overhead rõ ràng.",
+        "whyBreaks": "Firewall block UDP 53 outbound → mọi DNS query timeout → toàn bộ service phụ thuộc domain resolution đều fail. Dấu hiệu: ping IP OK nhưng ping hostname timeout. Verify: dig @8.8.8.8 google.com nếu không trả lời → firewall block UDP 53.",
+        "observeWith": "sudo tcpdump -i any -n 'port 53'  # Capture DNS: xem UDP vs TCP handshake\ndig google.com  # Default UDP\ndig +tcp google.com  # Force TCP — đếm số packet thêm",
+        "code": "# DNS query mặc định dùng UDP\ndig google.com\n\n# Force DNS qua TCP để so sánh\ndig +tcp google.com\n\n# Capture DNS query (UDP port 53)\nsudo tcpdump -i any -n 'port 53' &\ndig google.com\nsudo pkill tcpdump\n# Thấy: 1 query packet + 1 response packet (UDP, không có handshake)"
+      },
+      {
+        "step": 7,
+        "what": "TCP FIN handshake — đóng kết nối đúng cách",
+        "why": "TCP không chỉ bắt tay khi mở mà còn khi đóng: FIN → FIN-ACK → ACK. Hiểu TIME_WAIT giúp debug 'Address already in use' khi restart server — kernel chờ hết TIME_WAIT (60s).",
+        "whyBreaks": "Restart service ngay sau khi dừng → 'Address already in use' vì port vẫn ở TIME_WAIT. Fix: SO_REUSEADDR (hầu hết production server đã set). Nếu thấy quá nhiều TIME_WAIT → có thể connection không được reuse (thiếu keepalive/connection pool).",
+        "observeWith": "ss -tn state time-wait  # Xem connection đang ở TIME_WAIT\nwatch -n1 'ss -tn | grep TIME-WAIT | wc -l'  # Đếm real-time khi open/close connection",
+        "code": "# Xem TCP states khi kết nối đóng\nss -tn\n\n# Xem TIME_WAIT (xuất hiện ngay sau khi đóng kết nối)\nss -tn | grep TIME-WAIT\n\n# Fix 'Address already in use' khi dev: SO_REUSEADDR\n# (nginx, node.js đều set flag này mặc định)",
+        "failModes": [
+          {
+            "symptom": "Server không nhận được connection mới dù đang chạy — client báo 'cannot assign requested address'",
+            "evidence": "ss -tn | grep TIME-WAIT | wc -l trả về hàng chục nghìn (>28000 trên default ephemeral range 32768-60999). Client kernel không tìm được port ephemeral trống để mở connection mới"
+          },
+          {
+            "symptom": "Restart nginx/node ngay sau khi stop → 'bind: Address already in use'",
+            "evidence": "ss -tn | grep ':80.*TIME-WAIT' hoặc ss -tlnp | grep ':80' không thấy LISTEN nhưng port vẫn bị chiếm. Kernel giữ socket ở TIME_WAIT ~60s (2×MSL, RFC 793)"
+          }
+        ],
+        "fixSteps": [
+          {
+            "step": "Kiểm tra số lượng TIME_WAIT hiện tại",
+            "command": "ss -tn state time-wait | wc -l"
+          },
+          {
+            "step": "Xem range ephemeral port của kernel",
+            "command": "cat /proc/sys/net/ipv4/ip_local_port_range"
+          },
+          {
+            "step": "Tăng ephemeral port range để có nhiều port hơn (tạm thời, cần tune keepalive/pool là giải pháp thực sự)",
+            "command": "sudo sysctl -w net.ipv4.ip_local_port_range='1024 65535'"
+          },
+          {
+            "step": "Bật tcp_tw_reuse để tái dùng TIME_WAIT socket cho outbound connection (an toàn khi enable timestamps)",
+            "command": "sudo sysctl -w net.ipv4.tcp_tw_reuse=1"
+          }
+        ],
+        "automateScript": {
+          "lang": "bash",
+          "code": "#!/bin/bash\n# watch-tcp-states.sh — Monitor TCP state counts theo thời gian thực\n# Dùng khi debug TIME_WAIT exhaustion hoặc theo dõi connection leak\nINTERVAL=${1:-2}\necho \"Monitoring TCP states every ${INTERVAL}s (Ctrl+C để dừng)\"\necho \"---\"\nwhile true; do\n  echo \"$(date '+%H:%M:%S')  $(ss -tn | awk 'NR>1{print $1}' | sort | uniq -c | sort -rn | tr '\\n' '  ')\"\n  sleep \"$INTERVAL\"\ndone",
+          "note": "Chạy trên production server khi nghi ngờ TIME_WAIT exhaustion hoặc connection pool leak. Output: timestamp + count từng TCP state (ESTAB, TIME-WAIT, CLOSE-WAIT...). Interval mặc định 2s, truyền tham số để thay đổi: ./watch-tcp-states.sh 5"
+        }
+      }
+    ],
+    "misconceptions": null
+  }
+}
