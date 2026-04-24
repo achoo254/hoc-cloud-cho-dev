@@ -180,6 +180,62 @@ function TldrSection({ items }: { items: TldrItem[] }) {
   )
 }
 
+// ── SEE: Walkthrough extras (failModes / fixSteps) ────────────────────────────
+// Schema cho phép item là string HOẶC object { symptom/step, evidence/command }.
+
+type FailMode = NonNullable<WalkthroughStep['failModes']>[number]
+type FixStep = NonNullable<WalkthroughStep['fixSteps']>[number]
+
+function FailModesList({ items }: { items: FailMode[] }) {
+  return (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-destructive">Fail modes</p>
+      <ul className="space-y-2">
+        {items.map((item, i) => {
+          if (typeof item === 'string') {
+            return (
+              <li key={i} className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: item }} />
+            )
+          }
+          return (
+            <li key={i} className="text-sm space-y-1">
+              <p className="text-foreground" dangerouslySetInnerHTML={{ __html: item.symptom }} />
+              {item.evidence && (
+                <p className="text-xs text-muted-foreground font-mono [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5" dangerouslySetInnerHTML={{ __html: item.evidence }} />
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function FixStepsList({ items }: { items: FixStep[] }) {
+  return (
+    <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">Fix steps</p>
+      <ol className="space-y-2 list-decimal list-inside">
+        {items.map((item, i) => {
+          if (typeof item === 'string') {
+            return (
+              <li key={i} className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: item }} />
+            )
+          }
+          return (
+            <li key={i} className="text-sm text-muted-foreground space-y-1">
+              <span dangerouslySetInnerHTML={{ __html: item.step }} />
+              {item.command && (
+                <CodeBlock code={item.command} lang="bash" />
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 // ── SEE: Walkthrough section ──────────────────────────────────────────────────
 
 function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
@@ -201,6 +257,12 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
             <div className="flex-1 space-y-2 min-w-0">
               <p className="font-medium text-sm" dangerouslySetInnerHTML={{ __html: step.what }} />
               <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: step.why }} />
+              {step.whyBreaks && (
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-destructive">Breaks when: </span>
+                  <span dangerouslySetInnerHTML={{ __html: step.whyBreaks }} />
+                </p>
+              )}
               {step.code && (
                 <CodeBlock code={step.code} lang="bash" />
               )}
@@ -208,6 +270,12 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
                 <p className="text-xs text-muted-foreground italic">
                   Observe with: <span dangerouslySetInnerHTML={{ __html: step.observeWith }} />
                 </p>
+              )}
+              {Array.isArray(step.failModes) && step.failModes.length > 0 && (
+                <FailModesList items={step.failModes} />
+              )}
+              {Array.isArray(step.fixSteps) && step.fixSteps.length > 0 && (
+                <FixStepsList items={step.fixSteps} />
               )}
             </div>
           </li>

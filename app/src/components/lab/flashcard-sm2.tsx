@@ -138,7 +138,10 @@ export function FlashcardSM2({ cards, labSlug, className, onAllMastered }: Flash
             style={reduce ? undefined : { backfaceVisibility: 'hidden' }}
           >
             <p className="text-sm text-muted-foreground mb-2 uppercase tracking-wide">Front</p>
-            <p className="font-medium text-base leading-relaxed">{card.front}</p>
+            <p
+              className="font-medium text-base leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: card.front }}
+            />
             <p className="mt-3 text-xs text-muted-foreground">Click to flip</p>
           </div>
 
@@ -153,9 +156,15 @@ export function FlashcardSM2({ cards, labSlug, className, onAllMastered }: Flash
             style={reduce ? undefined : { backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
             <p className="text-sm text-muted-foreground mb-2 uppercase tracking-wide">Answer</p>
-            <p className="font-medium text-base leading-relaxed">{card.back}</p>
+            <p
+              className="font-medium text-base leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: card.back }}
+            />
             {card.why && (
-              <p className="mt-2 text-xs text-muted-foreground italic">{card.why}</p>
+              <p
+                className="mt-2 text-xs text-muted-foreground italic"
+                dangerouslySetInnerHTML={{ __html: card.why }}
+              />
             )}
           </div>
         </motion.div>
