@@ -59,6 +59,26 @@
   }
 }
 
+/* Lab inline links — applied to <a href> rendered inside lab content
+   (dangerouslySetInnerHTML from author-controlled `why` / `whyBreaks` / etc).
+   target="_blank" + rel được LabRenderer gắn runtime qua MutationObserver. */
+.lab-article a[href] {
+  color: hsl(217 91% 50%);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+.lab-article a[href]:hover {
+  color: hsl(217 91% 40%);
+}
+.dark .lab-article a[href] {
+  color: hsl(213 94% 68%);
+}
+.dark .lab-article a[href]:hover {
+  color: hsl(213 94% 78%);
+}
+
 /* Search result highlight — applied by useQueryHighlight hook when URL has ?q= */
 mark.query-highlight {
   background-color: rgb(254 240 138 / 0.7); /* yellow-200/70 */

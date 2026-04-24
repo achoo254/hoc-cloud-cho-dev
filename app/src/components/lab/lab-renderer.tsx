@@ -302,6 +302,32 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Gắn target="_blank" + rel an toàn cho MỌI <a href> nằm trong lab content
+  // (kể cả HTML render bằng dangerouslySetInnerHTML từ `why` / `whyBreaks` /
+  // playground concept-cards). MutationObserver bắt cả node mount sau
+  // (lazy playgrounds, tab chuyển, quiz reveal…).
+  const articleRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const root = articleRef.current
+    if (!root) return
+    const patchLinks = (scope: ParentNode) => {
+      scope.querySelectorAll('a[href]').forEach((a) => {
+        if (a.getAttribute('target') !== '_blank') a.setAttribute('target', '_blank')
+        if (!a.getAttribute('rel')) a.setAttribute('rel', 'noopener noreferrer')
+      })
+    }
+    patchLinks(root)
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) patchLinks(node as Element)
+        })
+      }
+    })
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [lab.slug])
+
   function handleQuizScore(score: number) {
     // Only forward fields with real values — prevents races with flashcard
     // mastery from nulling out completed_at on partial scores.
@@ -339,7 +365,7 @@ export function LabRenderer({ lab, className }: LabRendererProps) {
   )
 
   return (
-    <article className={cn('max-w-3xl mx-auto space-y-8 py-6 px-4', className)}>
+    <article ref={articleRef} className={cn('lab-article max-w-3xl mx-auto space-y-8 py-6 px-4', className)}>
       {/* Header */}
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">

@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { LayerStackEncap } from './layer-stack-encap'
-import { PacketJourney } from './packet-journey'
+import { OsiTcpipComparison } from './osi-tcpip-comparison'
 import { NetworkTopology, EXAMPLE_DEVOPS_FLOW } from './network-topology'
 import { MisconceptionsSection } from '../misconceptions-section'
 import type { DiagramComponentProps } from './registry'
@@ -77,7 +77,7 @@ export function TcpIpJourneyPlayground({ lab, seeExtraContent, tryItContent }: D
           data-tab-value="see"
           className="mt-4 space-y-8"
         >
-          <PacketJourney />
+          <OsiTcpipComparison />
 
           {/* Network Topology với D3.js */}
           <div className="pt-6 border-t border-border">
