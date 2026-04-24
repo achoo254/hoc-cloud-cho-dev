@@ -170,6 +170,10 @@ export function ThreeColumnMapping({ className }: Props) {
         .text(t.name)
     })
 
+    // Connectors layer (dynamic) — append BEFORE proto-layer để chips render
+    // trên connectors (tránh dashed line che chip).
+    svg.append('g').attr('class', 'connectors-layer')
+
     // Col 2: protocol chip groups (hidden)
     const protoL = svg.append('g').attr('class', 'proto-layer')
     PROTOCOL_GROUPS.forEach((protos, gIdx) => {
@@ -229,8 +233,6 @@ export function ThreeColumnMapping({ className }: Props) {
       })
     })
 
-    // Connectors layer (dynamic)
-    svg.append('g').attr('class', 'connectors-layer')
   }, [tcpipBlocks])
 
   const clearTimers = useCallback(() => {
