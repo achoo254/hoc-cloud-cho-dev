@@ -18,6 +18,7 @@ function toLabContent(doc) {
     quiz: doc.quiz ?? [],
     flashcards: doc.flashcards ?? [],
     try_at_home: doc.tryAtHome ?? [],
+    misconceptions: doc.misconceptions ?? [],
     diagram: doc.diagram ?? undefined,
   };
 }

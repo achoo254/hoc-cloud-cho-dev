@@ -109,6 +109,17 @@ export const TryAtHomeSchema = z
   })
   .passthrough()
 
+// ── Misconceptions (THINK depth upgrade) ──────────────────────────────────────
+// All 8 labs backfilled 2026-04-24: now required with min 2 items per lab.
+
+export const MisconceptionSchema = z
+  .object({
+    wrong: z.string(),
+    right: z.string(),
+    why: z.string(),
+  })
+  .passthrough()
+
 // ── Full lab fixture ──────────────────────────────────────────────────────────
 
 export const LabFixtureSchema = z.object({
@@ -126,6 +137,9 @@ export const LabFixtureSchema = z.object({
   flashcards: z.array(FlashcardSchema).min(1),
   try_at_home: z.array(TryAtHomeSchema).min(1),
 
+  // THINK depth upgrade — required ≥2 items (all 8 labs backfilled 2026-04-24)
+  misconceptions: z.array(MisconceptionSchema).min(2),
+
   // Optional interactive playground config (Phase 01)
   diagram: DiagramSchema.optional(),
 })
@@ -138,6 +152,7 @@ export const LabSchemas = {
   QuizItemSchema,
   FlashcardSchema,
   TryAtHomeSchema,
+  MisconceptionSchema,
   LabFixtureSchema,
 }
 
@@ -148,5 +163,6 @@ export type WalkthroughStep = z.infer<typeof WalkthroughStepSchema>
 export type QuizItem = z.infer<typeof QuizItemSchema>
 export type Flashcard = z.infer<typeof FlashcardSchema>
 export type TryAtHome = z.infer<typeof TryAtHomeSchema>
+export type Misconception = z.infer<typeof MisconceptionSchema>
 /** Full parsed lab fixture — use as prop type for <LabRenderer>. */
 export type LabContent = z.infer<typeof LabFixtureSchema>
