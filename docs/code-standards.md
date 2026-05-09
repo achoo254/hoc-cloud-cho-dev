@@ -55,6 +55,22 @@ Forbidden profiles: `script`, `foreignObject` tags and inline event attributes (
 
 Wrap all lazy-loaded diagram components in `PlaygroundErrorBoundary` with a text fallback. Never let playground errors break the full lab renderer.
 
+## Client-side Binary Parsers
+
+For pure client-side binary parsing (e.g., PCAP files), use `DataView` + `TextDecoder` — no native modules, no server round-trips.
+
+Rules:
+- Max file size enforced before parsing (e.g., 5 MB) — reject early with a user-visible toast.
+- Max packet/record count cap (e.g., 200) — truncate silently with a count label.
+- Parser modules must be standalone (no D3, no Framer Motion dependencies).
+- File size limit: 200 LOC applies per module — split parser and UI into separate files.
+
+## Media Query Hook
+
+Use `useMediaQuery` / `useIsDesktop` from `src/lib/hooks/use-media-query.ts` for JS-driven responsive logic (e.g., conditionally rendering heavy components). Do **not** instantiate `window.matchMedia` directly in components.
+
+CSS-only switches (`hidden md:block`) remain preferred for simple show/hide. Use the hook only when render logic (not just visibility) depends on breakpoint.
+
 ## Content Schema
 
 Lab content is validated against Zod schema in `src/lib/schema-lab.ts` (v3). The `diagram.type === 'custom'` + `diagram.component` field drives playground routing via `diagramRegistry`.
