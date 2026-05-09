@@ -10,6 +10,8 @@ import { HttpConceptCards } from './http-concept-cards'
 import { HttpVisualizer } from './http-visualizer'
 import { PlaygroundShell } from './shared'
 import { MisconceptionsSection } from '../misconceptions-section'
+import { PacketDecoder } from './shared/packet-decoder'
+import { httpCapture } from './shared/sample-captures/http-capture'
 import type { DiagramComponentProps } from './registry'
 
 export function HttpPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -28,6 +30,10 @@ export function HttpPlayground({ lab, seeExtraContent, tryItContent }: DiagramCo
           <section>
             <h3 className="text-lg font-semibold mb-4">HTTP Protocol Animation</h3>
             <HttpVisualizer />
+          </section>
+          <section>
+            <h3 className="text-lg font-semibold mb-4">tcpdump capture — HTTP request/response</h3>
+            <PacketDecoder defaultPackets={httpCapture} title="HTTP over TCP (sample capture)" />
           </section>
         </div>
       }
