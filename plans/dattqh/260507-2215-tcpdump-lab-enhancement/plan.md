@@ -2,7 +2,7 @@
 type: implementation-plan
 slug: tcpdump-lab-enhancement
 date: 2026-05-07
-status: pending
+status: completed
 priority: medium
 estimated_hours: 10
 related_brainstorm: ../reports/brainstorm-260507-2215-tcpdump-lab-enhancement.md
@@ -25,14 +25,14 @@ Brainstorm report: `../reports/brainstorm-260507-2215-tcpdump-lab-enhancement.md
 
 | # | Phase | File | Est | Status |
 |---|-------|------|-----|--------|
-| 1 | PCAP parser (vanilla, client-side) | [phase-01-pcap-parser.md](phase-01-pcap-parser.md) | 1.5h | pending |
-| 2 | Sample captures (icmp-ping + http) | [phase-02-sample-captures.md](phase-02-sample-captures.md) | 1h | pending |
-| 3 | Packet decoder UI (3-panel desktop) | [phase-03-packet-decoder-ui.md](phase-03-packet-decoder-ui.md) | 3h | pending |
-| 4 | Upload .pcap UI + integrate | [phase-04-upload-pcap.md](phase-04-upload-pcap.md) | 1.5h | pending |
-| 5 | Mobile responsive | [phase-05-mobile-responsive.md](phase-05-mobile-responsive.md) | 1h | pending |
-| 6 | Integrate vào 2 playground | [phase-06-integrate-playgrounds.md](phase-06-integrate-playgrounds.md) | 0.5h | pending |
-| 7 | MongoDB content update script | [phase-07-mongo-content-update.md](phase-07-mongo-content-update.md) | 1h | pending |
-| 8 | Smoke test + typecheck + build | [phase-08-smoke-test.md](phase-08-smoke-test.md) | 0.5h | pending |
+| 1 | PCAP parser (vanilla, client-side) | [phase-01-pcap-parser.md](phase-01-pcap-parser.md) | 1.5h | completed |
+| 2 | Sample captures (icmp-ping + http) | [phase-02-sample-captures.md](phase-02-sample-captures.md) | 1h | completed |
+| 3 | Packet decoder UI (3-panel desktop) | [phase-03-packet-decoder-ui.md](phase-03-packet-decoder-ui.md) | 3h | completed |
+| 4 | Upload .pcap UI + integrate | [phase-04-upload-pcap.md](phase-04-upload-pcap.md) | 1.5h | completed |
+| 5 | Mobile responsive | [phase-05-mobile-responsive.md](phase-05-mobile-responsive.md) | 1h | completed |
+| 6 | Integrate vào 2 playground | [phase-06-integrate-playgrounds.md](phase-06-integrate-playgrounds.md) | 0.5h | completed |
+| 7 | MongoDB content update script | [phase-07-mongo-content-update.md](phase-07-mongo-content-update.md) | 1h | completed |
+| 8 | Smoke test + typecheck + build | [phase-08-smoke-test.md](phase-08-smoke-test.md) | 0.5h | completed-partial |
 
 **Total: ~10h**
 
@@ -56,3 +56,18 @@ PCAPNG, IPv6, TLS decryption, lab tcpdump độc lập, server-side capture gene
 ## Risks
 
 Xem section 7 brainstorm report.
+
+## Completion Notes (2026-05-09)
+
+**Done (code + typecheck + build xanh):**
+- Phase 1-6: PCAP parser, sample captures, PacketDecoder 3-panel UI, drag-drop upload, mobile responsive, tích hợp vào icmp-ping-playground + http-playground.
+- Code review score 7.5/10 — 3 critical/major findings đã fix (inclLen guard, onDragEnter, TextDecoder replace).
+- `pnpm --dir app run typecheck` PASS, `pnpm --dir app run build` PASS (52.43 kB http-playground bundle).
+- Phase 7: script viết xong, syntax-check PASS, chưa chạy trên Mongo thật.
+
+**User cần làm tiếp:**
+1. Chạy `node server/scripts/update-lab-tcpdump.js` để write content vào MongoDB (idempotent, an toàn chạy lại).
+2. Mở browser, vào lab icmp-ping + http, kiểm tra SEE section render PacketDecoder đúng.
+3. Thử upload file `.pcap` thật từ Linux → kiểm tra render OK; file không hợp lệ → toast lỗi, không crash.
+4. Verify mobile (resize < 768px) — hex view collapse, không overflow ngang.
+5. Search "tcpdump" trên Meilisearch → kỳ vọng trả 2 lab.

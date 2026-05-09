@@ -1,6 +1,6 @@
 ---
 phase: 3
-status: pending
+status: completed
 priority: high
 estimated_hours: 3
 depends_on: [1, 2]

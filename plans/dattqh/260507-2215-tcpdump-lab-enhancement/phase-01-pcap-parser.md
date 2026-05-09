@@ -1,6 +1,6 @@
 ---
 phase: 1
-status: pending
+status: completed
 priority: high
 estimated_hours: 1.5
 ---
