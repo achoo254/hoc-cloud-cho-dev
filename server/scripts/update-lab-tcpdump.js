@@ -3,12 +3,11 @@
  * Runner: bổ sung tcpdump content vào lab icmp-ping và http trong MongoDB.
  *
  * Usage:
- *   MONGODB_URI=mongodb://... node server/scripts/update-lab-tcpdump.js
+ *   node --env-file=.env.development server/scripts/update-lab-tcpdump.js
  *
  * Idempotent: skip lab nếu đã có entry tryAtHome bắt đầu bằng 'tcpdump'.
  */
 
-import 'dotenv/config';
 import crypto from 'crypto';
 import { connectMongo, disconnectMongo } from '../db/mongo-client.js';
 import { Lab } from '../db/models/index.js';
