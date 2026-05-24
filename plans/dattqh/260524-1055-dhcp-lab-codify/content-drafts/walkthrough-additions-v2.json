@@ -1,0 +1,30 @@
+[
+  {
+    "step": 10,
+    "what": "ARP Probe vs Gratuitous ARP + DHCPDECLINE → APIPA fallback",
+    "why": "Bên cạnh ping-check của server (step 8), client cũng có cơ chế tự bảo vệ — ARP Probe (<a href=\"https://datatracker.ietf.org/doc/html/rfc5227\">RFC 5227</a>): trước khi gán IP, gửi ARP Request với <code>Sender IP = 0.0.0.0</code> để hỏi 'có ai đang dùng IP này không?'. Nếu có reply → từ chối gán + gửi DHCPDECLINE → server abandon IP đó. Sau DECLINE, dhcpcd fallback sang APIPA <code>169.254.0.0/16</code> (<a href=\"https://datatracker.ietf.org/doc/html/rfc3927\">RFC 3927</a> link-local). Phân biệt rõ với Gratuitous ARP (<code>Sender IP = Target IP</code>) — cùng opcode 1 nhưng mục đích ngược nhau.",
+    "whyBreaks": "systemd-networkd **KHÔNG gửi DHCPDECLINE** khi DAD phát hiện conflict — nó vẫn 'ngoan ngoãn' gán IP, tạo conflict thật sự. Chỉ `dhcpcd` (và một số client khác) gửi DECLINE đúng RFC. Đây là lý do Case B với systemd-networkd thấy ARP flap mà KHÔNG có DECLINE trong tcpdump — student dễ tưởng 'lab fail', thực ra client behavior khác nhau.",
+    "code": "# === ARP Probe — Client tự kiểm tra IP trước khi gán ===\n# Trên Client2, đặt manual IP chưa cấp (vd 192.168.100.105)\nsudo ip addr add 192.168.100.105/24 dev ens33\n\n# Trên server, tcpdump bắt ARP\nsudo tcpdump -i ens33 arp -n\n# Mong đợi packet:\n#   ARP, Request who-has 192.168.100.105 tell 0.0.0.0  ← ARP Probe!\n# Sender IP = 0.0.0.0 đặc trưng RFC 5227 — KHÔNG ô nhiễm ARP cache\n\n# === Gratuitous ARP — Tuyên bố IP ===\n# Trên Server, giả lập claim .106 (đã cấp cho Client1)\nsudo arping -I ens37 -c 5 -s 192.168.100.106 192.168.100.106\n# Tcpdump thấy:\n#   ARP, Request who-has 192.168.100.106 tell 192.168.100.106  ← Gratuitous\n# Sender IP = Target IP — cập nhật ARP cache mọi máy: .106 → MAC mới\n\n# === DHCPDECLINE → APIPA (chỉ dhcpcd) ===\n# Setup: Client2 đã static .100, server cấp .100 cho Client1\nsudo systemctl stop systemd-networkd systemd-networkd.socket\nsudo rm -f /run/systemd/netif/leases/*\nsudo ip addr flush dev ens33\nsudo ip link set ens33 down && sleep 1 && sudo ip link set ens33 up && sleep 1\nsudo dhcpcd -1 -t 20 ens33\n\n# Stdout dhcpcd:\n#   ens33: offered 192.168.100.100\n#   ens33: probing address 192.168.100.100\n#   ens33: DAD detected 00:0c:29:4c:8b:da using 192.168.100.100\n#   ens33: 192.168.100.100 declined\n#   ens33: probing for an IPv4LL address\n#   ens33: leased 169.254.X.Y for infinity   ← APIPA fallback\n\n# Server log:\n#   DHCPDECLINE of 192.168.100.100 from <MAC C1>: abandoned",
+    "observeWith": "Filter Wireshark hữu ích: `arp.opcode == 1 && arp.src.proto_ipv4 == 0.0.0.0` (chỉ ARP Probe), `arp.src.proto_ipv4 == arp.dst.proto_ipv4` (chỉ Gratuitous). DHCPDECLINE: filter `bootp.option.dhcp == 4`. APIPA address visible qua `ip addr show ens33` thấy IP trong dải `169.254.x.x` — không có default route.",
+    "failModes": [
+      {
+        "symptom": "Không thấy DHCPDECLINE trong pcap dù conflict đã tồn tại",
+        "evidence": "Client đang dùng systemd-networkd hoặc NetworkManager mặc định — không enforce DAD strict. Chỉ dhcpcd / một số DHCP client gửi DECLINE đúng RFC. Verify: `which dhcpcd && dhcpcd --version`."
+      },
+      {
+        "symptom": "dhcpcd báo 'no working IPv4LL' không fallback APIPA",
+        "evidence": "Firewall block 169.254/16 hoặc kernel module ipv4ll chưa load. Check: `sysctl net.ipv4.ip_local_port_range` + `lsmod | grep ipv4ll`."
+      }
+    ],
+    "fixSteps": [
+      {
+        "step": "Cài dhcpcd nếu thiếu",
+        "command": "sudo apt install -y dhcpcd-base"
+      },
+      {
+        "step": "Production fix: bật DAD strict ở mọi DHCP client + DHCP snooping ở switch",
+        "command": "echo 'net.ipv4.conf.all.arp_ignore=1\\nnet.ipv4.conf.all.arp_announce=2\\nnet.ipv4.conf.all.arp_accept=0' | sudo tee /etc/sysctl.d/99-dad-strict.conf && sudo sysctl --system"
+      }
+    ]
+  }
+]

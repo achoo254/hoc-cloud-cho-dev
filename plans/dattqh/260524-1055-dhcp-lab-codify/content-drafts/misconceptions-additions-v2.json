@@ -1,0 +1,17 @@
+[
+  {
+    "wrong": "ARP Probe và Gratuitous ARP là cùng một thứ — cùng opcode 1, cùng broadcast",
+    "right": "Cùng là ARP Request (opcode 1) broadcast NHƯNG khác hoàn toàn ở **Sender IP**: ARP Probe (<a href=\"https://datatracker.ietf.org/doc/html/rfc5227\">RFC 5227</a>) có `Sender IP = 0.0.0.0` (hỏi 'IP X có ai dùng không?' trước khi gán, không ô nhiễm ARP cache người khác); Gratuitous ARP có `Sender IP = Target IP` (tuyên bố 'IP X là của tôi' để update ARP cache mọi máy). Mục đích ngược nhau hoàn toàn.",
+    "why": "Phân biệt sai dẫn đến đọc Wireshark sai: thấy `who-has 192.168.X tell 0.0.0.0` mà tưởng là attack (vì Sender IP zero trông lạ), thực ra là client behavior chuẩn RFC. Hoặc thấy `who-has X tell X` lại tưởng là Probe → kết luận sai về cơ chế phát hiện conflict. Filter Wireshark phân biệt: `arp.src.proto_ipv4 == 0.0.0.0` (Probe) vs `arp.src.proto_ipv4 == arp.dst.proto_ipv4` (Gratuitous)."
+  },
+  {
+    "wrong": "Mọi DHCP client implementation đều gửi DHCPDECLINE khi phát hiện IP conflict",
+    "right": "Chỉ `dhcpcd` và một số client khác (`udhcpc -t`) gửi DECLINE đúng <a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.4.1\">RFC 2131 §4.4.1</a>. `systemd-networkd` mặc định **KHÔNG** gửi DECLINE — khi DAD phát hiện conflict, nó vẫn 'ngoan ngoãn' gán IP, tạo conflict thật sự trên LAN. NetworkManager hành xử tuỳ phiên bản. Hậu quả: Case B test với systemd-networkd không thấy DECLINE trong tcpdump, có thể tưởng lab fail.",
+    "why": "Test Case B với client mặc định systemd-networkd → không có DECLINE → student tưởng cơ chế 'tự bảo vệ phía client' không tồn tại. Thực ra cơ chế ĐÚNG có (DAD đã chạy, ARP probe gửi rồi), nhưng client KHÔNG dùng kết quả để send DECLINE. Muốn demo full chain ARP Probe → DAD → DECLINE → APIPA fallback phải explicit dùng `dhcpcd -1 ens33`. Đây là khác biệt implementation lớn giữa các Linux distros."
+  },
+  {
+    "wrong": "Khi thấy IP 169.254.x.x trên interface là lỗi mạng, phải block dải này",
+    "right": "169.254.0.0/16 là dải link-local chuẩn IANA (<a href=\"https://datatracker.ietf.org/doc/html/rfc3927\">RFC 3927</a>). Là **fallback hợp lệ** khi: (1) DHCP server không reachable → APIPA (Windows / dhcpcd auto-assign); (2) Sau DHCPDECLINE → dhcpcd `probing for an IPv4LL address`. Máy dùng APIPA chỉ liên lạc được trong cùng L2 segment, không có default route → không ra internet. Block dải này = block fallback hợp lệ + zero-config networking.",
+    "why": "Thấy 169.254.x.x trên client là **dấu hiệu DHCP infrastructure có vấn đề** (server down, pool hết, filter sai...) — cần debug NGUỒN gốc, không phải block IP. Cũng dùng để chẩn đoán cluster: nếu vài node tự dưng 169.254 thì DHCP server ở subnet đó có chuyện. Lab Case B với `dhcpcd` demo trực tiếp APIPA fallback sau DECLINE — là behavior ĐÚNG, không phải lỗi."
+  }
+]

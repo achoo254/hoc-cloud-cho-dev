@@ -4,6 +4,16 @@ Reverse-chronological. Format: `## YYYY-MM-DD — <summary>`.
 
 ---
 
+## 2026-05-24 (v2) — DHCP lab content extend (peer-inspired ARP Probe + APIPA)
+
+- Bổ sung lab `dhcp` content peer-inspired từ STEP-BY-STEP-v2-hybrid: +1 walkthrough step 10 (ARP Probe vs Gratuitous ARP + DHCPDECLINE → APIPA fallback), +3 misconceptions (Probe vs Gratuitous distinction, networkd KHÔNG gửi DECLINE, APIPA RFC 3927 không phải lỗi).
+- Counts cuối: `walkthrough 9→10`, `misconceptions 9→12` (try_at_home giữ 9).
+- Script `server/scripts/update-lab-dhcp-vmware-v2.js` (idempotent sentinel `step === 10`).
+- Archive cập nhật: `source/STEP-BY-STEP-v1-original.md` (23 KB session đầu) + `source/STEP-BY-STEP-v2-hybrid.md` (42 KB, peer-inspired topology + RFC 5227/3927 references).
+- Sample captures + IP scheme (`.81.x`) giữ nguyên — match pcap thực tế đã capture; mismatch với v2 topology (`.100.x`) defer xử lý.
+
+---
+
 ## 2026-05-24 — DHCP lab codify (VMware 2-client conflict scenario)
 
 - Bổ sung lab `dhcp` content thực hành: +4 `tryAtHome` (systemd-run tcpdump, dhcpcd ép DISCOVER, Case A ping-check, Case B arping), +2 `walkthrough` steps (step 8 = Conflict A ping-check, step 9 = Conflict B ARP flap, full snippet 30+ dòng/step), +4 `misconceptions` (CAP_NET_RAW silent fail, AF_PACKET bypass iptables, INIT-REBOOT lease cache, Linux netplan không DAD).
