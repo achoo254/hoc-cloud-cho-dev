@@ -1,0 +1,61 @@
+{
+  "phaseType": "core",
+  "title": "Phase 2 — Cài + cấu hình DHCP Server minimal",
+  "sbsSection": "§3.4 + §3.5 + §4",
+  "vmTarget": "server",
+  "estimatedMinutes": 15,
+  "why": "ISC <code>dhcpd</code> là tham chiếu chuẩn (reference implementation) cho RFC 2131. Cấu hình tối thiểu chỉ cần <code>subnet</code> + <code>range</code> + <code>option routers</code> + <code>option domain-name-servers</code> là Client xin được IP. Không cần NAT, không cần ping-check ở phase này — giữ KISS để chứng minh DORA hoạt động trước, sau đó mới mở rộng (Optional O1/O2).",
+  "cmd": "# 1. Cài isc-dhcp-server\nsudo apt update\nsudo apt install -y isc-dhcp-server tcpdump\n\n# 2. Bật listen trên ens33\nsudo nano /etc/default/isc-dhcp-server\n#   INTERFACESv4=\"ens33\"\n#   INTERFACESv6=\"\"\n\n# 3. Cấu hình dhcpd.conf minimal (10 dòng)\nsudo nano /etc/dhcp/dhcpd.conf\n#   default-lease-time 120;\n#   max-lease-time 300;\n#   authoritative;\n#   log-facility local7;\n#   subnet 192.168.81.0 netmask 255.255.255.0 {\n#     range 192.168.81.100 192.168.81.110;\n#     option routers 192.168.81.10;\n#     option domain-name-servers 8.8.8.8, 1.1.1.1;\n#     option broadcast-address 192.168.81.255;\n#   }\n\n# 4. Verify syntax\nsudo dhcpd -t -cf /etc/dhcp/dhcpd.conf\n\n# 5. Restart + check\nsudo systemctl restart isc-dhcp-server\nsudo ss -ulnp | grep :67",
+  "observeWith": "Trên Server: <code>dhcpd -t</code> hiển thị 'Config file: /etc/dhcp/dhcpd.conf' kèm 'Database file:' và 'PID file:' (không có error). <code>ss -ulnp</code> thấy dhcpd LISTEN UDP port 67. Trên Client1 sau khi boot: <code>ip -br a</code> hiển thị ens33 với IP <code>192.168.81.100/24</code> (IP đầu pool).",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Trên <strong>Server</strong>: <code>sudo apt install -y isc-dhcp-server tcpdump</code>. Sau đó set listen interface qua <code>/etc/default/isc-dhcp-server</code>: <code>INTERFACESv4=\"ens33\"</code> + <code>INTERFACESv6=\"\"</code>.",
+      "expect": "<code>which dhcpd</code> → <code>/usr/sbin/dhcpd</code>. <code>cat /etc/default/isc-dhcp-server</code> chỉ có 2 dòng <code>INTERFACESv4</code> + <code>INTERFACESv6</code>."
+    },
+    {
+      "n": 2,
+      "do": "Edit <code>/etc/dhcp/dhcpd.conf</code> với 10 dòng minimal: <code>default-lease-time 120</code>, <code>authoritative</code>, <code>subnet 192.168.81.0/24</code> với <code>range .100 .110</code> + <code>option routers 192.168.81.10</code> (Server làm gateway).",
+      "expect": "<code>cat /etc/dhcp/dhcpd.conf</code> hiển thị đúng nội dung 10 dòng. Pool 11 IP (.100 → .110) đủ cho 2-3 Client demo.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase2-02-dhcpd-conf-minimal.png",
+        "alt": "cat /etc/dhcp/dhcpd.conf hiển thị 10 dòng cấu hình minimal",
+        "caption": "<code>dhcpd.conf</code> minimal: subnet <code>192.168.81.0/24</code>, pool <code>.100-.110</code>, lease 120s, gateway <code>.10</code>, DNS public. Không có <code>ping-check</code> (giữ cho Optional O2)."
+      }
+    },
+    {
+      "n": 3,
+      "do": "Verify syntax: <code>sudo dhcpd -t -cf /etc/dhcp/dhcpd.conf</code>. Nếu OK → <code>sudo systemctl restart isc-dhcp-server</code> + <code>sudo ss -ulnp | grep :67</code> để confirm dhcpd đang lắng nghe UDP 67.",
+      "expect": "<code>dhcpd -t</code> in ra 'Config file: /etc/dhcp/dhcpd.conf' (kèm Database/PID file), KHÔNG có dòng nào bắt đầu bằng 'error'. <code>ss</code> thấy dhcpd LISTEN <code>0.0.0.0:67</code>.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase2-01-dhcpd-test-ok.png",
+        "alt": "sudo dhcpd -t -cf output success — Config file/Database file/PID file lines, no error",
+        "caption": "<code>dhcpd -t</code> pass: hiển thị Config file path + Database file <code>/var/lib/dhcp/dhcpd.leases</code> + PID file <code>/var/run/dhcpd.pid</code>. Đây là gate bắt buộc trước khi <code>systemctl restart</code>."
+      }
+    },
+    {
+      "n": 4,
+      "do": "Trên <strong>Client1</strong> (VM mới, Network Adapter Custom VMnet1, netplan mặc định cloud-init <code>dhcp4: true</code>): boot VM. Login console. Chạy <code>ip -br a</code>.",
+      "expect": "<code>ens33 UP 192.168.81.100/24 metric 100 fe80::...</code> — Client1 đã hoàn thành DORA và nhận IP đầu pool <code>.100</code>. Trên Server: <code>sudo cat /var/lib/dhcp/dhcpd.leases | tail -10</code> hiển thị lease entry cho MAC Client1.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase2-03-client-receives-ip.png",
+        "alt": "Client1 booted, login dhcp-client-1, ip -br a shows ens33 192.168.81.100/24",
+        "caption": "Client1 (Ubuntu 24.04, hostname <code>dhcp-client-1</code>) sau khi boot: ens33 nhận <code>192.168.81.100/24</code> từ pool. System info banner cũng confirm 'IPv4 address for ens33: 192.168.81.100'. DORA hoàn tất tự động qua systemd-networkd."
+      }
+    }
+  ],
+  "troubleshooting": [
+    {
+      "symptom": "<code>dhcpd -t</code> báo error 'Can't open dhcpd.leases'.",
+      "fix": "Lease DB chưa được tạo. <code>sudo touch /var/lib/dhcp/dhcpd.leases && sudo chown dhcpd:dhcpd /var/lib/dhcp/dhcpd.leases</code>. Hoặc <code>sudo systemctl restart isc-dhcp-server</code> để package post-install tạo lại."
+    },
+    {
+      "symptom": "Client1 không nhận IP, <code>ip -br a</code> chỉ hiển thị link-local (<code>fe80::</code>) hoặc <code>0.0.0.0</code>.",
+      "fix": "Check 3 thứ: (1) Network Adapter Client1 phải là <strong>Custom VMnet1</strong>, KHÔNG phải NAT/Bridged. (2) Trên Server: <code>sudo systemctl status isc-dhcp-server</code> phải active. (3) Trên Server: <code>sudo journalctl -u isc-dhcp-server -f</code> xem có nhận được DHCPDISCOVER từ Client1 không. Nếu không có DISCOVER → L2 không thông giữa 2 VM (sai VMnet)."
+    },
+    {
+      "symptom": "Client1 nhận IP nhưng không phải trong pool (vd <code>.128/24</code> cached).",
+      "fix": "Client1 có netplan cũ static. Xem <code>ls /etc/netplan/</code> + <code>cat *.yaml</code>. Move file thừa ra <code>/tmp/</code>, đảm bảo chỉ còn 1 file với <code>dhcp4: true</code> cho <code>ens33</code>. <code>sudo netplan apply</code> + flush IP cũ: <code>sudo ip addr flush dev ens33 && sudo systemctl restart systemd-networkd</code>."
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "phaseType": "core",
+  "title": "Phase 4 — Case A: Manual đặt TRƯỚC (Client2 static → Client1 DHCP)",
+  "sbsSection": "§7",
+  "vmTarget": "client2",
+  "estimatedMinutes": 20,
+  "why": "Kịch bản phổ biến trong production: user đặt IP tĩnh trên thiết bị (printer, NAS) TRONG range pool DHCP. Khi DHCP client mới boot, server có thể OFFER trùng IP đã có. Cơ chế bảo vệ phía Client: <a href=\"https://datatracker.ietf.org/doc/html/rfc5227\">RFC 5227 ARP Probe</a> trước khi commit IP. Cơ chế bảo vệ phía Server (tuỳ chọn): <code>ping-check</code> ICMP echo trước OFFER (xem Optional O2).",
+  "cmd": "# 1. Trên Client2 console: convert DHCP → static .100 (steal IP Client1 dùng)\nsudo nano /etc/netplan/50-cloud-init.yaml\n#   network:\n#     version: 2\n#     ethernets:\n#       ens33:\n#         dhcp4: false\n#         addresses: [192.168.81.100/24]\n#         routes: [{to: default, via: 192.168.81.10}]\nsudo netplan apply\nip -br a\n\n# 2. Trên Server: wipe lease DB + restart dhcpd\nsudo systemctl stop isc-dhcp-server\nsudo sh -c 'echo -n > /var/lib/dhcp/dhcpd.leases'\nsudo systemctl start isc-dhcp-server\n\n# 3. Bắt gói trên Server\nsudo systemctl reset-failed lab-tcpdump.service 2>/dev/null\nsudo systemd-run --unit=lab-tcpdump --collect \\\n  /usr/bin/tcpdump -i ens33 -n -e -p -U \\\n  -w /tmp/case-a.pcap '(udp port 67 or udp port 68) or arp or icmp'\n\n# 4. Trên Client1 console: ép DISCOVER fresh\nsudo systemctl stop systemd-networkd systemd-networkd.socket\nsudo rm -f /run/systemd/netif/leases/*\nsudo ip addr flush dev ens33\nsudo ip link set ens33 down; sleep 1; sudo ip link set ens33 up; sleep 1\nsudo systemctl start systemd-networkd\nsleep 8\nip -br a\n\n# 5. Server: dừng tcpdump, xem log\nsudo systemctl stop lab-tcpdump.service\nsudo journalctl -u isc-dhcp-server -n 30 --no-pager\nsudo tcpdump -nn -tttt -r /tmp/case-a.pcap 'arp or (udp port 67 or udp port 68)'",
+  "observeWith": "Server log thấy chuỗi: <code>DHCPDISCOVER from &lt;MAC Client1&gt;</code> → <code>DHCPOFFER on 192.168.81.100</code> → (Client1 ARP probe .100 → Client2 reply) → Client1 gửi <code>DHCPDECLINE</code> → server: <code>DHCPDECLINE of 192.168.81.100 ... abandoned</code> → <code>DHCPOFFER on 192.168.81.101</code> → <code>DHCPACK on 192.168.81.101</code>. Pcap: ARP <code>who-has 192.168.81.100 tell 0.0.0.0</code> (probe) chen giữa OFFER và REQUEST. Client1 cuối cùng có <code>ens33 192.168.81.101/24</code>.",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Trên Client2 console: edit <code>/etc/netplan/50-cloud-init.yaml</code> chuyển <code>dhcp4: false</code> + <code>addresses: [192.168.81.100/24]</code> + default route via <code>.10</code>. <code>netplan apply</code> + verify <code>ip -br a</code>.",
+      "expect": "Client2 hiển thị <code>ens33 UP 192.168.81.100/24</code>. Trên Server: <code>arping -c 2 -I ens33 192.168.81.100</code> reply từ MAC Client2 (đã chiếm IP tĩnh)."
+    },
+    {
+      "n": 2,
+      "do": "Trên Server: wipe lease DB để pool trở về trạng thái sạch. <code>systemctl stop isc-dhcp-server</code> → <code>echo -n &gt; /var/lib/dhcp/dhcpd.leases</code> → <code>systemctl start isc-dhcp-server</code>. Bắt đầu tcpdump nền vào <code>/tmp/case-a.pcap</code>.",
+      "expect": "<code>journalctl -u isc-dhcp-server -n 5</code> thấy dhcpd start fresh. Lease DB rỗng (file 0 byte hoặc chỉ header)."
+    },
+    {
+      "n": 3,
+      "do": "Trên Client1 console: ép DISCOVER fresh (chuỗi flush networkd như Phase 3). Đợi 8 giây để DORA hoàn tất + ARP probe.",
+      "expect": "<code>ip -br a</code> trên Client1 hiển thị <strong><code>192.168.81.101/24</code></strong> (KHÔNG phải <code>.100</code>) — vì server đã abandoned <code>.100</code> sau DECLINE."
+    },
+    {
+      "n": 4,
+      "do": "Server: dừng tcpdump + đọc log dhcpd: <code>sudo journalctl -u isc-dhcp-server -n 30 --no-pager</code>. Tìm chuỗi: <code>DHCPDISCOVER → DHCPOFFER on .100 → DHCPDECLINE of .100 ... abandoned → DHCPOFFER on .101 → DHCPACK on .101</code>.",
+      "expect": "Log dhcpd có 6+ dòng, trong đó có dòng <code>DHCPDECLINE of 192.168.81.100 from &lt;MAC Client1&gt; via ens33: abandoned</code>. Lease DB sau test: <code>lease 192.168.81.100 { binding state abandoned; }</code>."
+    },
+    {
+      "n": 5,
+      "do": "Đọc pcap để thấy ARP Probe chen giữa OFFER và DECLINE: <code>sudo tcpdump -nn -tttt -r /tmp/case-a.pcap 'arp or (udp port 67 or udp port 68)'</code>. Tìm: DISCOVER → OFFER → <code>ARP, Request who-has 192.168.81.100 tell 0.0.0.0</code> (Client1 probe) → <code>ARP, Reply 192.168.81.100 is-at &lt;MAC Client2&gt;</code> → DECLINE → OFFER .101 → REQUEST → ACK.",
+      "expect": "ARP Probe pattern: sender IP <code>0.0.0.0</code> (đặc trưng RFC 5227), target IP <code>192.168.81.100</code>. ARP Reply có sender IP <code>192.168.81.100</code> tell MAC Client2. Sau đó server gửi NAK/OFFER mới."
+    }
+  ],
+  "analysis": {
+    "observation": "Server ISC dhcpd cấp IP <code>.101</code> cho Client1 thay vì <code>.100</code> đầu pool. Lease DB ghi nhận <code>.100</code> ở trạng thái <code>abandoned</code>. Pcap có ARP Probe (sender 0.0.0.0) chen giữa OFFER và DECLINE — đây là cơ chế bảo vệ phía Client (kernel Linux + systemd-networkd) theo <a href=\"https://datatracker.ietf.org/doc/html/rfc5227\">RFC 5227</a>.",
+    "mechanism": "Server không biết Client2 đang dùng <code>.100</code> vì Client2 đặt static (không qua DHCP). Server OFFERs <code>.100</code> theo thứ tự pool. Client1 trước khi gán <code>.100</code> gửi <strong>ARP Probe</strong> (Sender IP=<code>0.0.0.0</code>, Target IP=<code>.100</code>). Client2 reply từ <code>.100</code> → Client1 phát hiện conflict → gửi <strong>DHCPDECLINE</strong> (Option 53 type 4). Server nhận DECLINE → đánh dấu <code>.100</code> <code>abandoned</code> trong lease DB → OFFER IP kế tiếp <code>.101</code>. (Nếu bật <code>ping-check</code> ở Optional O2, server sẽ skip <code>.100</code> ngay trước OFFER bằng ICMP echo — sớm hơn 1 step.)",
+    "lesson": "<strong>Tuyệt đối KHÔNG đặt IP tĩnh trong range DHCP pool</strong>. Best practice: (1) Tách subnet hoặc giới hạn range để IP tĩnh nằm ngoài (vd subnet <code>/24</code>, pool <code>.100-.200</code>, tĩnh <code>.10-.99</code>). (2) Dùng <strong>DHCP reservation</strong> qua <code>host { hardware ethernet ...; fixed-address ...; }</code> để IP tĩnh được dhcpd quản lý, tránh conflict. (3) Bật <code>ping-check</code> server-side như defense-in-depth. (4) Pool <code>abandoned</code> teo dần theo thời gian — cần monitor + reset DB định kỳ."
+  },
+  "troubleshooting": [
+    {
+      "symptom": "Client1 vẫn nhận <code>.100</code> (không skip).",
+      "fix": "Kernel networkd có thể skip ARP probe trong một số config. Verify: <code>cat /proc/sys/net/ipv4/conf/ens33/arp_announce</code> + <code>arp_ignore</code>. Hoặc dùng <code>dhcpcd</code> client (strict RFC 5227): <code>sudo apt install dhcpcd5; sudo dhcpcd -1 -t 20 ens33</code>."
+    },
+    {
+      "symptom": "Cả 2 client cùng nhận <code>.100</code> qua DHCP (không Case A behavior).",
+      "fix": "VM clone share machine-id → Client-Id (Option 61) giống nhau → dhcpd treat 2 VM là 1 client. Regenerate machine-id trên Client2: <code>sudo rm /etc/machine-id /var/lib/dbus/machine-id && sudo systemd-machine-id-setup && sudo reboot</code>. Sau khi unique, mỗi client lấy IP riêng."
+    }
+  ]
+}

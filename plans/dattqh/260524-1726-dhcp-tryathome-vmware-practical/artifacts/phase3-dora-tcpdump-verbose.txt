@@ -1,0 +1,55 @@
+2026-05-24 12:35:57.163026 IP (tos 0xc0, ttl 64, id 0, offset 0, flags [none], proto UDP (17), length 328)
+    0.0.0.0.68 > 255.255.255.255.67: [udp sum ok] BOOTP/DHCP, Request from 00:0c:29:c7:be:73, length 300, xid 0x690b711b, secs 1, Flags [none] (0x0000)
+	  Client-Ethernet-Address 00:0c:29:c7:be:73
+	  Vendor-rfc1048 Extensions
+	    Magic Cookie 0x63825363
+	    DHCP-Message (53), length 1: Discover
+	    Client-ID (61), length 19: hardware-type 255, 2b:94:34:c1:00:02:00:00:ab:11:06:7c:e6:51:e1:9d:70:a4
+	    Parameter-Request (55), length 12: 
+	      Subnet-Mask (1), Default-Gateway (3), Domain-Name-Server (6), Hostname (12)
+	      Domain-Name (15), MTU (26), Static-Route (33), NTP (42)
+	      URL (114), Unknown (119), Unknown (120), Classless-Static-Route (121)
+	    MSZ (57), length 2: 1472
+	    SLP-NA (80), length 0""
+	    Hostname (12), length 13: "dhcp-client-1"
+2026-05-24 12:35:58.165049 IP (tos 0x10, ttl 128, id 0, offset 0, flags [none], proto UDP (17), length 328)
+    192.168.81.10.67 > 192.168.81.100.68: [udp sum ok] BOOTP/DHCP, Reply, length 300, xid 0x690b711b, secs 1, Flags [none] (0x0000)
+	  Your-IP 192.168.81.100
+	  Server-IP 192.168.81.10
+	  Client-Ethernet-Address 00:0c:29:c7:be:73
+	  Vendor-rfc1048 Extensions
+	    Magic Cookie 0x63825363
+	    DHCP-Message (53), length 1: Offer
+	    Server-ID (54), length 4: 192.168.81.10
+	    Lease-Time (51), length 4: 300
+	    Subnet-Mask (1), length 4: 255.255.255.0
+	    Default-Gateway (3), length 4: 192.168.81.10
+	    Domain-Name-Server (6), length 8: 8.8.8.8,1.1.1.1
+2026-05-24 12:35:58.165710 IP (tos 0xc0, ttl 64, id 0, offset 0, flags [none], proto UDP (17), length 338)
+    0.0.0.0.68 > 255.255.255.255.67: [udp sum ok] BOOTP/DHCP, Request from 00:0c:29:c7:be:73, length 310, xid 0x690b711b, secs 1, Flags [none] (0x0000)
+	  Client-Ethernet-Address 00:0c:29:c7:be:73
+	  Vendor-rfc1048 Extensions
+	    Magic Cookie 0x63825363
+	    DHCP-Message (53), length 1: Request
+	    Client-ID (61), length 19: hardware-type 255, 2b:94:34:c1:00:02:00:00:ab:11:06:7c:e6:51:e1:9d:70:a4
+	    Parameter-Request (55), length 12: 
+	      Subnet-Mask (1), Default-Gateway (3), Domain-Name-Server (6), Hostname (12)
+	      Domain-Name (15), MTU (26), Static-Route (33), NTP (42)
+	      URL (114), Unknown (119), Unknown (120), Classless-Static-Route (121)
+	    MSZ (57), length 2: 1472
+	    Server-ID (54), length 4: 192.168.81.10
+	    Requested-IP (50), length 4: 192.168.81.100
+	    Hostname (12), length 13: "dhcp-client-1"
+2026-05-24 12:35:58.167355 IP (tos 0x10, ttl 128, id 0, offset 0, flags [none], proto UDP (17), length 328)
+    192.168.81.10.67 > 192.168.81.100.68: [udp sum ok] BOOTP/DHCP, Reply, length 300, xid 0x690b711b, secs 1, Flags [none] (0x0000)
+	  Your-IP 192.168.81.100
+	  Server-IP 192.168.81.10
+	  Client-Ethernet-Address 00:0c:29:c7:be:73
+	  Vendor-rfc1048 Extensions
+	    Magic Cookie 0x63825363
+	    DHCP-Message (53), length 1: ACK
+	    Server-ID (54), length 4: 192.168.81.10
+	    Lease-Time (51), length 4: 300
+	    Subnet-Mask (1), length 4: 255.255.255.0
+	    Default-Gateway (3), length 4: 192.168.81.10
+	    Domain-Name-Server (6), length 8: 8.8.8.8,1.1.1.1

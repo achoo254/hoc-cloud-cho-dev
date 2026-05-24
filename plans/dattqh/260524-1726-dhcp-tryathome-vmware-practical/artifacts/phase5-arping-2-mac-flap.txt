@@ -1,0 +1,34 @@
+=== arping 192.168.81.100 từ Server (4 probe round) — Case B Evidence ===
+
+--- probe 1 ---
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]  1.091ms   ← Client2 (clone)
+Unicast reply from 192.168.81.100 [00:0C:29:C7:BE:73]  1.146ms   ← Client1
+Sent 1 probes (1 broadcast(s))
+Received 2 response(s)
+
+--- probe 2 ---
+ARPING 192.168.81.100 from 192.168.81.10 ens33
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]  0.896ms
+Unicast reply from 192.168.81.100 [00:0C:29:C7:BE:73]  0.926ms
+
+--- probe 3 ---
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]  0.841ms
+Unicast reply from 192.168.81.100 [00:0C:29:C7:BE:73]  0.874ms
+
+--- probe 4 ---
+Unicast reply from 192.168.81.100 [00:0C:29:C7:BE:73]  0.869ms   ← thứ tự đảo
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]  0.878ms
+
+=== Server dhcpd journal — cả 2 client cùng được cấp .100 ===
+12:49:18 dhcpd: DHCPACK on 192.168.81.100 to 00:0c:29:c7:be:73 (dhcp-client-1)
+12:49:20 dhcpd: DHCPACK on 192.168.81.100 to 00:0c:29:4c:8b:da (dhcp-client-1)
+12:51:48 dhcpd: DHCPACK on 192.168.81.100 to 00:0c:29:c7:be:73 (dhcp-client-1)
+12:51:50 dhcpd: DHCPACK on 192.168.81.100 to 00:0c:29:4c:8b:da (dhcp-client-1)
+
+Nguyên nhân server cấp same IP cho 2 MAC khác nhau: cả 2 client cùng hostname
+"dhcp-client-1" và share machine-id (Client-Id Option 61 giống nhau) sau full
+clone — dhcpd dùng Client-Id làm primary binding key, không phải MAC.
+
+=> Real-world surprise: cloned VMs PHẢI regenerate machine-id để DHCP hoạt động
+đúng. Lệnh: sudo rm /etc/machine-id /var/lib/dbus/machine-id && sudo
+systemd-machine-id-setup && sudo reboot
