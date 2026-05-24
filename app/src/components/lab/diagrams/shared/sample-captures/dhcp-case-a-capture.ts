@@ -85,8 +85,8 @@ function buildDhcpPacket(
   clientMac: number[],
   serverIdentifier: number[] | null,
 ): Uint8Array {
-  // Ethernet 14 + IPv4 20 + UDP 8 + BOOTP/DHCP (truncated 240 + options ~20) = 302 bytes
-  const total = 14 + 20 + 8 + 244
+  // Ethernet 14 + IPv4 20 + UDP 8 + BOOTP fixed 240 + magic cookie+Option 53 (7) + Option 54 (6) + End (1) = 296 bytes
+  const total = 14 + 20 + 8 + 250
   const buf = new Uint8Array(total)
   const ipTotalLen = total - 14
   writeMacIPv4(buf, srcMac, dstMac, 0x11 /* UDP */, ipTotalLen, srcIP, dstIP)
@@ -252,6 +252,7 @@ function icmpLayer(typeNum: number) {
     fields: [
       { name: 'Type', value: typeNum === 8 ? '8 (Echo Request)' : '0 (Echo Reply)', byteOffset: 34, byteLength: 1 },
       { name: 'Code', value: '0', byteOffset: 35, byteLength: 1 },
+      { name: 'Checksum', value: '0x0000', byteOffset: 36, byteLength: 2 },
       { name: 'Identifier', value: '0xd48d', byteOffset: 38, byteLength: 2 },
       { name: 'Sequence', value: '0', byteOffset: 40, byteLength: 2 },
       { name: 'Data', value: '16 bytes ASCII', byteOffset: 42, byteLength: 16 },

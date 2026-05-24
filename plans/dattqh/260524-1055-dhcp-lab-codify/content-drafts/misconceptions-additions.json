@@ -1,7 +1,7 @@
 [
   {
     "wrong": "Cứ bật `ping-check true` trong dhcpd.conf là server sẽ luôn skip IP đang dùng",
-    "right": "ISC dhcpd ở Ubuntu 24.04 mặc định chạy as non-root user `dhcpd` (systemd unit) → process **mất CAP_NET_RAW** → không gửi được ICMP echo → `ping-check` thầm lặng vô hiệu hoá. Verify bắt buộc: `grep CapEff /proc/$(pidof dhcpd)/status` PHẢI = `000001ffffffffff`. Nếu thấy `0000000000000800` → cần systemd drop-in override `ExecStart=` chạy as root (xem walkthrough step 8).",
+    "right": "ISC dhcpd ở Ubuntu 24.04 mặc định chạy as non-root user `dhcpd` (systemd unit) → process **mất CAP_NET_RAW** → không gửi được ICMP echo → `ping-check` thầm lặng vô hiệu hoá. Verify bắt buộc: `grep CapEff /proc/$(pidof dhcpd)/status` PHẢI = `000001ffffffffff` khi chạy as root. Nếu giá trị thấp hơn (giá trị cụ thể tuỳ kernel/unit/cap-bound) → đang chạy as user `dhcpd` thiếu `CAP_NET_RAW` → cần systemd drop-in override `ExecStart=` chạy as root (xem walkthrough step 8).",
     "why": "Học viên test scenario Case A (manual TRƯỚC) thấy có lúc IP vẫn cấp đúng (do random pool order), tưởng ping-check work — thực ra silent fail. Production: thấy 2 máy cùng IP mà không hiểu vì sao server 'ignore' ping-check setting đã bật."
   },
   {
