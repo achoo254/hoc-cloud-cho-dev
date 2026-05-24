@@ -41,7 +41,7 @@
 │   │  dhcp-server        │ ens37 ─ VMnet1 (Host-only) 100.1/24     │
 │   │  DHCP + NAT         │       │                                 │
 │   └─────────────────────┘       │                                 │
-│                                 │  VMnet1 192.168.100.0/24        │
+│                                 │  VMnet1 192.168.81.0/24        │
 │   ┌──────────────────┐          │  (VMware DHCP TẮT)              │
 │   │    Client1       │ ens33 ───┤                                 │
 │   │  dhcp-client     │          │                                 │
@@ -61,11 +61,11 @@
 | Node      | NIC   | Mạng                | IP                | Vai trò                                 |
 |-----------|-------|---------------------|-------------------|-----------------------------------------|
 | Server    | ens33 | VMnet8 NAT          | DHCP từ VMware    | Uplink ra internet                      |
-| Server    | ens37 | VMnet1 Host-only    | `192.168.100.1/24`| DHCP Server + Default Gateway nội bộ    |
+| Server    | ens37 | VMnet1 Host-only    | `192.168.81.1/24`| DHCP Server + Default Gateway nội bộ    |
 | Client1   | ens33 | VMnet1 Host-only    | DHCP `.100–.110`  | Client xin IP từ DHCP                   |
 | Client2   | ens33 | VMnet1 Host-only    | DHCP / Manual     | Client thứ 2, dùng để test conflict     |
 
-DHCP pool: **`192.168.100.100 – 192.168.100.110`** (11 IP, đủ để demo).
+DHCP pool: **`192.168.81.100 – 192.168.81.110`** (11 IP, đủ để demo).
 
 ---
 
@@ -89,7 +89,7 @@ VMware Workstation mặc định có DHCP daemon cho mỗi VMnet. Nếu để b�
 1. Mở **VMware Workstation → Edit → Virtual Network Editor** (cần quyền admin).
 2. Chọn **VMnet1** (Host-only).
 3. Tại "Use local DHCP service to distribute IP" → **BỎ TICK**.
-4. Subnet: `192.168.100.0/24`, Subnet mask `255.255.255.0`.
+4. Subnet: `192.168.81.0/24`, Subnet mask `255.255.255.0`.
 5. **VMnet8 (NAT)** giữ nguyên DHCP — vì Server cần uplink internet qua đó.
 6. Apply.
 
@@ -137,7 +137,7 @@ network:
       dhcp4: true
     ens37:                       # nội bộ — IP tĩnh, server-side
       dhcp4: false
-      addresses: [192.168.100.1/24]
+      addresses: [192.168.81.1/24]
 EOF
 sudo chmod 600 /etc/netplan/99-lab.yaml
 
@@ -147,7 +147,7 @@ sudo mv /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak 2>/d
 sudo netplan apply
 ip -br a
 # ens33 UP 192.168.x.x/24  (NAT)
-# ens37 UP 192.168.100.1/24
+# ens37 UP 192.168.81.1/24
 ```
 
 ### 3.3. Bật IP Forwarding + NAT MASQUERADE (Server thành Gateway)
@@ -167,7 +167,7 @@ sudo iptables -A FORWARD -i ens33 -o ens37 -m state --state RELATED,ESTABLISHED 
 sudo netfilter-persistent save
 ```
 
-> **Cơ chế MASQUERADE**: gói từ Client `192.168.100.X` đi ra cổng `ens33` sẽ được kernel ghi đè src = IP của ens33; reply về Server, kernel tra conntrack rồi dịch ngược về Client. Client không biết gì về NAT.
+> **Cơ chế MASQUERADE**: gói từ Client `192.168.81.X` đi ra cổng `ens33` sẽ được kernel ghi đè src = IP của ens33; reply về Server, kernel tra conntrack rồi dịch ngược về Client. Client không biết gì về NAT.
 
 ### 3.4. Cấu hình `/etc/default/isc-dhcp-server`
 
@@ -184,7 +184,7 @@ Lưu ý: lắng nghe chỉ trên `ens37` (mạng nội bộ), không phải `ens
 
 ```bash
 sudo tee /etc/dhcp/dhcpd.conf >/dev/null <<'EOF'
-# Lab DHCP — pool .100-.110 trên 192.168.100.0/24
+# Lab DHCP — pool .100-.110 trên 192.168.81.0/24
 default-lease-time 120;       # 2 phút — dễ quan sát renew
 max-lease-time 300;
 authoritative;
@@ -196,12 +196,12 @@ ping-timeout 1;
 
 log-facility local7;
 
-subnet 192.168.100.0 netmask 255.255.255.0 {
-  range 192.168.100.100 192.168.100.110;
+subnet 192.168.81.0 netmask 255.255.255.0 {
+  range 192.168.81.100 192.168.81.110;
 
-  option routers 192.168.100.1;                   # Server làm gateway
+  option routers 192.168.81.1;                   # Server làm gateway
   option domain-name-servers 8.8.8.8, 1.1.1.1;
-  option broadcast-address 192.168.100.255;
+  option broadcast-address 192.168.81.255;
 }
 EOF
 ```
@@ -275,9 +275,9 @@ sudo netplan apply
 Chờ ~5s, kiểm tra:
 ```bash
 ip -br a show ens33
-# Mong đợi: ens33 UP 192.168.100.100/24  (hoặc IP nào đó trong pool)
+# Mong đợi: ens33 UP 192.168.81.100/24  (hoặc IP nào đó trong pool)
 ip route
-# default via 192.168.100.1 dev ens33
+# default via 192.168.81.1 dev ens33
 ```
 
 Test internet (chứng minh NAT của Server hoạt động):
@@ -334,11 +334,11 @@ tshark -r /tmp/dora.pcap -Y 'bootp || dhcp' \
 
 Output mong đợi (5 dòng):
 ```
-1  0.000   192.168.100.106  192.168.100.1     7 (Release)
+1  0.000   192.168.81.106  192.168.81.1     7 (Release)
 2  4.127   0.0.0.0          255.255.255.255   1 (Discover)
-3  7.139   192.168.100.1    192.168.100.106   2 (Offer)
+3  7.139   192.168.81.1    192.168.81.106   2 (Offer)
 4  7.141   0.0.0.0          255.255.255.255   3 (Request)
-5  7.145   192.168.100.1    192.168.100.106   5 (ACK)
+5  7.145   192.168.81.1    192.168.81.106   5 (ACK)
 ```
 
 ### 5.2. Cơ chế DORA — sơ đồ tổng
@@ -363,10 +363,10 @@ Mỗi gói DHCP có **header cố định 236 byte** (kế thừa BOOTP) + phầ
 |----------------|--------------------------|------------------------------------------------------------|
 | `op`           | `1` (BOOTREQUEST)        | Client → Server                                            |
 | `xid`          | `0xABCD1234`             | Transaction ID — khớp với phiên lease cũ                   |
-| `ciaddr`       | `192.168.100.106`        | IP Client đang trả lại (khác DISCOVER là `0.0.0.0`)        |
+| `ciaddr`       | `192.168.81.106`        | IP Client đang trả lại (khác DISCOVER là `0.0.0.0`)        |
 | `chaddr`       | `00:0c:29:04:70:61`      | MAC Client                                                 |
 | Option `53`    | `7` (RELEASE)            | DHCP Message Type                                          |
-| Option `54`    | `192.168.100.1`          | Server ID — chỉ rõ server nào cần xoá lease                |
+| Option `54`    | `192.168.81.1`          | Server ID — chỉ rõ server nào cần xoá lease                |
 
 #### Gói 2 — DHCP Discover
 
@@ -389,16 +389,16 @@ Mỗi gói DHCP có **header cố định 236 byte** (kế thừa BOOTP) + phầ
 |----------------|--------------------------|------------------------------------------------------------|
 | `op`           | `2` (BOOTREPLY)          | Server → Client                                            |
 | `xid`          | `0x3903F326`             | **Phải khớp xid của DISCOVER**                             |
-| `yiaddr`       | `192.168.100.106`        | **IP server đề xuất cấp** (your IP address)                |
-| `siaddr`       | `192.168.100.1`          | Server IP                                                  |
+| `yiaddr`       | `192.168.81.106`        | **IP server đề xuất cấp** (your IP address)                |
+| `siaddr`       | `192.168.81.1`          | Server IP                                                  |
 | `chaddr`       | `00:0c:29:04:70:61`      | Echo MAC từ DISCOVER                                       |
 | Option `53`    | `2` (OFFER)              | DHCP Message Type                                          |
-| Option `54`    | `192.168.100.1`          | Server Identifier                                          |
+| Option `54`    | `192.168.81.1`          | Server Identifier                                          |
 | Option `51`    | `120`                    | Lease time (giây)                                          |
 | Option `1`     | `255.255.255.0`          | Subnet Mask                                                |
-| Option `3`     | `192.168.100.1`          | Default Gateway                                            |
+| Option `3`     | `192.168.81.1`          | Default Gateway                                            |
 | Option `6`     | `8.8.8.8, 1.1.1.1`       | DNS Servers                                                |
-| Option `28`    | `192.168.100.255`        | Broadcast Address                                          |
+| Option `28`    | `192.168.81.255`        | Broadcast Address                                          |
 
 > Server **tạm thời reserve** IP này cho MAC này; nếu Client không REQUEST trong timeout, server thả ra.
 
@@ -411,8 +411,8 @@ Mỗi gói DHCP có **header cố định 236 byte** (kế thừa BOOTP) + phầ
 | `flags`        | `0x8000`                 | Vẫn broadcast (chưa chính thức gán IP)                     |
 | `ciaddr`       | `0.0.0.0`                | Client chưa commit IP                                      |
 | Option `53`    | `3` (REQUEST)            | DHCP Message Type                                          |
-| Option `54`    | `192.168.100.1`          | **"Tôi chọn server này"** — server khác sẽ giải phóng IP   |
-| Option `50`    | `192.168.100.106`        | IP Client muốn (echo lại từ OFFER)                         |
+| Option `54`    | `192.168.81.1`          | **"Tôi chọn server này"** — server khác sẽ giải phóng IP   |
+| Option `50`    | `192.168.81.106`        | IP Client muốn (echo lại từ OFFER)                         |
 
 #### Gói 5 — DHCP ACK
 
@@ -420,7 +420,7 @@ Mỗi gói DHCP có **header cố định 236 byte** (kế thừa BOOTP) + phầ
 |----------------|--------------------------|------------------------------------------------------------|
 | `op`           | `2` (BOOTREPLY)          | Server → Client                                            |
 | `xid`          | `0x3903F326`             | Khớp xid                                                   |
-| `yiaddr`       | `192.168.100.106`        | Xác nhận IP                                                |
+| `yiaddr`       | `192.168.81.106`        | Xác nhận IP                                                |
 | Option `53`    | `5` (ACK)                | DHCP Message Type                                          |
 | Option `51`    | `120`                    | **Lease time chính thức bắt đầu**                          |
 | Option `58`    | `60` (T1)                | Renewal time — Client unicast renew với server hiện tại    |
@@ -455,13 +455,13 @@ ARP Request (Probe):
   Sender MAC : 00:0c:29:04:70:61
   Sender IP  : 0.0.0.0            ← ĐẶC TRƯNG ARP PROBE
   Target MAC : 00:00:00:00:00:00
-  Target IP  : 192.168.100.105    ← IP đang được kiểm tra
+  Target IP  : 192.168.81.105    ← IP đang được kiểm tra
   Broadcast  → ff:ff:ff:ff:ff:ff
 ```
 
 Trong tcpdump hiện dưới dạng:
 ```
-who-has 192.168.100.105 tell 0.0.0.0
+who-has 192.168.81.105 tell 0.0.0.0
 ```
 
 **Hành vi**:
@@ -475,14 +475,14 @@ Máy đang **tuyên bố** "IP này là của tôi" để cập nhật ARP cache
 ```
 ARP Request (Gratuitous):
   Sender MAC : 00:0c:29:04:70:61
-  Sender IP  : 192.168.100.106    ← Sender IP
-  Target IP  : 192.168.100.106    ← Target IP = Sender IP
+  Sender IP  : 192.168.81.106    ← Sender IP
+  Target IP  : 192.168.81.106    ← Target IP = Sender IP
   Broadcast  → ff:ff:ff:ff:ff:ff
 ```
 
 Trong tcpdump:
 ```
-who-has 192.168.100.106 tell 192.168.100.106
+who-has 192.168.81.106 tell 192.168.81.106
 ```
 
 **Mục đích chính đáng**: máy mới khởi động báo MAC mới của IP (vd. sau khi VRRP failover). **Khi bị lạm dụng**: máy thứ 2 dùng để claim IP của máy đang dùng → conflict.
@@ -514,10 +514,10 @@ network:
   ethernets:
     ens33:
       dhcp4: no
-      addresses: [192.168.100.100/24]
+      addresses: [192.168.81.100/24]
       routes:
         - to: default
-          via: 192.168.100.1
+          via: 192.168.81.1
       nameservers:
         addresses: [8.8.8.8]
 EOF
@@ -539,19 +539,19 @@ sudo systemctl start isc-dhcp-server
 sudo cp /etc/netplan/50-cloud-init.yaml.manual /etc/netplan/50-cloud-init.yaml
 sudo netplan apply
 ip -br a show ens33
-# Mong đợi: ens33 ... 192.168.100.100/24
+# Mong đợi: ens33 ... 192.168.81.100/24
 ```
 
 Trên Server (terminal log dhcpd) sẽ thấy:
 ```
-DHCPRELEASE of 192.168.100.X from <MAC C2> via ens37 (found)
+DHCPRELEASE of 192.168.81.X from <MAC C2> via ens37 (found)
 ```
 nghĩa là networkd của Client2 đã trả lại IP cũ trước khi chuyển sang static.
 
 Xác nhận từ Server bằng arping:
 ```bash
-sudo arping -c2 -I ens37 192.168.100.100
-# → Unicast reply from 192.168.100.100 [MAC của Client2]
+sudo arping -c2 -I ens37 192.168.81.100
+# → Unicast reply from 192.168.81.100 [MAC của Client2]
 ```
 
 ### 7.4. Trên Server — bắt gói
@@ -580,7 +580,7 @@ sleep 1
 sudo dhcpcd -1 -t 20 -B ens33
 
 ip -br a show ens33
-# Mong đợi: 192.168.100.101/24  (vì .100 đã có máy)
+# Mong đợi: 192.168.81.101/24  (vì .100 đã có máy)
 ```
 
 ### 7.6. Trên Server — dừng tcpdump, xem bằng chứng
@@ -593,11 +593,11 @@ sudo chmod +r /tmp/case-A.pcap
 **Bằng chứng #1 — log dhcpd:**
 ```
 DHCPDISCOVER from <MAC C1> via ens37
-ICMP Echo reply while lease 192.168.100.100 valid.    ← Client2 trả lời ping
-Abandoning IP address 192.168.100.100: pinged before offer
-DHCPOFFER on 192.168.100.101 to <MAC C1> via ens37
-DHCPREQUEST for 192.168.100.101 …
-DHCPACK on 192.168.100.101 to <MAC C1> via ens37
+ICMP Echo reply while lease 192.168.81.100 valid.    ← Client2 trả lời ping
+Abandoning IP address 192.168.81.100: pinged before offer
+DHCPOFFER on 192.168.81.101 to <MAC C1> via ens37
+DHCPREQUEST for 192.168.81.101 …
+DHCPACK on 192.168.81.101 to <MAC C1> via ens37
 ```
 
 **Bằng chứng #2 — lease DB:**
@@ -605,11 +605,11 @@ DHCPACK on 192.168.100.101 to <MAC C1> via ens37
 sudo cat /var/lib/dhcp/dhcpd.leases
 ```
 ```
-lease 192.168.100.100 {
+lease 192.168.81.100 {
   binding state abandoned;       ← BỊ ĐÁNH DẤU
   …
 }
-lease 192.168.100.101 {
+lease 192.168.81.101 {
   binding state active;
   hardware ethernet <MAC C1>;
 }
@@ -622,9 +622,9 @@ tcpdump -nn -tt -e -r /tmp/case-A.pcap | head
 Thứ tự gói chuẩn:
 ```
 … BOOTP/DHCP, Discover from <MAC C1>
-… 192.168.100.1 > 192.168.100.100: ICMP echo request    ← server pinging
-… 192.168.100.100 > 192.168.100.1: ICMP echo reply      ← Client2 reply!
-… BOOTP/DHCP, Offer for 192.168.100.101 to <MAC C1>
+… 192.168.81.1 > 192.168.81.100: ICMP echo request    ← server pinging
+… 192.168.81.100 > 192.168.81.1: ICMP echo reply      ← Client2 reply!
+… BOOTP/DHCP, Offer for 192.168.81.101 to <MAC C1>
 … BOOTP/DHCP, Request
 … BOOTP/DHCP, ACK
 ```
@@ -661,15 +661,15 @@ sudo systemctl start isc-dhcp-server
 ```
 
 Trên cả 2 client — ép xin DHCP fresh (lặp lại block 7.5). Kết quả mẫu:
-- Client1 (MAC c4:f1:be) → `192.168.100.100`
-- Client2 (MAC 4c:8b:da) → `192.168.100.101`
+- Client1 (MAC c4:f1:be) → `192.168.81.100`
+- Client2 (MAC 4c:8b:da) → `192.168.81.101`
 
 Lưu IP của Client1 vào biến cho dễ thao tác:
 ```bash
 # Trên Server
 arp -n | grep 192.168.100
-# Ví dụ: 192.168.100.100  ether  00:0c:29:c4:f1:be  C  ens37   ← Client1
-#         192.168.100.101  ether  00:0c:29:4c:8b:da  C  ens37   ← Client2
+# Ví dụ: 192.168.81.100  ether  00:0c:29:c4:f1:be  C  ens37   ← Client1
+#         192.168.81.101  ether  00:0c:29:4c:8b:da  C  ens37   ← Client2
 ```
 
 ### 8.2. Chuẩn bị Client2 — netplan "steal IP của Client1"
@@ -682,10 +682,10 @@ network:
   ethernets:
     ens33:
       dhcp4: no
-      addresses: [192.168.100.100/24]    # ← IP Client1 đang giữ
+      addresses: [192.168.81.100/24]    # ← IP Client1 đang giữ
       routes:
         - to: default
-          via: 192.168.100.1
+          via: 192.168.81.1
       nameservers:
         addresses: [8.8.8.8]
 EOF
@@ -707,7 +707,7 @@ sudo systemd-run --unit=lab-tcpdump --collect \
 sudo cp /etc/netplan/50-cloud-init.yaml.steal /etc/netplan/50-cloud-init.yaml
 sudo netplan apply
 ip -br a show ens33
-# Mong đợi: 192.168.100.100/24   ← TRÙNG với Client1
+# Mong đợi: 192.168.81.100/24   ← TRÙNG với Client1
 sudo dmesg | tail -5
 # Tuỳ kernel có thể thấy: "IPv4: address conflict detected"
 ```
@@ -718,17 +718,17 @@ Chạy nhiều lần để bắt thấy 2 MAC luân phiên trả lời:
 ```bash
 for i in 1 2 3 4 5 6 7 8; do
   echo "=== probe $i ==="
-  sudo arping -c2 -w 1 -I ens37 192.168.100.100
+  sudo arping -c2 -w 1 -I ens37 192.168.81.100
   sleep 1
 done
 ```
 
 Kết quả tiêu biểu:
 ```
-Unicast reply from 192.168.100.100 [00:0C:29:C4:F1:BE]   ← Client1
-Unicast reply from 192.168.100.100 [00:0C:29:4C:8B:DA]   ← Client2
-Unicast reply from 192.168.100.100 [00:0C:29:C4:F1:BE]
-Unicast reply from 192.168.100.100 [00:0C:29:4C:8B:DA]
+Unicast reply from 192.168.81.100 [00:0C:29:C4:F1:BE]   ← Client1
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]   ← Client2
+Unicast reply from 192.168.81.100 [00:0C:29:C4:F1:BE]
+Unicast reply from 192.168.81.100 [00:0C:29:4C:8B:DA]
 ```
 
 **Hai MAC khác nhau cùng claim cùng một IP** — chính xác hiện tượng "ARP cache flapping".
@@ -754,17 +754,17 @@ sudo dhcpcd -1 -t 20 ens33
 
 Trong stdout của `dhcpcd` (hoặc xem `/var/log/dhcpcd.log` hoặc `journalctl -u dhcpcd`):
 ```
-ens33: offered 192.168.100.100 from 192.168.100.1
-ens33: probing address 192.168.100.100/24
-ens33: DAD detected 00:0c:29:4c:8b:da using 192.168.100.100  ← Client2 reply!
-ens33: 192.168.100.100 declined
+ens33: offered 192.168.81.100 from 192.168.81.1
+ens33: probing address 192.168.81.100/24
+ens33: DAD detected 00:0c:29:4c:8b:da using 192.168.81.100  ← Client2 reply!
+ens33: 192.168.81.100 declined
 ens33: probing for an IPv4LL address
 ens33: leased 169.254.123.45 for infinity                     ← APIPA fallback
 ```
 
 Trên Server xem log dhcpd:
 ```
-DHCPDECLINE of 192.168.100.100 from <MAC C1> via ens37: abandoned
+DHCPDECLINE of 192.168.81.100 from <MAC C1> via ens37: abandoned
 ```
 
 > **APIPA (`169.254.0.0/16`)** là dải IANA reserved cho link-local (RFC 3927). Máy dùng APIPA chỉ liên lạc trong cùng L2 segment, không có default route — không ra internet được.
@@ -777,10 +777,10 @@ sudo chmod +r /tmp/case-B.pcap
 tcpdump -nn -tt -e -r /tmp/case-B.pcap | head -30
 ```
 
-Trong pcap (lọc Wireshark `arp.dst.proto_ipv4 == 192.168.100.100`), bạn sẽ thấy:
+Trong pcap (lọc Wireshark `arp.dst.proto_ipv4 == 192.168.81.100`), bạn sẽ thấy:
 - ARP Probe từ Client2 (sender `0.0.0.0`)
-- ARP Reply từ Client1 (sender `192.168.100.100`)
-- Sau đó nhiều ARP Request/Reply có 2 MAC khác nhau cùng "is-at 192.168.100.100"
+- ARP Reply từ Client1 (sender `192.168.81.100`)
+- Sau đó nhiều ARP Request/Reply có 2 MAC khác nhau cùng "is-at 192.168.81.100"
 
 ### 8.8. Kết luận Case B
 
@@ -829,7 +829,7 @@ Trong pcap (lọc Wireshark `arp.dst.proto_ipv4 == 192.168.100.100`), bạn sẽ
 | Gói DHCP của 1 client cụ thể            | `dhcp.hw.mac_addr == 00:0c:29:c4:f1:be`                     |
 | ARP Probe                               | `arp.opcode == 1 and arp.src.proto_ipv4 == 0.0.0.0`         |
 | Gratuitous ARP                          | `arp.src.proto_ipv4 == arp.dst.proto_ipv4`                  |
-| ARP cho IP cụ thể                       | `arp.dst.proto_ipv4 == 192.168.100.100 \|\| arp.src.proto_ipv4 == 192.168.100.100` |
+| ARP cho IP cụ thể                       | `arp.dst.proto_ipv4 == 192.168.81.100 \|\| arp.src.proto_ipv4 == 192.168.81.100` |
 | Chỉ DHCPDECLINE                         | `dhcp.option.dhcp == 4`                                     |
 | Theo xid                                | `dhcp.id == 0x3903F326`                                     |
 
