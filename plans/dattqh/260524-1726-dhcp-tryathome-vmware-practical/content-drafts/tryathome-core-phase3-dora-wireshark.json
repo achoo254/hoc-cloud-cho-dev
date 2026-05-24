@@ -21,12 +21,22 @@
     {
       "n": 3,
       "do": "Trên Server: dừng tcpdump + chmod readable + liệt kê các gói: <code>sudo tcpdump -nn -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'</code>",
-      "expect": "Output hiển thị 4 gói (hoặc 5 nếu có Release):<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request from &lt;MAC&gt;</code> (DISCOVER)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (OFFER)<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request</code> (REQUEST)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (ACK)<br>Cách nhau dưới 1 giây."
+      "expect": "Output hiển thị 4 gói (hoặc 5 nếu có Release):<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request from &lt;MAC&gt;</code> (DISCOVER)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (OFFER)<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request</code> (REQUEST)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (ACK)<br>Cách nhau dưới 1 giây.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase3-01-dora-packet-list.png",
+        "alt": "Server tcpdump output — 5 packets: Release + DORA",
+        "caption": "<code>tcpdump -nn -tttt</code> đọc <code>/tmp/dora.pcap</code> — 5 packet: 1 Release (Client1 stop networkd) + 4 DORA (Discover/Offer/Request/Ack). Thời gian giữa Discover và ACK ~1 giây. Src <code>0.0.0.0</code> ở DISCOVER+REQUEST = broadcast vì Client1 chưa commit IP."
+      }
     },
     {
       "n": 4,
       "do": "Phân tích chi tiết options bằng <code>sudo tcpdump -nn -vv -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'</code>. Tìm: (a) <code>xid</code> giống nhau qua 4 gói, (b) <code>chaddr</code> = MAC Client, (c) <code>yiaddr</code> trong OFFER/ACK = IP cấp, (d) Option 53 Message-Type {1,2,3,5}, (e) Option 54 Server-ID, (f) Option 51 Lease-Time, (g) Option 50 Requested-IP trong REQUEST.",
-      "expect": "DISCOVER có <code>DHCP-Message (53): Discover</code>, <code>Parameter-Request (55): Subnet-Mask, Default-Gateway, DNS, Hostname...</code>, <code>Hostname: dhcp-client-1</code>. OFFER có <code>DHCP-Message: Offer</code>, <code>Your-IP 192.168.81.100</code>, <code>Server-ID 192.168.81.10</code>, <code>Lease-Time 300</code>, <code>Subnet-Mask 255.255.255.0</code>, <code>Default-Gateway 192.168.81.10</code>, <code>Domain-Name-Server 8.8.8.8, 1.1.1.1</code>. REQUEST có <code>Requested-IP (50) 192.168.81.100</code>, <code>Server-ID (54) 192.168.81.10</code> — client cam kết chọn server này. ACK echo lại lease params."
+      "expect": "DISCOVER có <code>DHCP-Message (53): Discover</code>, <code>Parameter-Request (55): Subnet-Mask, Default-Gateway, DNS, Hostname...</code>, <code>Hostname: dhcp-client-1</code>. OFFER có <code>DHCP-Message: Offer</code>, <code>Your-IP 192.168.81.100</code>, <code>Server-ID 192.168.81.10</code>, <code>Lease-Time 300</code>, <code>Subnet-Mask 255.255.255.0</code>, <code>Default-Gateway 192.168.81.10</code>, <code>Domain-Name-Server 8.8.8.8, 1.1.1.1</code>. REQUEST có <code>Requested-IP (50) 192.168.81.100</code>, <code>Server-ID (54) 192.168.81.10</code> — client cam kết chọn server này. ACK echo lại lease params.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase3-02-dora-options-verbose.png",
+        "alt": "tcpdump -vv excerpt — DHCP Options chi tiết của 4 gói DORA",
+        "caption": "<code>tcpdump -vv</code> hiển thị field/option chi tiết: <code>xid 0x690b711b</code> nhất quán 4 gói; OFFER+ACK chứa Option 54 (Server-ID), 51 (Lease-Time 300s), 1/3/6 (Subnet-Mask + Gateway + DNS); REQUEST chứa Option 50 (Requested-IP) + 54 (Server-ID echo) để cam kết chọn server."
+      }
     },
     {
       "n": 5,

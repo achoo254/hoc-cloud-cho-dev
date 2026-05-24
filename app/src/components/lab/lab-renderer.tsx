@@ -452,8 +452,14 @@ function TryAtHomeTroubleshootList({ items }: { items: TryAtHomeTroubleshoot[] }
       <ul className="space-y-1 list-disc pl-5">
         {items.map((t, idx) => (
           <li key={idx}>
-            <span className="font-medium">{t.symptom}</span>
-            <span className="text-muted-foreground"> → {t.fix}</span>
+            <span
+              className="font-medium"
+              dangerouslySetInnerHTML={{ __html: t.symptom }}
+            />
+            <span className="text-muted-foreground">
+              {' → '}
+              <span dangerouslySetInnerHTML={{ __html: t.fix }} />
+            </span>
           </li>
         ))}
       </ul>

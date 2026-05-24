@@ -16,7 +16,12 @@
     {
       "n": 2,
       "do": "Trên Server: <code>sudo arping -c 2 -w 1 -I ens33 192.168.81.100</code>, lặp 4 lần để bắt nhiều round.",
-      "expect": "Mỗi round arping broadcast 1 request → nhận <strong>2 reply</strong> từ 2 MAC khác nhau (MAC Client1 + MAC Client2). Thứ tự reply có thể đảo giữa các round. Đây chính là 'ARP cache flapping' — hiện tượng đặc trưng IP conflict."
+      "expect": "Mỗi round arping broadcast 1 request → nhận <strong>2 reply</strong> từ 2 MAC khác nhau (MAC Client1 + MAC Client2). Thứ tự reply có thể đảo giữa các round. Đây chính là 'ARP cache flapping' — hiện tượng đặc trưng IP conflict.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase5-01-arping-2-mac-flap.png",
+        "alt": "Server arping 4 round — 2 MAC reply cùng 192.168.81.100",
+        "caption": "Lab session live: <code>00:0C:29:4C:8B:DA</code> (Client2 clone) + <code>00:0C:29:C7:BE:73</code> (Client1) cùng claim <code>.100</code>. Thứ tự reply đảo round 4 — race condition L2. Server dhcpd log cũng có DHCPACK cấp <code>.100</code> cho cả 2 MAC vì shared machine-id → Client-ID Option 61 trùng."
+      }
     },
     {
       "n": 3,
