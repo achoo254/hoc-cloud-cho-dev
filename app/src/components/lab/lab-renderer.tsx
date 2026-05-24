@@ -22,7 +22,15 @@ import { useProgress } from '@/lib/hooks/use-progress'
 import { diagramRegistry, type DiagramRegistryKey } from '@/components/lab/diagrams/registry'
 import { PlaygroundErrorBoundary } from '@/components/lab/diagrams/playground-error-boundary'
 import { MisconceptionsSection } from '@/components/lab/misconceptions-section'
-import type { LabContent, TldrItem, WalkthroughStep, TryAtHome } from '@/lib/schema-lab'
+import { ScreenshotFigure } from '@/components/lab/screenshot-figure'
+import type {
+  LabContent,
+  TldrItem,
+  WalkthroughStep,
+  TryAtHome,
+  TryAtHomeAnalysis,
+  TryAtHomeTroubleshoot,
+} from '@/lib/schema-lab'
 
 // Feature flag (RED TEAM #12) + query override
 const PLAYGROUND_ENABLED = import.meta.env.VITE_ENABLE_DIAGRAM_PLAYGROUND !== 'false'
@@ -286,27 +294,169 @@ function WalkthroughSection({ steps }: { steps: WalkthroughStep[] }) {
 }
 
 // ── Try-at-home sub-section (rendered inside TRY IT tab) ──────────────────────
+// Schema v3.1 — backward compatible:
+//   - Item không có steps[]      → flat legacy view (cmd + why + observeWith)
+//   - Item có steps[]            → expanded phase card (header + steps + analysis)
+//   - phaseType === 'optional'   → collapsed accordion, render mở rộng tuỳ chọn
 
 function TryAtHomeSection({ items }: { items: TryAtHome[] }) {
+  const coreItems = items.filter((i) => i.phaseType !== 'optional')
+  const optionalItems = items.filter((i) => i.phaseType === 'optional')
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
         Thực hành tại nhà
       </h3>
-      {items.map((item, idx) => (
-        <div key={idx} className="space-y-1.5">
-          <CodeBlock code={item.cmd} lang="bash" />
-          <p className="text-sm text-muted-foreground px-1">
-            <span className="font-medium text-foreground">Tại sao: </span>
-            <span dangerouslySetInnerHTML={{ __html: item.why }} />
-          </p>
-          {item.observeWith && (
-            <p className="text-xs text-muted-foreground px-1 italic">
-              Quan sát với: <span dangerouslySetInnerHTML={{ __html: item.observeWith }} />
-            </p>
+
+      <div className="space-y-3">
+        {coreItems.map((item, idx) => (
+          <TryAtHomeItem key={`core-${idx}`} item={item} />
+        ))}
+      </div>
+
+      {optionalItems.length > 0 && (
+        <details className="rounded-md border border-dashed border-border p-3 group">
+          <summary className="cursor-pointer text-sm font-medium select-none flex items-center gap-2">
+            <span className="transition-transform group-open:rotate-90">▶</span>
+            Mở rộng (tuỳ chọn) — {optionalItems.length} phase
+          </summary>
+          <div className="mt-3 space-y-3">
+            {optionalItems.map((item, idx) => (
+              <TryAtHomeItem key={`opt-${idx}`} item={item} />
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function TryAtHomeItem({ item }: { item: TryAtHome }) {
+  if (!item.steps || item.steps.length === 0) {
+    return <TryAtHomeLegacyItem item={item} />
+  }
+  return <TryAtHomePhaseCard item={item} />
+}
+
+function TryAtHomeLegacyItem({ item }: { item: TryAtHome }) {
+  return (
+    <div className="space-y-1.5">
+      <CodeBlock code={item.cmd} lang="bash" />
+      <p className="text-sm text-muted-foreground px-1">
+        <span className="font-medium text-foreground">Tại sao: </span>
+        <span dangerouslySetInnerHTML={{ __html: item.why }} />
+      </p>
+      {item.observeWith && (
+        <p className="text-xs text-muted-foreground px-1 italic">
+          Quan sát với: <span dangerouslySetInnerHTML={{ __html: item.observeWith }} />
+        </p>
+      )}
+    </div>
+  )
+}
+
+function TryAtHomePhaseCard({ item }: { item: TryAtHome }) {
+  return (
+    <article className="rounded-lg border border-border p-4 space-y-3 bg-card">
+      {(item.title || item.sbsSection || item.vmTarget || item.estimatedMinutes) && (
+        <header className="flex items-center gap-2 flex-wrap">
+          {item.title && (
+            <h4 className="text-base font-semibold flex-1 min-w-0">{item.title}</h4>
           )}
-        </div>
-      ))}
+          {item.sbsSection && (
+            <Badge variant="outline" className="font-mono text-xs">
+              {item.sbsSection}
+            </Badge>
+          )}
+          {item.vmTarget && (
+            <Badge variant="secondary" className="text-xs">
+              VM: {item.vmTarget}
+            </Badge>
+          )}
+          {item.estimatedMinutes && (
+            <Badge variant="secondary" className="text-xs">
+              ~{item.estimatedMinutes}&apos;
+            </Badge>
+          )}
+        </header>
+      )}
+
+      <p className="text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Tại sao: </span>
+        <span dangerouslySetInnerHTML={{ __html: item.why }} />
+      </p>
+
+      {item.cmd && <CodeBlock code={item.cmd} lang="bash" />}
+
+      {item.observeWith && (
+        <p className="text-xs text-muted-foreground italic">
+          Quan sát với:{' '}
+          <span dangerouslySetInnerHTML={{ __html: item.observeWith }} />
+        </p>
+      )}
+
+      {item.steps && item.steps.length > 0 && (
+        <ol className="space-y-3 list-decimal pl-5 marker:text-muted-foreground marker:font-semibold">
+          {item.steps.map((s) => (
+            <li key={s.n} className="space-y-1.5">
+              <p
+                className="text-sm font-medium"
+                dangerouslySetInnerHTML={{ __html: s.do }}
+              />
+              <p className="text-xs text-muted-foreground italic">
+                <span className="font-medium">Mong đợi: </span>
+                <span dangerouslySetInnerHTML={{ __html: s.expect }} />
+              </p>
+              {s.screenshot && <ScreenshotFigure {...s.screenshot} />}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {item.analysis && <TryAtHomeAnalysisCallout analysis={item.analysis} />}
+
+      {item.troubleshooting && item.troubleshooting.length > 0 && (
+        <TryAtHomeTroubleshootList items={item.troubleshooting} />
+      )}
+    </article>
+  )
+}
+
+function TryAtHomeAnalysisCallout({ analysis }: { analysis: TryAtHomeAnalysis }) {
+  return (
+    <div className="callout-observe rounded-md p-3 space-y-1.5 text-sm border border-border bg-muted/30">
+      <div className="font-semibold text-foreground">Phân tích hiện tượng</div>
+      <div>
+        <span className="font-medium">Quan sát: </span>
+        <span dangerouslySetInnerHTML={{ __html: analysis.observation }} />
+      </div>
+      <div>
+        <span className="font-medium">Cơ chế: </span>
+        <span dangerouslySetInnerHTML={{ __html: analysis.mechanism }} />
+      </div>
+      <div>
+        <span className="font-medium">Bài học: </span>
+        <span dangerouslySetInnerHTML={{ __html: analysis.lesson }} />
+      </div>
+    </div>
+  )
+}
+
+function TryAtHomeTroubleshootList({ items }: { items: TryAtHomeTroubleshoot[] }) {
+  return (
+    <div className="text-xs space-y-1.5 border-t border-border pt-2">
+      <div className="font-semibold text-muted-foreground uppercase tracking-wide">
+        Bẫy thường gặp
+      </div>
+      <ul className="space-y-1 list-disc pl-5">
+        {items.map((t, idx) => (
+          <li key={idx}>
+            <span className="font-medium">{t.symptom}</span>
+            <span className="text-muted-foreground"> → {t.fix}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

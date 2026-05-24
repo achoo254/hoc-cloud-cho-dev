@@ -74,9 +74,46 @@ TRY IT  → TL;DR* · Quiz* · Flashcards* · Try at home*
 
 Advisory: tối thiểu 2 item per lab (Zod vẫn validate `optional()` hiện tại — sẽ tighten sang `required()` sau khi xác nhận đủ 8 labs backfill).
 
-### `quiz[]`, `flashcards[]`, `tryAtHome[]` — giữ nguyên shape v2
+### `quiz[]`, `flashcards[]` — giữ nguyên shape v2
 
 Xem `labs/_shared/lab-template.js` validator hiện tại.
+
+### `tryAtHome[]` — extended v3.1 (additive, backward compatible)
+
+| Key | Type | Mandatory | Note |
+|-----|------|-----------|------|
+| `cmd` | string | ✅ | Summary command block (legacy + summary cho phase mới) |
+| `why` | string | ✅ | Summary rationale; HTML-capable |
+| `observeWith` | string | — | Summary observation |
+| `title` | string | — | Phase heading. Ví dụ "Phase 4 — Case A: Manual đặt TRƯỚC" |
+| `sbsSection` | string | — | Source reference. Ví dụ "§7" trỏ về STEP-BY-STEP-v2 |
+| `vmTarget` | enum | — | `host` \| `server` \| `client1` \| `client2` — VM nào chạy |
+| `estimatedMinutes` | int | — | Time budget |
+| `phaseType` | enum | — | `core` (bắt buộc, render mặc định) \| `optional` (render collapsed accordion) |
+| `steps[]` | step | — | Step list với screenshot — kích hoạt expanded card view |
+| `analysis` | `{observation, mechanism, lesson}` | — | "Phân tích hiện tượng" callout — trả lời "kiểm tra điều gì xảy ra" |
+| `troubleshooting[]` | `{symptom, fix}` | — | Pitfall guide |
+
+#### `tryAtHome[].steps[]` item
+
+| Key | Type | Mandatory | Note |
+|-----|------|-----------|------|
+| `n` | int | ✅ | Step number (1-based) |
+| `do` | string | ✅ | Action / command for this step |
+| `expect` | string | ✅ | Expected result (text) |
+| `screenshot` | `{src, alt, caption}` | — | Reference screenshot — `src` phải bắt đầu `/labs/<slug>/screenshots/...` |
+
+#### Render behavior
+
+- Item không có `steps[]` → render flat legacy view (chỉ `cmd` + `why` + `observeWith`)
+- Item có `steps[]` → render expanded phase card với header (title + badge SBS + chip VM + chip time), summary, steps list, analysis callout, troubleshooting
+- `phaseType: 'optional'` → render trong `<details>` accordion thu gọn, label "Mở rộng (tuỳ chọn) — N phase"
+
+#### Screenshot baseline
+
+- Lab DHCP: VMware Workstation Pro 25H2 + Ubuntu Server 24.04 LTS
+- Static folder: `app/public/labs/<slug>/screenshots/{core,optional}/*.png`
+- README per-lab: `app/public/labs/<slug>/screenshots/README.md` ghi version + privacy checklist
 
 ## 3. Render order (per walkthrough step)
 

@@ -101,11 +101,57 @@ export const FlashcardSchema = z
   })
   .passthrough()
 
+// Reference screenshot embedded inside a TryAtHome step.
+export const TryAtHomeScreenshotSchema = z
+  .object({
+    src: z.string().min(1),
+    alt: z.string().min(1),
+    caption: z.string().min(1),
+  })
+  .passthrough()
+
+// One numbered step inside an extended TryAtHome phase card.
+export const TryAtHomeStepSchema = z
+  .object({
+    n: z.number().int().positive(),
+    do: z.string().min(1),
+    expect: z.string().min(1),
+    screenshot: TryAtHomeScreenshotSchema.optional(),
+  })
+  .passthrough()
+
+// "Phân tích hiện tượng" callout — answers "kiểm tra điều gì xảy ra".
+export const TryAtHomeAnalysisSchema = z
+  .object({
+    observation: z.string().min(1),
+    mechanism: z.string().min(1),
+    lesson: z.string().min(1),
+  })
+  .passthrough()
+
+export const TryAtHomeTroubleshootSchema = z
+  .object({
+    symptom: z.string().min(1),
+    fix: z.string().min(1),
+  })
+  .passthrough()
+
 export const TryAtHomeSchema = z
   .object({
+    // existing — flat legacy view fallback
     cmd: z.string(),
     why: z.string(),
     observeWith: z.string().optional(),
+
+    // v3.1 extensions — render expanded phase card khi có steps[]
+    title: z.string().optional(),
+    sbsSection: z.string().optional(),
+    vmTarget: z.enum(['host', 'server', 'client1', 'client2']).optional(),
+    estimatedMinutes: z.number().int().positive().optional(),
+    phaseType: z.enum(['core', 'optional']).optional(),
+    steps: z.array(TryAtHomeStepSchema).optional(),
+    analysis: TryAtHomeAnalysisSchema.optional(),
+    troubleshooting: z.array(TryAtHomeTroubleshootSchema).optional(),
   })
   .passthrough()
 
@@ -152,6 +198,10 @@ export const LabSchemas = {
   QuizItemSchema,
   FlashcardSchema,
   TryAtHomeSchema,
+  TryAtHomeStepSchema,
+  TryAtHomeAnalysisSchema,
+  TryAtHomeTroubleshootSchema,
+  TryAtHomeScreenshotSchema,
   MisconceptionSchema,
   LabFixtureSchema,
 }
@@ -163,6 +213,10 @@ export type WalkthroughStep = z.infer<typeof WalkthroughStepSchema>
 export type QuizItem = z.infer<typeof QuizItemSchema>
 export type Flashcard = z.infer<typeof FlashcardSchema>
 export type TryAtHome = z.infer<typeof TryAtHomeSchema>
+export type TryAtHomeStep = z.infer<typeof TryAtHomeStepSchema>
+export type TryAtHomeAnalysis = z.infer<typeof TryAtHomeAnalysisSchema>
+export type TryAtHomeTroubleshoot = z.infer<typeof TryAtHomeTroubleshootSchema>
+export type TryAtHomeScreenshot = z.infer<typeof TryAtHomeScreenshotSchema>
 export type Misconception = z.infer<typeof MisconceptionSchema>
 /** Full parsed lab fixture — use as prop type for <LabRenderer>. */
 export type LabContent = z.infer<typeof LabFixtureSchema>
