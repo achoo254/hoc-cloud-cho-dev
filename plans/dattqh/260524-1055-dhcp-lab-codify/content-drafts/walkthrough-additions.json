@@ -1,0 +1,62 @@
+[
+  {
+    "step": 8,
+    "what": "Conflict A — Manual TRƯỚC: server tự bảo vệ bằng ICMP ping-check",
+    "why": "ISC dhcpd với option `ping-check true` sẽ gửi ICMP echo tới IP sắp cấp trước khi OFFER. Nếu có reply (máy đang dùng IP đó) → server abandon IP, thử IP tiếp theo trong pool. Tham chiếu <a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-4.3.1\">RFC 2131 §4.3.1</a> (server SHOULD probe before OFFER). Cơ chế này chỉ work khi dhcpd có CAP_NET_RAW (chạy as root) — chi tiết ở phần whyBreaks.",
+    "whyBreaks": "Silent fail nếu dhcpd chạy as non-root user `dhcpd` (default systemd unit Ubuntu 24.04) — process mất CAP_NET_RAW → không gửi được ICMP echo → ping-check thầm lặng vô hiệu hoá hoàn toàn. Server vẫn cấp IP đang bị máy tĩnh chiếm → 2 máy cùng IP → ARP flap trong production. Verify: `grep CapEff /proc/$(pidof dhcpd)/status` phải = `000001ffffffffff`; nếu = `0000000000000800` → đang as user dhcpd → cần systemd drop-in.",
+    "code": "# === Server setup ===\n# 1. dhcpd.conf bật ping-check\nsudo tee /etc/dhcp/dhcpd.conf >/dev/null <<'EOF'\ndefault-lease-time 120;\nmax-lease-time 300;\nauthoritative;\nping-check true;\nping-timeout 1;\nsubnet 192.168.81.0 netmask 255.255.255.0 {\n  range 192.168.81.200 192.168.81.201;\n  option routers 192.168.81.2;\n  option domain-name-servers 8.8.8.8, 1.1.1.1;\n}\nEOF\n\n# 2. systemd drop-in để dhcpd chạy as ROOT (CAP_NET_RAW)\nsudo mkdir -p /etc/systemd/system/isc-dhcp-server.service.d\nsudo tee /etc/systemd/system/isc-dhcp-server.service.d/override.conf >/dev/null <<'EOF'\n[Service]\nExecStart=\nExecStart=/usr/sbin/dhcpd -f -4 -pf /run/dhcp-server/dhcpd.pid \\\n  -cf /etc/dhcp/dhcpd.conf ens33\nEOF\nsudo chown root:root /var/lib/dhcp /var/lib/dhcp/dhcpd.leases\nsudo systemctl daemon-reload\nsudo systemctl restart isc-dhcp-server\n\n# 3. Verify CapEff (PHẢI = 000001ffffffffff)\ngrep CapEff /proc/$(pidof dhcpd | awk '{print $1}')/status\n\n# === Trigger scenario ===\n# Client2 manual .200 → server wipe lease → Client1 fresh DISCOVER\n# (chi tiết command trong TRY IT section #3)",
+    "observeWith": "Server log: `journalctl -u isc-dhcp-server | grep -E 'DHCP|ICMP|aban'` thấy chuỗi: `DHCPDISCOVER from <MAC>` → `ICMP Echo reply while lease 192.168.81.200 valid` → `Abandoning IP address 192.168.81.200: pinged before offer` → `DHCPOFFER on 192.168.81.201`. Pcap filter `bootp or icmp` đầy đủ: DISCOVER → ICMP echo (server→.200) → ICMP reply (Client2→server) → OFFER .201 → REQUEST → ACK.",
+    "failModes": [
+      {
+        "symptom": "Server vẫn cấp .200 dù Client2 đang giữ static .200",
+        "evidence": "Server log không có dòng `ICMP Echo reply ...` và không có `Abandoning IP`. `grep CapEff /proc/$(pidof dhcpd)/status` ra `0000000000000800` (= user dhcpd, mất raw socket)."
+      },
+      {
+        "symptom": "ping-check timeout nhưng IP vẫn cấp",
+        "evidence": "`ping-timeout 1` ngắn quá đối với host vừa boot. Tăng lên `ping-timeout 3` nếu network có latency cao."
+      }
+    ],
+    "fixSteps": [
+      {
+        "step": "Verify CapEff của dhcpd",
+        "command": "grep CapEff /proc/$(pidof dhcpd | awk '{print $1}')/status"
+      },
+      {
+        "step": "Nếu Uid != 0: tạo systemd drop-in chạy as root",
+        "command": "sudo systemctl edit isc-dhcp-server  # paste [Service] ExecStart= + ExecStart=/usr/sbin/dhcpd -f -4 -pf /run/dhcp-server/dhcpd.pid -cf /etc/dhcp/dhcpd.conf ens33"
+      },
+      {
+        "step": "Reload + restart + verify",
+        "command": "sudo systemctl daemon-reload && sudo systemctl restart isc-dhcp-server && grep CapEff /proc/$(pidof dhcpd | awk '{print $1}')/status"
+      }
+    ]
+  },
+  {
+    "step": 9,
+    "what": "Conflict B — Manual SAU: Linux netplan static không DAD → ARP cache flap",
+    "why": "Khi Client1 đã có lease DHCP IP X và Client2 đặt static cùng IP X: DHCP server không phát hiện (đã ACK xong cho Client1, không re-check). systemd-networkd gán static raw — KHÔNG thực thi Duplicate Address Detection (DAD) strict, KHÔNG gửi DHCPDECLINE, KHÔNG log warning rõ ràng. Cả 2 máy cùng claim IP → mọi ARP request đều có 2 reply từ 2 MAC khác nhau. Tham chiếu <a href=\"https://datatracker.ietf.org/doc/html/rfc5227\">RFC 5227 §2.1.1</a> (DAD recommend nhưng Linux không enforce).",
+    "whyBreaks": "Hậu quả production: TCP session đứt vì traffic phản hồi đôi lúc về máy A đôi lúc về máy B; switch L2 update CAM table liên tục → CPU spike + packet loss. Debug khó vì không có error message; chỉ thấy 'mạng chập chờn'. Phòng ngừa thực tế (KHÔNG fix client-side): DHCP snooping + Dynamic ARP Inspection (DAI) ở switch + IPAM theo dõi IP tĩnh.",
+    "code": "# === Tiền đề ===\n# Client1 đang giữ DHCP IP .201 (qua DHCPACK). Server không can thiệp nữa.\n\n# === Tạo conflict ===\n# Client2: tạo netplan static .201 (TRÙNG IP Client1)\nsudo tee /etc/netplan/50-cloud-init.yaml >/dev/null <<'EOF'\nnetwork:\n  version: 2\n  renderer: networkd\n  ethernets:\n    ens33:\n      dhcp4: no\n      addresses: [192.168.81.201/24]\n      routes:\n        - {to: default, via: 192.168.81.2}\nEOF\nsudo chmod 600 /etc/netplan/50-cloud-init.yaml\nsudo netplan apply\nip -br a show ens33   # Mong đợi: ens33 ... 192.168.81.201/24\n\n# === Quan sát ARP flap ===\n# Trên server (.128), arping loop sẽ thấy 2 MAC khác nhau cùng reply\nfor i in 1 2 3 4 5 6; do\n  sudo arping -c 2 -w 1 -I ens33 192.168.81.201\n  sleep 1\ndone\n\n# Tcpdump xem packet level:\nsudo tcpdump -i ens33 -n -e arp host 192.168.81.201\n\n# === Mitigation client-side (KHÔNG đủ cho production) ===\necho 'net.ipv4.conf.all.arp_ignore=1' | sudo tee -a /etc/sysctl.d/99-arp.conf\necho 'net.ipv4.conf.all.arp_announce=2' | sudo tee -a /etc/sysctl.d/99-arp.conf\nsudo sysctl --system",
+    "observeWith": "Output arping luân phiên 2 MAC: `Unicast reply from 192.168.81.201 [00:0C:29:C4:F1:BE]` (Client1) và `[00:0C:29:4C:8B:DA]` (Client2). Pcap filter `arp.dst.proto_ipv4 == 192.168.81.201` rõ 2 source MAC khác nhau cùng claim. DHCP server log VẪN không có cảnh báo gì (vì không biết conflict). `journalctl -k --since '2 min ago' | grep -iE 'ipv4|arp'` đôi khi (không phải luôn) có `IPv4: ... sent an invalid ARP reply` tuỳ phiên bản kernel.",
+    "failModes": [
+      {
+        "symptom": "arping chỉ thấy 1 MAC reply, không thấy flap",
+        "evidence": "Client2 chưa apply netplan (lỗi syntax YAML hoặc systemd-networkd kẹt). Check `ip -br a show ens33` trên Client2 phải có IP đúng .201."
+      },
+      {
+        "symptom": "Client2 fail apply netplan với lỗi 'Address already assigned'",
+        "evidence": "Kernel TỪ CHỐI gán IP đã tồn tại trong cùng máy (không phải máy khác). Lý do thường gặp: ens33 đã có IP từ DHCP cache trong /run/systemd/netif/leases — flush trước: `sudo ip addr flush dev ens33`."
+      }
+    ],
+    "fixSteps": [
+      {
+        "step": "Restart networkd để force apply netplan",
+        "command": "sudo systemctl restart systemd-networkd && sleep 2 && ip -br a show ens33"
+      },
+      {
+        "step": "Sản phẩm-grade fix: bật DHCP snooping + DAI ở switch (Cisco IOS example)",
+        "command": "switch(config)# ip dhcp snooping\nswitch(config)# ip dhcp snooping vlan 10\nswitch(config)# ip arp inspection vlan 10\nswitch(config-if)# ip dhcp snooping trust   # trên uplink port tới DHCP server"
+      }
+    ]
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "wrong": "Cứ bật `ping-check true` trong dhcpd.conf là server sẽ luôn skip IP đang dùng",
+    "right": "ISC dhcpd ở Ubuntu 24.04 mặc định chạy as non-root user `dhcpd` (systemd unit) → process **mất CAP_NET_RAW** → không gửi được ICMP echo → `ping-check` thầm lặng vô hiệu hoá. Verify bắt buộc: `grep CapEff /proc/$(pidof dhcpd)/status` PHẢI = `000001ffffffffff`. Nếu thấy `0000000000000800` → cần systemd drop-in override `ExecStart=` chạy as root (xem walkthrough step 8).",
+    "why": "Học viên test scenario Case A (manual TRƯỚC) thấy có lúc IP vẫn cấp đúng (do random pool order), tưởng ping-check work — thực ra silent fail. Production: thấy 2 máy cùng IP mà không hiểu vì sao server 'ignore' ping-check setting đã bật."
+  },
+  {
+    "wrong": "iptables INPUT rule đủ chặn DHCP reply từ rogue server (vd VMware NAT .254)",
+    "right": "`systemd-networkd` dùng raw socket **AF_PACKET** (L2) để nhận DHCP — **bypass iptables INPUT hoàn toàn** vì iptables chỉ xử lý packet đã đi qua netfilter NF_INET hook (L3+). Phải dùng **nftables `netdev/ingress` hook** với priority -300 (chạy ở L2 trước AF_PACKET) hoặc tắt rogue DHCP ở nguồn (Virtual Network Editor → VMnet8 → uncheck `Use local DHCP service`).",
+    "why": "Lab VMware Workstation mặc định: VMnet8 NAT có DHCP riêng tại .254 chen vào tranh OFFER với DHCP server của lab. Nếu chỉ block bằng iptables → client vẫn nhận IP từ VMware DHCP → toàn bộ lab fail mà không hiểu vì sao filter 'không work'. Lệnh đúng: `nft -f - <<NFT\\ntable netdev dhcpfilter { chain ingress { type filter hook ingress device \"ens33\" priority -300; ip saddr != 192.168.81.128 udp sport 67 counter drop } }\\nNFT`."
+  },
+  {
+    "wrong": "`sudo systemctl restart systemd-networkd` đủ để client xin DHCP fresh DORA",
+    "right": "networkd cache lease tại `/run/systemd/netif/leases/` → khi restart sẽ làm **INIT-REBOOT** (gửi DHCPREQUEST cho IP cũ) chứ KHÔNG DISCOVER. Nếu server không có lease tương ứng → NAK. Để force DISCOVER thực sự: `sudo rm -f /run/systemd/netif/leases/*` + `sudo ip addr flush dev ens33` + `sudo ip link set ens33 down/up` + `sudo dhcpcd -1 -B ens33` (one-shot, không daemon).",
+    "why": "Capture mà chỉ thấy REQUEST/ACK (2 gói) thay vì DORA (4 gói) → học viên tưởng cấu hình DHCP server sai, debug nhầm hướng cả buổi. Thực ra client đang INIT-REBOOT mà không biết. Là bẫy mỗi khi muốn demo full DORA capture trong lab."
+  },
+  {
+    "wrong": "Linux client tự gửi DHCPDECLINE và tránh IP khi phát hiện trùng với máy khác",
+    "right": "systemd-networkd gán static IP **không thực thi DAD strict**, không gửi DHCPDECLINE, không log warning. Cả 2 máy cùng claim IP → mọi ARP request đều có 2 reply từ 2 MAC khác nhau → ARP cache flap. Sysctl `arp_announce=2; arp_ignore=1` (client-side) giảm nhưng KHÔNG đủ — chỉ DHCP snooping + Dynamic ARP Inspection (DAI) ở switch (RFC <a href=\"https://datatracker.ietf.org/doc/html/rfc7039\">7039</a>) mới ngăn dứt điểm.",
+    "why": "Nghĩ Linux tự xử lý conflict → không bật DHCP snooping/DAI ở switch → mạng prod đứt liên tục khi có user gõ nhầm IP. Debug rất khó vì không có error log cụ thể, chỉ thấy 'mạng chập chờn'. Lab Case B demo trực tiếp hiện tượng này: 2 client cùng claim .201, `arping` thấy 2 MAC luân phiên reply."
+  }
+]

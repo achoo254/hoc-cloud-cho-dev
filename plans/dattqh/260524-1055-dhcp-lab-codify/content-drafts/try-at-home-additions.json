@@ -1,0 +1,22 @@
+[
+  {
+    "cmd": "# Trên server — tcpdump dưới systemd unit (không HUP khi SSH ngắt)\nsudo systemctl reset-failed lab-tcpdump.service 2>/dev/null\nsudo systemd-run --unit=lab-tcpdump --collect \\\n  /usr/bin/tcpdump -i ens33 -n -e -p -U -s 0 \\\n  -w /tmp/dora.pcap '(udp port 67 or udp port 68) or arp or icmp'\n\n# Dừng khi xong\nsudo systemctl stop lab-tcpdump.service\nsudo chmod +r /tmp/dora.pcap",
+    "why": "Bắt DORA dài hạn mà không sợ SSH bị HUP nuốt tcpdump (kill -HUP khi shell thoát). systemd-run --collect cleanup unit sau khi exit; -U flush packet ngay vào file thay vì buffer.",
+    "observeWith": "Sau capture: `sudo tcpdump -nn -tt -e -r /tmp/dora.pcap | head -20` xem timestamp + src/dst của 4 gói DORA. Hoặc kéo file vào tab Upload .pcap trong DHCP playground (tab SEE)."
+  },
+  {
+    "cmd": "# Trên client — ÉP DISCOVER FRESH (không INIT-REBOOT / REQUEST IP cũ)\nsudo systemctl stop systemd-networkd systemd-networkd.socket\nsudo rm -f /run/systemd/netif/leases/* /var/lib/dhcpcd/*.lease 2>/dev/null\nsudo ip addr flush dev ens33\nsudo ip link set ens33 down\nsleep 1\nsudo ip link set ens33 up\nsleep 1\nsudo dhcpcd -1 -t 20 -B ens33",
+    "why": "systemd-networkd cache lease tại /run/systemd/netif/leases — khi restart sẽ làm INIT-REBOOT (gửi DHCPREQUEST IP cũ) thay vì DISCOVER. Muốn capture full DORA (4 gói) phải xóa lease cache + flush addr + link bounce + dùng dhcpcd one-shot.",
+    "observeWith": "tcpdump trên server thấy đủ chuỗi BOOTP/DHCP: Discover → Offer → Request → ACK. Nếu chỉ thấy Request → lease cache chưa xóa. Filter Wireshark: `bootp.option.dhcp == 1` (DISCOVER), `== 2` (OFFER), `== 3` (REQUEST), `== 5` (ACK)."
+  },
+  {
+    "cmd": "# CASE A — Manual TRƯỚC: ping-check ICMP của server bảo vệ pool\n# Trên Client2: đặt static IP .200 (sẽ là IP đầu pool server sắp cấp)\nsudo tee /etc/netplan/50-cloud-init.yaml >/dev/null <<'EOF'\nnetwork:\n  version: 2\n  renderer: networkd\n  ethernets:\n    ens33:\n      dhcp4: no\n      addresses: [192.168.81.200/24]\n      routes:\n        - {to: default, via: 192.168.81.2}\nEOF\nsudo chmod 600 /etc/netplan/50-cloud-init.yaml\nsudo netplan apply\n\n# Trên server: wipe lease + restart dhcpd\nsudo systemctl stop isc-dhcp-server\nsudo sh -c 'echo -n > /var/lib/dhcp/dhcpd.leases'\nsudo systemctl start isc-dhcp-server\n\n# Trên Client1: force DISCOVER fresh (xem command #2)",
+    "why": "Server ISC dhcpd với `ping-check true; ping-timeout 1;` sẽ gửi ICMP echo tới IP sắp cấp trước khi OFFER. Nếu có reply (máy đang dùng) → server abandon IP đó, thử IP tiếp theo. Cơ chế bảo vệ pool khỏi đụng IP tĩnh nằm trong range DHCP. CỐT LÕI: dhcpd PHẢI chạy as root (CAP_NET_RAW) — không thì silent fail.",
+    "observeWith": "Server log: `journalctl -u isc-dhcp-server -n 20` thấy `ICMP Echo reply while lease 192.168.81.200 valid.` + `Abandoning IP address 192.168.81.200: pinged before offer`. Lease DB: `sudo cat /var/lib/dhcp/dhcpd.leases | grep -A4 .200` có `binding state abandoned`. Pcap: filter `bootp or icmp` thấy DISCOVER → ICMP echo/reply → OFFER IP khác (.201)."
+  },
+  {
+    "cmd": "# CASE B — Manual SAU: ARP flap 2 MAC cùng IP\n# Tiền đề: Client1 đã có DHCP IP (vd .201). Server không biết conflict sắp xảy ra.\n# Trên Client2: đặt static trùng IP Client1\nsudo tee /etc/netplan/50-cloud-init.yaml >/dev/null <<'EOF'\nnetwork:\n  version: 2\n  ethernets:\n    ens33:\n      dhcp4: no\n      addresses: [192.168.81.201/24]\nEOF\nsudo netplan apply\n\n# Trên server: quan sát ARP flap\nfor i in 1 2 3 4 5 6; do\n  sudo arping -c 2 -w 1 -I ens33 192.168.81.201\n  sleep 1\ndone",
+    "why": "DHCP server không phát hiện vì đã ACK xong Client1 từ lâu — không có cơ chế re-check sau khi cấp. systemd-networkd gán static raw không thực thi DAD strict, không gửi DHCPDECLINE. Cả 2 client cùng claim IP → switch L2 cache flap → traffic intermittent. Khác hẳn Case A nơi server kiểm tra TRƯỚC khi cấp.",
+    "observeWith": "Output arping luân phiên 2 MAC khác nhau cùng `is-at 192.168.81.201`. Ví dụ session lab: Client1 MAC `00:0c:29:c4:f1:be` và Client2 MAC `00:0c:29:4c:8b:da` cùng reply. Pcap (case-B): filter `arp.dst.proto_ipv4 == 192.168.81.201` thấy 2 source MAC. `dmesg | grep -iE 'conflict|arp'` trên client có thể có cảnh báo (tuỳ kernel)."
+  }
+]
