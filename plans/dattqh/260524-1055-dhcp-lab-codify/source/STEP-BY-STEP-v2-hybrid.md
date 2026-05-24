@@ -73,11 +73,11 @@ DHCP pool: **`192.168.81.100 – 192.168.81.110`** (11 IP, đủ để demo).
 
 ### 2.1. Tạo 3 VM Ubuntu Server 24.04
 
-| VM       | Hostname        | Username       | Password   | NIC                              |
-|----------|-----------------|----------------|------------|----------------------------------|
-| Server   | `dhcp-server`   | `dhcp-server`  | `7335140`  | NIC1 → VMnet8, NIC2 → VMnet1     |
-| Client1  | `dhcp-client`   | `dhcp-client`  | `7335140`  | NIC1 → VMnet1                    |
-| Client2  | `dhcp-client-2` | `dhcp-client-2`| `7335140`  | NIC1 → VMnet1                    |
+| VM       | Hostname        | Username        | Password   | NIC                              |
+|----------|-----------------|-----------------|------------|----------------------------------|
+| Server   | `dhcp-server`   | `dhcp-username` | `7335140`  | NIC1 → VMnet8, NIC2 → VMnet1     |
+| Client1  | `dhcp-client`   | `dhcp-client`   | `7335140`  | NIC1 → VMnet1                    |
+| Client2  | `dhcp-client-2` | `dhcp-client-2` | `7335140`  | NIC1 → VMnet1                    |
 
 Khi cài Ubuntu Server, bật OpenSSH server.
 
@@ -99,7 +99,7 @@ VMware Workstation mặc định có DHCP daemon cho mỗi VMnet. Nếu để b�
 
 - Mở Settings của Server, **Add… → Network Adapter** thứ hai. NIC1 chọn "Custom: VMnet8", NIC2 chọn "Custom: VMnet1".
 - Client1, Client2 chỉ có 1 NIC, chọn "Custom: VMnet1".
-- Khởi động cả 3 VM. Sau khi cài đặt, từ host gõ `ssh dhcp-server@<ip>` (ip lấy từ VMware NAT) để vào server tiếp tục cấu hình.
+- Khởi động cả 3 VM. Sau khi cài đặt, từ host gõ `ssh dhcp-username@<ip>` (ip lấy từ VMware NAT) để vào server tiếp tục cấu hình.
 
 ---
 
@@ -931,6 +931,6 @@ sudo netfilter-persistent save
 Sao chép pcap về host để mở Wireshark:
 ```bash
 # Trên host
-scp dhcp-server@<IP_VMnet8>:/tmp/*.pcap .
+scp dhcp-username@<IP_VMnet8>:/tmp/*.pcap .
 wireshark dora.pcap
 ```

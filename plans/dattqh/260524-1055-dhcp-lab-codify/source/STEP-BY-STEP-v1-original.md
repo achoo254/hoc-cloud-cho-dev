@@ -62,7 +62,7 @@ Phần còn lại của tài liệu giả định bạn ở **trường hợp B.
 
 ## 2. Cấu hình SERVER (`192.168.81.128`)
 
-Login vào VM server (user `dhcp-server`, password `7335140`).
+Login vào VM server (user `dhcp-username`, password `7335140`).
 
 ### 2.1. Cài gói cần thiết
 ```bash
@@ -617,4 +617,4 @@ sudo systemctl daemon-reload
 /tmp/case-B.pcap                                  # 29 packets — ARP flap
 ```
 
-Mở pcap bằng Wireshark trên máy host (copy file qua `scp dhcp-server@192.168.81.128:/tmp/case-A.pcap .`) hoặc trên server với `wireshark /tmp/case-A.pcap`.
+Mở pcap bằng Wireshark trên máy host (copy file qua `scp dhcp-username@192.168.81.128:/tmp/case-A.pcap .`) hoặc trên server với `wireshark /tmp/case-A.pcap`.
