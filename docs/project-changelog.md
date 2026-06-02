@@ -4,6 +4,36 @@ Reverse-chronological. Format: `## YYYY-MM-DD — <summary>`.
 
 ---
 
+## 2026-06-02 (v2) — Mục "Bài Tập" (Exercises) owner-gated + chuyển 3 lab Linux sang
+
+- Thêm tính năng **Bài Tập** riêng tư (owner-gated): collection `exercises` độc lập, mỗi bài = **Đề bài → Hướng dẫn thực hiện → Demo thực tế**. Tối giản (không quiz/flashcards/progress/Meili/SM-2).
+- Backend: `server/db/models/exercise-model.js` (Mixed subdocs, no Meili hook), `server/auth/require-owner.js` (chặn theo `OWNER_EMAIL` allowlist; 401 anon / 403 non-owner / case-insensitive), `server/api/exercises-routes.js` (`GET /api/exercises` + `/:slug`, owner-gate per-route), mount trong `server.js`.
+- Frontend: nav "Bài Tập" chỉ hiện owner (`auth-context.isOwner` vs `VITE_OWNER_EMAIL`); route `/exercises` (catalog) + `/exercise/:slug` (renderer riêng); `lib/api.ts` fetchers + types.
+- **MOVE 3 lab Linux** (`syslog`, `linux-boot-process`, `linux-swap`) từ `labs` → `exercises` (map tryAtHome→guide, output thật→demo) rồi **xóa khỏi labs collection** (labs 11→8). Backup: `plans/dattqh/260602-2112-.../backup/lab-*-pre-move.json`. Script: `migrate-linux-labs-to-exercises.js`.
+- Revert FE labs về trước (roadmap `02-linux`→placeholder, `LAB_ORDER` bỏ 3 slug) vì 02-linux không còn lab công khai.
+- Env: `OWNER_EMAIL` (server, `.env*`) + `VITE_OWNER_EMAIL` (client, `app/.env*`) = `quocdat254@gmail.com`. **Deploy lưu ý**: phải set 2 env này ở VPS prod, nếu không owner cũng bị 403/ẩn nav.
+- Verify: typecheck pass; anon `/api/exercises`→401; `requireOwner` unit test 401/403/200 + case-insensitive; gate KHÔNG rò sang `/api/labs`/`/api/progress` (200). code-reviewer: APPROVE_WITH_NITS (đã fix H1 double-middleware + M1 silent-error).
+
+---
+
+## 2026-06-02 — Module `02-linux`: 3 lab mới (syslog · boot process · swap)
+
+> **Superseded 2026-06-02 (v2)**: 3 lab này đã được **chuyển sang mục Bài Tập** (exercises, owner-gated) và xóa khỏi labs collection. Entry dưới ghi lại quá trình tạo gốc.
+
+
+- Thêm module `02-linux` với 3 lab schema-v3, insert thẳng MongoDB (DB thật qua `.env.development`): `syslog` (45m), `linux-boot-process` (40m), `linux-swap` (35m). Tổng lab: 8 → 11.
+- Mỗi lab đủ mandatory: `misconceptions 4`, `tldr 6`, `walkthrough 6`, `quiz 5`, `flashcards 8`, `tryAtHome 3–4 phase`. Lab `syslog` có FAIL/FIX thật trong walkthrough (lỗi rsyslog 2207 permission → chown).
+- Practical `tryAtHome` xây từ output THẬT trên 2 VM Ubuntu 24.04 (`dattqh-nat` 192.168.122.171 = syslog server / boot chậm; `dattqh-client` 192.168.122.172 = syslog client / boot nhanh). Evidence: `plans/dattqh/260602-2027-linux-labs-syslog-boot-swap/evidence/`.
+  - syslog: rsyslog server `imtcp/imudp 514` + dynafile template; client `omfwd` TCP + queue; verify log nhận tại `/var/log/remote/<host>/<prog>.log`.
+  - boot: `systemd-analyze blame/critical-chain` chỉ thủ phạm `systemd-networkd-wait-online` (timeout 120s, FAILED trên 171 → boot 2min vs 172 9s).
+  - swap: `swapon/free/proc/fstab/vmstat`, demo tạo swapfile phụ (priority -3) + swappiness set/revert.
+- Script: `server/scripts/seed-linux-labs.js` (upsert idempotent + contentHash + backup), content drafts `plans/dattqh/260602-2027-linux-labs-syslog-boot-swap/content-drafts/*.js`.
+- FE: `roadmap-section.tsx` mở `02-linux` (`placeholder: false`, duration `~2h`); `lab-catalog-grid.tsx` thêm 3 slug vào `LAB_ORDER`. `typecheck` pass.
+- Thêm `server/scripts/sync-meili-index.js` (bulk re-sync Mongo → Meili) dùng khi content ghi thẳng Mongo không qua server process.
+- **Pending**: Meilisearch index production chưa có 3 lab này — prod Meili chạy localhost trên VPS (không reachable từ máy dev). Cần chạy `node --env-file=.env server/scripts/sync-meili-index.js` trên VPS để search thấy. Catalog + roadmap + `/lab/:slug` đã hoạt động (không phụ thuộc Meili).
+
+---
+
 ## 2026-05-24 (v2) — DHCP lab content extend (peer-inspired ARP Probe + APIPA)
 
 - Bổ sung lab `dhcp` content peer-inspired từ STEP-BY-STEP-v2-hybrid: +1 walkthrough step 10 (ARP Probe vs Gratuitous ARP + DHCPDECLINE → APIPA fallback), +3 misconceptions (Probe vs Gratuitous distinction, networkd KHÔNG gửi DECLINE, APIPA RFC 3927 không phải lỗi).

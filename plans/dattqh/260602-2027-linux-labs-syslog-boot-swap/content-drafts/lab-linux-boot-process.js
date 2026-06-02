@@ -1,0 +1,285 @@
+// Lab content — Quá trình khởi động Linux. Shape camelCase (Mongo).
+// Practical so sánh boot THẬT: dattqh-nat (171, 2min 7s — networkd-wait-online timeout)
+// vs dattqh-client (172, 8.9s). Citations: systemd bootup(7), systemd-analyze(1), GRUB manual.
+
+export default {
+  slug: 'linux-boot-process',
+  module: '02-linux',
+  title: 'Quá trình khởi động Linux',
+  estimatedMinutes: 40,
+
+  misconceptions: [
+    {
+      wrong: 'Firmware (UEFI/BIOS) nạp và chạy thẳng nhân Linux.',
+      right: 'Firmware nạp <em>bootloader</em> (GRUB) từ EFI System Partition; GRUB mới nạp kernel + initramfs. Có một tầng trung gian giữa firmware và kernel.',
+      why: 'P1: UEFI tìm file <code>.efi</code> trong ESP (FAT32, vd <code>/boot/efi/EFI/ubuntu/grubx64.efi</code>) theo boot entry trong NVRAM. P2: GRUB đọc <code>/boot/grub/grub.cfg</code>, hiển thị menu (ở đây <code>GRUB_TIMEOUT=0</code>, <code>GRUB_TIMEOUT_STYLE=hidden</code> nên ẩn), rồi nạp <code>vmlinuz</code> + <code>initrd.img</code> vào RAM và trao quyền kèm kernel cmdline. P3: Khi máy "không boot", phải xác định kẹt ở tầng nào: firmware không thấy ESP, GRUB lỗi <code>grub rescue></code>, hay kernel panic — ba tầng cần cách xử lý khác nhau.',
+    },
+    {
+      wrong: 'systemd khởi động service tuần tự theo thứ tự đánh số/tên.',
+      right: 'systemd khởi động <em>song song</em> theo đồ thị phụ thuộc (<code>Wants=</code>, <code>Requires=</code>, <code>After=</code>, <code>Before=</code>), không theo số thứ tự như SysV init cũ.',
+      why: 'P1: <a href="https://www.freedesktop.org/software/systemd/man/latest/bootup.html">bootup(7)</a> mô tả PID 1 (systemd) tiến tới <code>default.target</code> bằng cách kích hoạt các unit khi dependency sẵn sàng. P2: Thứ tự chỉ bị ràng buộc bởi <code>After=</code>/<code>Before=</code>; các unit độc lập chạy đồng thời. <code>systemd-analyze critical-chain</code> hiển thị đường phụ thuộc nối tiếp (critical path), khác với <code>blame</code> (tổng thời gian mỗi unit, kể cả chạy song song). P3: Vì vậy tổng thời gian boot KHÔNG bằng tổng <code>blame</code>; tối ưu boot phải nhắm vào unit nằm trên critical-chain, không phải unit có <code>blame</code> lớn nhất nhưng chạy song song.',
+    },
+    {
+      wrong: 'Boot chậm là do phần cứng/ổ đĩa yếu.',
+      right: 'Phần lớn thời gian thường ở <em>userspace</em> (service), đo bằng <code>systemd-analyze</code>. Nguyên nhân hay gặp là một service treo chờ timeout, không phải ổ đĩa.',
+      why: 'P1: <code>systemd-analyze</code> tách rõ thời gian <code>kernel</code> và <code>userspace</code>. P2: Trên VM lab dattqh-nat: <code>4.065s (kernel) + 2min 2.993s (userspace) = 2min 7.059s</code> — userspace chiếm gần hết, và <code>systemd-analyze blame</code> chỉ ra <code>2min 131ms systemd-networkd-wait-online.service</code> đứng đầu, <code>systemctl --failed</code> xác nhận unit này FAILED (timeout 120s). P3: Cùng image, dattqh-client boot 8.9s vì wait-online xong trong 1.14s — chứng minh nguyên nhân là service treo, không phải phần cứng; sửa đúng service mới giảm được thời gian.',
+    },
+    {
+      wrong: 'initramfs chỉ là tùy chọn, xoá đi vẫn boot bình thường.',
+      right: 'initramfs là rootfs tạm trong RAM chứa driver/tool để <em>mount được root thật</em> (LVM, LUKS, RAID). Thiếu nó kernel thường panic vì không mở được root filesystem.',
+      why: 'P1: Kernel sau khi bung cần mount <code>root=</code> (ở đây <code>/dev/mapper/ubuntu--vg-ubuntu--lv</code> — một LV của LVM). P2: Driver/khả năng cần để kích hoạt LVM nằm trong <code>/boot/initrd.img-$(uname -r)</code> (≈73 MB ở VM lab); kernel mount initramfs trước, chạy script trong đó để <code>vgchange</code>/mở LUKS, rồi pivot_root sang root thật và exec <code>/sbin/init</code>. P3: Sau khi cập nhật kernel hoặc đổi storage stack, phải <code>update-initramfs -u</code>; quên bước này → boot kernel mới sẽ panic "VFS: Unable to mount root fs" dù đĩa nguyên vẹn.',
+    },
+  ],
+
+  tldr: [
+    {
+      what: '5 tầng boot',
+      why: 'P1: Trình tự: Firmware (UEFI/BIOS) → Bootloader (GRUB) → Kernel → initramfs → <code>systemd</code> (PID 1) → targets. P2: Mỗi tầng trao quyền cho tầng sau: firmware→ESP/GRUB, GRUB→vmlinuz+initrd, kernel→pivot root→/sbin/init, systemd→<a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html">default.target</a>. P3: Định vị sự cố theo tầng giúp chọn đúng công cụ: GRUB shell, kernel cmdline, hay <code>systemctl</code>.',
+      whyBreaks: 'Nhầm tầng khi debug (vd sửa systemd trong khi kẹt ở GRUB) làm mất thời gian.',
+      deploymentUse: 'Khi cung cấp image cloud: kiểm cả 5 tầng — ESP đúng, GRUB entry đúng kernel, initramfs có driver virtio, default.target hợp lý (multi-user cho server không GUI).',
+    },
+    {
+      what: 'systemd-analyze (đo tổng)',
+      why: 'P1: <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html">systemd-analyze(1)</a> in thời gian kernel + userspace + tổng. P2: VM lab 171: <code>4.065s (kernel) + 2min 2.993s (userspace)</code>; 172: <code>4.322s + 4.663s = 8.985s</code>. P3: Là số đo đầu tiên để biết nên đào kernel hay userspace.',
+      whyBreaks: 'Đọc tổng mà không tách kernel/userspace → nhắm sai nơi tối ưu.',
+      deploymentUse: 'Đưa <code>systemd-analyze</code> vào post-provision check; cảnh báo nếu userspace vượt ngưỡng (vd >30s) gợi ý service treo.',
+    },
+    {
+      what: 'blame vs critical-chain',
+      why: 'P1: <code>systemd-analyze blame</code> liệt kê thời gian từng unit (gồm chạy song song); <code>critical-chain</code> hiển thị đường phụ thuộc nối tiếp quyết định mốc đạt target. P2: 171: blame top = <code>2min 131ms systemd-networkd-wait-online.service</code>; critical-chain cho thấy graphical.target đạt @2min 2.967s. P3: Tối ưu phải nhắm unit trên critical-chain — unit blame lớn nhưng song song không kéo dài tổng.',
+      whyBreaks: 'Tối ưu theo blame mù quáng (vd gỡ service song song) không giảm boot vì nó không nằm trên critical path.',
+      deploymentUse: 'Dùng critical-chain để chọn unit cần <code>systemctl disable</code>/đổi dependency khi cắt thời gian boot golden image.',
+    },
+    {
+      what: 'default.target',
+      why: 'P1: <code>systemctl get-default</code> cho biết target cuối cùng systemd hướng tới (<a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html">systemd.special(7)</a>). P2: VM lab = <code>graphical.target</code> (kéo theo multi-user.target). Server không GUI nên đặt <code>multi-user.target</code> để bớt service đồ hoạ. P3: Sai default.target làm server tải thêm stack GUI vô ích hoặc desktop không lên màn hình.',
+      whyBreaks: 'Đặt graphical.target trên máy không cài desktop → treo chờ display-manager.',
+      deploymentUse: 'Server headless: <code>sudo systemctl set-default multi-user.target</code> để boot nhanh và giảm surface.',
+    },
+    {
+      what: 'systemd-networkd-wait-online',
+      why: 'P1: <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-networkd-wait-online.service.html">wait-online(8)</a> chặn <code>network-online.target</code> tới khi link đạt trạng thái online (mặc định timeout 120s). P2: VM lab 171: link <code>ens160</code> có <code>dhcp4: true</code> nhưng DHCP không hoàn tất → wait-online timeout, <code>status=1/FAILURE</code>, kéo userspace lên 2 phút. P3: Là nguyên nhân boot chậm rất phổ biến trên Ubuntu/netplan; fix bằng <code>optional: true</code> trong netplan hoặc bỏ dhcp4 nếu chỉ static.',
+      whyBreaks: 'Để mặc định khi có interface không bao giờ "online" → mỗi lần boot chờ đủ 120s.',
+      deploymentUse: 'Image cloud nhiều NIC: đặt <code>optional: true</code> cho NIC phụ để wait-online không chờ NIC chưa cắm.',
+    },
+    {
+      what: 'journalctl -b (log boot)',
+      why: 'P1: <code>journalctl -b</code> đọc log của lần boot hiện tại; <code>-b -1</code> cho lần trước. P2: Lọc theo unit: <code>journalctl -b -u systemd-networkd-wait-online</code> cho thấy chính xác dòng "Timeout occurred while waiting for network connectivity". P3: Là cách truy nguyên vì sao một service trên critical-chain chậm/fail.',
+      whyBreaks: 'Không bật persistent journal (<code>/var/log/journal</code>) → mất log boot trước sau reboot, khó điều tra sự cố không tái hiện.',
+      deploymentUse: 'Bật persistent journal (<code>Storage=persistent</code> trong journald.conf) trên server để giữ log nhiều lần boot phục vụ điều tra.',
+    },
+  ],
+
+  walkthrough: [
+    {
+      step: 1,
+      what: 'Firmware UEFI POST → tìm bootloader trong ESP',
+      why: 'Sau khi bật nguồn, UEFI chạy POST kiểm phần cứng rồi đọc boot entry trong NVRAM để nạp file .efi của bootloader từ EFI System Partition (FAT32). Đây là điểm khởi đầu trước khi có bất kỳ phần nào của Linux.',
+      whyBreaks: 'ESP bị xoá/đổi hoặc boot order sai → firmware không tìm thấy bootloader, dừng ở màn hình firmware / "no bootable device".',
+      observeWith: 'Trong OS đang chạy: mount | grep efi và ls /boot/efi/EFI/ để thấy thư mục ubuntu/grub; efibootmgr -v liệt kê boot entry NVRAM.',
+      code: '# Xem phân vùng ESP + boot entry (khi OS đang chạy)\nmount | grep -i efi\nls /boot/efi/EFI/\nsudo efibootmgr -v 2>/dev/null | head',
+    },
+    {
+      step: 2,
+      what: 'GRUB nạp kernel + initramfs',
+      why: 'GRUB đọc /boot/grub/grub.cfg, chọn entry (menu ẩn khi GRUB_TIMEOUT=0), nạp vmlinuz và initrd.img vào RAM, truyền kernel cmdline (root=, ro). Đây là nơi quyết định kernel nào chạy và tham số gì.',
+      whyBreaks: 'grub.cfg trỏ kernel/initrd không tồn tại (vd sau xoá kernel cũ chưa update-grub) → "error: file not found", rơi vào grub rescue>.',
+      observeWith: 'cat /proc/cmdline xem tham số GRUB đã truyền; grep GRUB_ /etc/default/grub; ls /boot/vmlinuz-* /boot/initrd.img-*.',
+      code: '# Tham số kernel GRUB đã truyền lúc boot này\ncat /proc/cmdline\n# BOOT_IMAGE=/vmlinuz-6.8.0-31-generic root=/dev/mapper/ubuntu--vg-ubuntu--lv ro\n\ngrep -E \'^GRUB_TIMEOUT|^GRUB_CMDLINE\' /etc/default/grub',
+    },
+    {
+      step: 3,
+      what: 'Kernel bung + mount initramfs',
+      why: 'Kernel tự giải nén, khởi tạo CPU/MMU/scheduler, nạp driver built-in, rồi mount initramfs làm rootfs tạm trong RAM. initramfs chứa tool để kích hoạt LVM/LUKS cần cho root thật. Thời gian này là phần "kernel" trong systemd-analyze.',
+      whyBreaks: 'initramfs thiếu driver (vd virtio_blk, dm-mod) → không thấy đĩa/LV → "VFS: Unable to mount root fs", kernel panic.',
+      observeWith: 'systemd-analyze (phần kernel ~4s ở VM lab); lsinitramfs /boot/initrd.img-$(uname -r) | grep -E "lvm|virtio" xem có driver cần thiết.',
+      code: '# Thời gian kernel vs userspace\nsystemd-analyze\n# Startup finished in 4.065s (kernel) + 2min 2.993s (userspace) ...\n\n# Nội dung initramfs (driver/tool)\nlsinitramfs /boot/initrd.img-$(uname -r) | grep -iE \'lvm|virtio|dm-\' | head',
+    },
+    {
+      step: 4,
+      what: 'Pivot sang root thật → exec systemd (PID 1)',
+      why: 'Script trong initramfs kích hoạt LVM (vgchange), mount /dev/mapper/ubuntu--vg-ubuntu--lv làm /, pivot_root, rồi exec /sbin/init = systemd thành PID 1. Từ đây userspace thật bắt đầu.',
+      whyBreaks: 'root= sai hoặc LV không kích hoạt được → initramfs rơi vào (initramfs) busybox shell, không pivot được.',
+      observeWith: 'ps -p 1 -o comm= (phải là systemd); findmnt / xem root đang mount từ đâu; readlink /sbin/init.',
+      code: '# PID 1 là systemd?\nps -p 1 -o pid,comm\n# 1 systemd\n\n# Root thật mount từ đâu\nfindmnt /',
+    },
+    {
+      step: 5,
+      what: 'systemd tiến tới default.target (song song theo dependency)',
+      why: 'systemd kích hoạt các unit theo đồ thị Wants/Requires/After để đạt default.target (graphical.target ở VM lab). Các unit độc lập chạy song song; chỉ ràng buộc bởi After/Before. Đây là phần chiếm phần lớn thời gian userspace.',
+      whyBreaks: 'Một unit trên critical-chain treo chờ timeout (vd networkd-wait-online 120s) kéo dài toàn bộ thời gian đạt target.',
+      observeWith: 'systemctl get-default; systemd-analyze critical-chain; systemctl --failed liệt kê unit fail.',
+      code: '# Target đích + đường critical\nsystemctl get-default      # graphical.target\nsystemd-analyze critical-chain | head -20\nsystemctl --failed',
+    },
+    {
+      step: 6,
+      what: 'Đo & debug: blame / critical-chain / journalctl -b',
+      why: 'systemd-analyze blame xếp hạng thời gian từng unit; critical-chain chỉ đường nối tiếp quyết định; journalctl -b -u <unit> cho log lý do. Bộ ba này là quy trình chuẩn để tìm thủ phạm boot chậm.',
+      whyBreaks: 'Tối ưu theo blame mà bỏ qua critical-chain → gỡ nhầm unit song song, boot không nhanh hơn.',
+      observeWith: 'systemd-analyze blame | head; journalctl -b -u systemd-networkd-wait-online --no-pager.',
+      code: '# Quy trình tìm thủ phạm boot chậm\nsystemd-analyze blame | head -10\n# 2min 131ms systemd-networkd-wait-online.service  <-- thủ phạm\nsudo journalctl -b -u systemd-networkd-wait-online --no-pager | tail\n# ... Timeout occurred while waiting for network connectivity.',
+    },
+  ],
+
+  quiz: [
+    {
+      q: 'Thứ tự đúng của các tầng khởi động trên một máy Ubuntu UEFI + LVM?',
+      options: [
+        'GRUB → Firmware → Kernel → systemd → initramfs',
+        'Firmware (UEFI) → GRUB → Kernel → initramfs → systemd (PID 1)',
+        'Firmware → Kernel → GRUB → initramfs → systemd',
+        'Kernel → initramfs → Firmware → GRUB → systemd',
+      ],
+      correct: 1,
+      whyCorrect: 'UEFI nạp GRUB từ ESP; GRUB nạp kernel + initramfs; kernel mount initramfs để kích hoạt LVM rồi pivot sang root thật và exec systemd (PID 1). Xem <a href="https://www.freedesktop.org/software/systemd/man/latest/bootup.html">bootup(7)</a>.',
+      whyOthersWrong: {
+        '0': 'Firmware luôn chạy trước GRUB, không phải ngược lại.',
+        '2': 'GRUB chạy sau firmware và trước kernel, không xen giữa kernel và initramfs.',
+        '3': 'Firmware là tầng đầu tiên, không thể nằm sau kernel.',
+      },
+    },
+    {
+      q: 'Vì sao tổng thời gian boot KHÔNG bằng tổng các giá trị trong systemd-analyze blame?',
+      options: [
+        'blame tính nhầm đơn vị thời gian',
+        'Nhiều unit chạy song song; chỉ unit trên critical-chain mới cộng dồn vào thời gian đạt target',
+        'blame chỉ đo kernel, không đo userspace',
+        'Vì có swap',
+      ],
+      correct: 1,
+      whyCorrect: 'systemd khởi động song song theo dependency. blame là thời gian mỗi unit (kể cả chạy đồng thời); <code>critical-chain</code> mới là đường nối tiếp quyết định mốc đạt target.',
+      whyOthersWrong: {
+        '0': 'Đơn vị blame chính xác (s/ms); vấn đề là tính song song.',
+        '2': 'blame đo các unit userspace là chính.',
+        '3': 'swap không liên quan tới cách tính thời gian boot.',
+      },
+    },
+    {
+      q: 'Trên VM 171, systemd-analyze cho userspace 2min, blame đứng đầu là systemd-networkd-wait-online.service và systemctl --failed liệt kê nó. Kết luận hợp lý nhất?',
+      options: [
+        'Ổ đĩa hỏng cần thay',
+        'wait-online chờ network "online" tới timeout (mặc định 120s) rồi FAILED, kéo dài boot',
+        'Kernel quá cũ',
+        'RAM không đủ',
+      ],
+      correct: 1,
+      whyCorrect: '<a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-networkd-wait-online.service.html">wait-online(8)</a> chặn tới khi link online; ở 171 DHCP không hoàn tất nên timeout 120s và status=1/FAILURE — đúng với 2min userspace.',
+      whyOthersWrong: {
+        '0': 'kernel chỉ 4s, đĩa mount bình thường; không có dấu hiệu lỗi đĩa.',
+        '2': 'Cùng kernel, 172 vẫn boot 9s — không phải kernel.',
+        '3': 'Cùng 4GB RAM, 172 boot nhanh — không phải RAM.',
+      },
+    },
+    {
+      q: 'initramfs cần thiết vì điều gì trên hệ dùng LVM?',
+      options: [
+        'Để hiển thị menu GRUB',
+        'Chứa driver/tool kích hoạt LVM và mount được root filesystem thật',
+        'Để tăng tốc swap',
+        'Để chạy GUI',
+      ],
+      correct: 1,
+      whyCorrect: 'Kernel cần mount root= (vd /dev/mapper/ubuntu--vg-ubuntu--lv). Tool/driver để kích hoạt LVM nằm trong initramfs; thiếu → "Unable to mount root fs".',
+      whyOthersWrong: {
+        '0': 'Menu là việc của GRUB, không phải initramfs.',
+        '2': 'initramfs không liên quan tốc độ swap.',
+        '3': 'GUI do display-manager lo, sau khi systemd chạy.',
+      },
+    },
+    {
+      q: 'Lệnh nào xem log của riêng lần boot hiện tại cho một unit cụ thể?',
+      options: [
+        'dmesg | grep unit',
+        'journalctl -b -u <unit>',
+        'systemctl status --all',
+        'cat /var/log/boot',
+      ],
+      correct: 1,
+      whyCorrect: '<code>journalctl -b</code> giới hạn log lần boot hiện tại; thêm <code>-u &lt;unit&gt;</code> lọc theo unit. Vd <code>journalctl -b -u systemd-networkd-wait-online</code>.',
+      whyOthersWrong: {
+        '0': 'dmesg chỉ ring buffer kernel, không có log userspace của systemd unit.',
+        '2': 'status --all không giới hạn theo lần boot.',
+        '3': 'Không có file /var/log/boot chuẩn trên hệ journald.',
+      },
+    },
+  ],
+
+  flashcards: [
+    { front: '5 tầng boot Linux (UEFI)?', back: 'Firmware → GRUB → Kernel → initramfs → systemd (PID 1) → targets', why: 'Định vị sự cố theo tầng để chọn đúng công cụ debug.' },
+    { front: 'Lệnh đo tổng thời gian boot + tách kernel/userspace?', back: 'systemd-analyze', why: 'Biết nên đào kernel hay userspace trước khi tối ưu.' },
+    { front: 'blame khác critical-chain ở đâu?', back: 'blame = thời gian mỗi unit (gồm song song); critical-chain = đường phụ thuộc nối tiếp quyết định mốc target', why: 'Tối ưu boot phải nhắm unit trên critical-chain, không phải blame lớn nhất.' },
+    { front: 'PID 1 trên hệ systemd là gì?', back: 'systemd (/sbin/init → systemd), kiểm bằng ps -p 1 -o comm', why: 'PID 1 quản lý mọi service; phân biệt tầng userspace với kernel/initramfs.' },
+    { front: 'Vì sao systemd-networkd-wait-online hay làm boot chậm?', back: 'Chặn network-online.target tới khi link online; timeout mặc định 120s nếu link không bao giờ online', why: 'Nguyên nhân boot chậm phổ biến trên Ubuntu/netplan; fix bằng optional: true.' },
+    { front: 'Xem tham số kernel GRUB đã truyền lúc boot?', back: 'cat /proc/cmdline', why: 'Kiểm root=, ro và các tham số; chẩn đoán sai cmdline.' },
+    { front: 'default.target của server headless nên là?', back: 'multi-user.target (set bằng systemctl set-default)', why: 'Tránh tải stack GUI vô ích, boot nhanh và giảm surface.' },
+    { front: 'Sau khi đổi kernel/storage phải làm gì với initramfs?', back: 'sudo update-initramfs -u (và update-grub)', why: 'Quên → kernel mới panic "Unable to mount root fs" dù đĩa nguyên.' },
+  ],
+
+  tryAtHome: [
+    {
+      phaseType: 'core',
+      title: 'Phase 1 — Đo boot + tìm thủ phạm trên VM chậm (171)',
+      vmTarget: 'server',
+      estimatedMinutes: 12,
+      why: 'P1: Quy trình chuẩn tìm boot chậm là <code>systemd-analyze</code> → <code>blame</code> → <code>critical-chain</code> → <code>--failed</code> (<a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html">systemd-analyze(1)</a>). P2: VM dattqh-nat boot 2min 7s; mục tiêu là chỉ ra unit gây chậm bằng dữ liệu, không đoán. P3: Kỹ năng này áp dụng nguyên cho mọi server thật bị chậm boot.',
+      cmd: '# Trên dattqh-nat (192.168.122.171)\nsystemd-analyze\nsystemd-analyze blame | head -10\nsystemd-analyze critical-chain | head -20\nsystemctl --failed\nsudo journalctl -b -u systemd-networkd-wait-online --no-pager | tail',
+      observeWith: '<code>systemd-analyze</code> → <code>4.065s (kernel) + 2min 2.993s (userspace)</code>. <code>blame</code> top = <code>2min 131ms systemd-networkd-wait-online.service</code>. <code>systemctl --failed</code> liệt kê unit này FAILED. journal: <code>Timeout occurred while waiting for network connectivity</code>.',
+      analysis: {
+        observation: 'Userspace chiếm 2min trong tổng 2min 7s; một unit duy nhất (networkd-wait-online) chiếm gần như toàn bộ và đang ở trạng thái FAILED.',
+        mechanism: 'Netplan cấu hình ens160 <code>dhcp4: true</code> kèm địa chỉ static; <code>systemd-networkd-wait-online</code> chờ link đạt trạng thái "online" (gồm DHCP hoàn tất). DHCP không có lease hợp lệ kịp nên service chờ tới timeout mặc định 120s rồi exit status=1. Vì nó nằm trên đường tới network-online.target, thời gian này cộng thẳng vào userspace.',
+        lesson: 'Boot chậm hiếm khi do phần cứng; <code>systemd-analyze</code> tách kernel/userspace, <code>blame</code>+<code>--failed</code> khoanh vùng, <code>journalctl -b -u</code> xác nhận nguyên nhân. Quy trình đo-trước-sửa-sau quan trọng hơn bản thân con số.',
+      },
+      steps: [
+        { n: 1, do: 'Đo tổng: <code>systemd-analyze</code>.', expect: '<code>Startup finished in 4.065s (kernel) + 2min 2.993s (userspace) = 2min 7.059s</code>; <code>graphical.target reached after 2min 2.967s</code>.' },
+        { n: 2, do: 'Xếp hạng unit: <code>systemd-analyze blame | head -10</code>.', expect: 'Dòng đầu <code>2min 131ms systemd-networkd-wait-online.service</code>, bỏ xa các unit sau (apt-daily 17.8s, apt-daily-upgrade 4.5s).' },
+        { n: 3, do: 'Xem unit fail: <code>systemctl --failed</code>.', expect: '<code>systemd-networkd-wait-online.service loaded failed failed Wait for Network to be Configured</code>.' },
+        { n: 4, do: 'Xác nhận nguyên nhân: <code>sudo journalctl -b -u systemd-networkd-wait-online --no-pager | tail</code>.', expect: '<code>Timeout occurred while waiting for network connectivity.</code> → <code>Main process exited, code=exited, status=1/FAILURE</code>.' },
+      ],
+      troubleshooting: [
+        { symptom: '<code>systemctl --failed</code> trống dù boot chậm.', fix: 'Service treo nhưng không fail (chờ vô hạn). Dùng <code>systemd-analyze critical-chain</code> đọc unit có <code>@</code> lớn nhất, rồi <code>journalctl -b -u &lt;unit&gt;</code>.' },
+        { symptom: 'critical-chain không hiện unit nghi ngờ.', fix: 'critical-chain chỉ đường nối tiếp; unit chậm có thể nằm nhánh khác. Đối chiếu cả <code>blame</code> lẫn <code>critical-chain</code>.' },
+      ],
+    },
+    {
+      phaseType: 'core',
+      title: 'Phase 2 — So sánh VM boot nhanh (172) để xác nhận thủ phạm',
+      vmTarget: 'client1',
+      estimatedMinutes: 8,
+      why: 'P1: Cùng image, dattqh-client boot 8.9s. P2: So sánh <code>blame</code> hai máy là cách kiểm chứng giả thuyết "wait-online là thủ phạm" — biến số duy nhất nên là trạng thái network. P3: Phương pháp so sánh control/treatment áp dụng cho mọi điều tra hiệu năng.',
+      cmd: '# Trên dattqh-client (192.168.122.172)\nsystemd-analyze\nsystemd-analyze blame | head -6\nsystemctl --failed\nsudo journalctl -b -u systemd-networkd-wait-online --no-pager | tail -3',
+      observeWith: '<code>systemd-analyze</code> → <code>4.322s + 4.663s = 8.985s</code>. blame: <code>1.140s systemd-networkd-wait-online.service</code> (xong nhanh). <code>systemctl --failed</code> trống. journal: <code>Finished systemd-networkd-wait-online.service</code> (~1s, không timeout).',
+      analysis: {
+        observation: 'Trên 172, cùng unit networkd-wait-online chỉ tốn 1.14s và Finished thành công; userspace 4.6s; không unit nào FAILED.',
+        mechanism: 'Khác biệt giữa 9s và 2min nằm hoàn toàn ở unit này: 172 có network "online" nhanh nên wait-online thoát ngay; 171 chờ tới timeout. Biến số phần cứng (cùng image, cùng 4GB/2vCPU) được loại trừ.',
+        lesson: 'So sánh hai hệ chỉ khác một biến là cách chứng minh nguyên nhân thay vì suy đoán. Một khi xác định, fix nhắm đúng wait-online (netplan optional: true / bỏ dhcp4 thừa), không động vào phần cứng.',
+      },
+      steps: [
+        { n: 1, do: 'Đo tổng trên 172: <code>systemd-analyze</code>.', expect: '<code>4.322s (kernel) + 4.663s (userspace) = 8.985s</code> — nhanh hơn 171 ~14 lần.' },
+        { n: 2, do: '<code>systemd-analyze blame | head -6</code> và <code>systemctl --failed</code>.', expect: 'wait-online chỉ <code>1.140s</code>; <code>systemctl --failed</code> không liệt kê unit nào.' },
+        { n: 3, do: 'Đọc journal wait-online: <code>sudo journalctl -b -u systemd-networkd-wait-online --no-pager | tail -3</code>.', expect: '<code>Finished systemd-networkd-wait-online.service</code> (~1s) — không có dòng "Timeout".' },
+      ],
+      troubleshooting: [
+        { symptom: 'Boot 172 cũng chậm khi đo lại.', fix: 'Trạng thái network thay đổi theo thời điểm (DHCP server libvirt bận). Reboot và đo lại; bản chất wait-online phụ thuộc thời điểm có lease.' },
+      ],
+    },
+    {
+      phaseType: 'core',
+      title: 'Phase 3 — Khảo sát từng tầng + cách fix (không apply trên VM)',
+      vmTarget: 'server',
+      estimatedMinutes: 12,
+      why: 'P1: Hiểu boot không chỉ là đo thời gian mà còn đọc được hiện trạng từng tầng: kernel cmdline, GRUB, initramfs, default.target. P2: Các lệnh <code>cat /proc/cmdline</code>, <code>findmnt /</code>, <code>lsinitramfs</code>, <code>systemctl get-default</code> phơi bày từng tầng. P3: Phase này cũng nêu cách fix boot chậm (documented) nhưng KHÔNG apply để giữ nguyên hiện trạng demo cho người học sau.',
+      cmd: '# Trên 171 — đọc từng tầng (read-only)\ncat /proc/cmdline\nps -p 1 -o pid,comm\nfindmnt /\nlsinitramfs /boot/initrd.img-$(uname -r) | grep -iE \'lvm|virtio\' | head\nsystemctl get-default\n\n# CÁCH FIX wait-online (tham khảo — không chạy trên VM lab):\n#   sudo nano /etc/netplan/50-cloud-init.yaml  -> thêm \'optional: true\' dưới ens160\n#   sudo netplan try && sudo netplan apply\n# hoặc bỏ \'dhcp4: true\' nếu chỉ dùng static.',
+      observeWith: '<code>cat /proc/cmdline</code> → <code>BOOT_IMAGE=/vmlinuz-6.8.0-31-generic root=/dev/mapper/ubuntu--vg-ubuntu--lv ro</code>. <code>ps -p 1</code> → <code>1 systemd</code>. <code>findmnt /</code> → root trên <code>/dev/mapper/ubuntu--vg-ubuntu--lv</code>. <code>systemctl get-default</code> → <code>graphical.target</code>.',
+      steps: [
+        { n: 1, do: 'Tầng GRUB→kernel: <code>cat /proc/cmdline</code>.', expect: '<code>BOOT_IMAGE=/vmlinuz-6.8.0-31-generic root=/dev/mapper/ubuntu--vg-ubuntu--lv ro</code> — thấy kernel + root LV + ro.' },
+        { n: 2, do: 'Tầng systemd: <code>ps -p 1 -o pid,comm</code> và <code>findmnt /</code>.', expect: 'PID 1 = <code>systemd</code>; root mount từ <code>/dev/mapper/ubuntu--vg-ubuntu--lv</code> (LVM) — xác nhận đã pivot khỏi initramfs.' },
+        { n: 3, do: 'Tầng initramfs: <code>lsinitramfs /boot/initrd.img-$(uname -r) | grep -iE \'lvm|virtio\' | head</code>.', expect: 'Liệt kê module/tool LVM + virtio — đủ để mount root LV; giải thích vì sao thiếu initramfs sẽ panic.' },
+        { n: 4, do: 'Tầng target + đọc cách fix wait-online (KHÔNG apply): <code>systemctl get-default</code>.', expect: '<code>graphical.target</code>. Ghi nhận hướng fix: netplan <code>optional: true</code> cho ens160 hoặc bỏ dhcp4 thừa; trên server headless cân nhắc <code>set-default multi-user.target</code>.' },
+      ],
+      troubleshooting: [
+        { symptom: '<code>lsinitramfs</code> báo command not found.', fix: 'Thuộc gói initramfs-tools: <code>sudo apt install -y initramfs-tools</code> (thường có sẵn). Hoặc xem nội dung bằng <code>unmkinitramfs</code>.' },
+        { symptom: 'Muốn thử fix nhưng sợ hỏng boot.', fix: 'Dùng <code>sudo netplan try</code> (tự rollback sau 120s nếu không confirm) thay vì <code>apply</code> trực tiếp; giữ một phiên SSH dự phòng. Trên VM lab này nên giữ nguyên để bảo toàn evidence boot chậm.' },
+      ],
+    },
+  ],
+}

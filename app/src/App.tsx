@@ -12,6 +12,8 @@ import { PROGRESS_QUERY_KEY } from '@/lib/hooks/use-progress'
 
 const IndexPage       = lazy(() => import('./routes/index'))
 const LabViewerPage   = lazy(() => import('./routes/lab-viewer'))
+const ExercisesPage   = lazy(() => import('./routes/exercises'))
+const ExerciseViewer  = lazy(() => import('./routes/exercise-viewer'))
 const SearchPage      = lazy(() => import('./routes/search'))
 const DevPlayground   = lazy(() => import('./routes/dev-playground'))
 const SpikePlayground = lazy(() => import('./routes/spike-playground'))
@@ -38,6 +40,8 @@ const router = createBrowserRouter([
     children: [
       { index: true,            element: <IndexPage />,     loader: prefetchProgress },
       { path: 'lab/:slug',      element: <LabViewerPage />, loader: prefetchProgress },
+      { path: 'exercises',      element: <ExercisesPage /> },
+      { path: 'exercise/:slug', element: <ExerciseViewer /> },
       { path: 'search',         element: <SearchPage /> },
       { path: 'dev/playground', element: <DevPlayground /> },
       { path: 'dev/spike',      element: <SpikePlayground /> },

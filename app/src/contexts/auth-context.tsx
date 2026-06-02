@@ -48,6 +48,8 @@ async function runMigrateProgress(): Promise<void> {
 interface AuthContextValue {
   user: User | null
   isLoading: boolean
+  /** True khi user đăng nhập khớp VITE_OWNER_EMAIL — chỉ để ẩn/hiện UI (bảo mật thật do API enforce). */
+  isOwner: boolean
   login: () => Promise<void>
   logout: () => Promise<void>
 }
@@ -150,11 +152,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY })
   }
 
+  const ownerEmail = (import.meta.env.VITE_OWNER_EMAIL || '').toLowerCase()
+  const userEmail = (data?.user?.email || '').toLowerCase()
+  const isOwner = !!userEmail && !!ownerEmail && userEmail === ownerEmail
+
   return (
     <AuthContext.Provider
       value={{
         user: data?.user ?? null,
         isLoading,
+        isOwner,
         login,
         logout,
       }}

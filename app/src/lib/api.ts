@@ -178,3 +178,67 @@ export const migrateProgress = (batchId: string) =>
 /** GET /healthz */
 export const getHealth = () =>
   request<{ status: string; db: string }>('/healthz')
+
+// ── Exercise types (mục Bài Tập — owner-gated) ────────────────────────────────
+
+export interface ExerciseIndexEntry {
+  slug: string
+  title: string
+  topic: string | null
+  tags: string[]
+  estimated_minutes: number | null
+  updated_at: number | null
+}
+
+export interface ExerciseGuideStep {
+  step: number
+  instruction: string
+  command?: string
+  note?: string
+}
+
+export interface ExerciseDemoStep {
+  step: number
+  what: string
+  command?: string
+  output: string
+  note?: string
+  screenshot?: { src: string; alt: string; caption: string }
+}
+
+export interface ExerciseContent {
+  slug: string
+  title: string
+  topic: string | null
+  tags: string[]
+  source: string | null
+  brief: string
+  estimated_minutes: number | null
+  content_hash?: string
+  updated_at: number | null
+  guide: ExerciseGuideStep[]
+  demo: ExerciseDemoStep[]
+  references: { label: string; url: string }[]
+}
+
+/**
+ * GET /api/exercises — owner-gated catalog. Trả [] nếu 401/403 (không phải owner)
+ * để FE hiện forbidden state thay vì crash.
+ */
+export const getExercisesIndex = async (): Promise<ExerciseIndexEntry[]> => {
+  const res = await fetch('/api/exercises')
+  if (res.status === 401 || res.status === 403) throw new ApiError(res.status, 'forbidden')
+  if (!res.ok) throw new ApiError(res.status, await res.text().catch(() => res.statusText))
+  const { exercises } = (await res.json()) as { exercises: ExerciseIndexEntry[] }
+  return exercises
+}
+
+/** GET /api/exercises/:slug — full content; null on 404; throws ApiError on 401/403. */
+export const getExerciseContent = async (slug: string): Promise<ExerciseContent | null> => {
+  const res = await fetch(`/api/exercises/${encodeURIComponent(slug)}`)
+  if (res.status === 404) return null
+  if (res.status === 401 || res.status === 403) throw new ApiError(res.status, 'forbidden')
+  if (!res.ok) throw new ApiError(res.status, await res.text().catch(() => res.statusText))
+  const { exercise } = (await res.json()) as { exercise: ExerciseContent }
+  return exercise
+}

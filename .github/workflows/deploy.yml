@@ -97,6 +97,10 @@ jobs:
       - name: Build FE bundle (Vite → app/dist)
         run: pnpm run build
         working-directory: app
+        env:
+          # Owner email cho nav "Bài Tập" (ẩn/hiện UI). Lộ trong bundle là chấp nhận
+          # được — bảo mật thật do server OWNER_EMAIL gate. Set GitHub secret OWNER_EMAIL.
+          VITE_OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
 
       - name: Build BE bundle (esbuild → dist-server/server.bundle.js)
         run: pnpm run build:server
@@ -173,6 +177,7 @@ jobs:
             MEILISEARCH_API_KEY=${{ secrets.MEILISEARCH_API_KEY }}
             FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
             FIREBASE_SERVICE_ACCOUNT_JSON=${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+            OWNER_EMAIL=${{ secrets.OWNER_EMAIL }}
             EOF
 
             # Extract bundle vào staging.
