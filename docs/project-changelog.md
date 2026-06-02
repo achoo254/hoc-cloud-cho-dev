@@ -13,7 +13,7 @@ Reverse-chronological. Format: `## YYYY-MM-DD — <summary>`.
 - Revert FE labs về trước (roadmap `02-linux`→placeholder, `LAB_ORDER` bỏ 3 slug) vì 02-linux không còn lab công khai.
 - Env: `OWNER_EMAIL` (server, `.env*`) + `VITE_OWNER_EMAIL` (client, `app/.env*`) = `quocdat254@gmail.com`. **Deploy lưu ý**: phải set 2 env này ở VPS prod, nếu không owner cũng bị 403/ẩn nav.
 - Verify: typecheck pass; anon `/api/exercises`→401; `requireOwner` unit test 401/403/200 + case-insensitive; gate KHÔNG rò sang `/api/labs`/`/api/progress` (200). code-reviewer: APPROVE_WITH_NITS (đã fix H1 double-middleware + M1 silent-error).
-- **Demo = ảnh terminal THẬT**: chạy lệnh thật trên VM → render output thành ảnh kiểu terminal (`tools/render_terminal.py`, PIL + Consolas). 10 ảnh tại `app/public/exercises/<slug>/screenshots/` (syslog 4 gồm FAIL/FIX perm, boot 3, swap 3). `demo[].screenshot.src` dùng **full URL** (`https://hoc-cloud.inetdev.io.vn/...`) để copy markdown sang hệ khác vẫn xem được ảnh. Patch DB: `patch-exercise-demo-screenshots.js`.
+- **Demo = ảnh chụp màn hình terminal THẬT**: mở cửa sổ `conhost` cổ điển chạy SSH (plink) live tới VM, chụp đúng cửa sổ bằng `PrintWindow` (P/Invoke, không full-screen → không lộ app khác). 10 ảnh tại `app/public/exercises/<slug>/screenshots/` (syslog 4 gồm FAIL/FIX perm, boot 3, swap 3). Tooling: `tools/capture.bat` + `tools/remote/*.sh` (transcript scripts; sudo password qua stdin, không hiện trên màn hình). `demo[].screenshot.src` dùng **full URL** (`https://hoc-cloud.inetdev.io.vn/...`) để copy markdown sang hệ khác vẫn xem được ảnh. Patch DB: `patch-exercise-demo-screenshots.js`. (`tools/render_terminal.py` — bản render PIL ban đầu, đã thay bằng ảnh chụp thật.)
 
 ---
 
