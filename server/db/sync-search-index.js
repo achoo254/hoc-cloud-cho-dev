@@ -1,5 +1,5 @@
 import { getMeiliClient } from './meilisearch-client.js';
-import { Lab } from './models/index.js';
+import { Lab, Exercise } from './models/index.js';
 
 // Caps keep a single document under Meili's default 2MB payload ceiling.
 // Order within each field groups conceptually related text so highlighting
@@ -93,6 +93,7 @@ function labToSearchDoc(lab) {
   return {
     id: lab.slug,
     slug: lab.slug,
+    type: 'lab',
     title: lab.title || '',
     module: lab.module || '',
     tldrText: extractTldrText(lab.tldr),
@@ -100,6 +101,57 @@ function labToSearchDoc(lab) {
     quizText: extractQuizText(lab.quiz),
     flashcardText: extractFlashcardText(lab.flashcards),
     tryAtHomeText: extractTryAtHomeText(lab.tryAtHome),
+  };
+}
+
+// ── Exercises (Bài Tập) ─────────────────────────────────────────────────────
+// Share the "labs" index with a `type` discriminator so one /api/search query
+// returns both. Exercise content is mapped into the SAME field names labs use
+// (tldrText/walkthroughText/tryAtHomeText) → preview/highlight logic in
+// search-routes.js works unchanged. Id is namespaced ("exercise:<slug>") to
+// avoid colliding with a lab that happens to share the slug.
+
+const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ');
+
+// guide[]: { instruction(HTML), command, note(HTML) }
+function extractExerciseGuideText(guide) {
+  if (!Array.isArray(guide)) return '';
+  const parts = [];
+  for (const g of guide) {
+    if (!g || typeof g !== 'object') continue;
+    parts.push(stripHtml(g.instruction), g.command, stripHtml(g.note));
+  }
+  return joinTexts(parts);
+}
+
+// demo[]: { what(HTML), command, output(HTML), note(HTML) }
+function extractExerciseDemoText(demo) {
+  if (!Array.isArray(demo)) return '';
+  const parts = [];
+  for (const d of demo) {
+    if (!d || typeof d !== 'object') continue;
+    parts.push(stripHtml(d.what), d.command, stripHtml(d.output), stripHtml(d.note));
+  }
+  return joinTexts(parts);
+}
+
+function exerciseToSearchDoc(ex) {
+  const refs = Array.isArray(ex.references) ? ex.references.map((r) => r?.label) : [];
+  const cmds = [
+    ...(Array.isArray(ex.guide) ? ex.guide.map((g) => g?.command) : []),
+    ...(Array.isArray(ex.demo) ? ex.demo.map((d) => d?.command) : []),
+  ];
+  return {
+    id: `exercise:${ex.slug}`,
+    slug: ex.slug,
+    type: 'exercise',
+    title: ex.title || '',
+    module: ex.topic || '',
+    tldrText: joinTexts([stripHtml(ex.brief), ex.topic, ...(ex.tags || [])]),
+    walkthroughText: joinTexts([extractExerciseGuideText(ex.guide), extractExerciseDemoText(ex.demo)]),
+    quizText: '',
+    flashcardText: '',
+    tryAtHomeText: joinTexts([...cmds, ...refs]),
   };
 }
 
@@ -148,5 +200,42 @@ export async function deleteLabFromIndex(slug) {
   const index = meili.index('labs');
 
   await index.deleteDocument(slug);
+  return { deleted: slug };
+}
+
+export async function syncExercisesToMeilisearch() {
+  const meili = getMeiliClient();
+  const index = meili.index('labs');
+
+  await applyIndexSettings(index);
+
+  const exercises = await Exercise.find().lean();
+  const docs = exercises.map(exerciseToSearchDoc);
+
+  if (docs.length === 0) {
+    console.log('[meilisearch] No exercises to sync');
+    return { synced: 0 };
+  }
+
+  const task = await index.addDocuments(docs, { primaryKey: 'id' });
+  await meili.tasks.waitForTask(task.taskUid);
+  console.log(`[meilisearch] Synced ${docs.length} exercises`);
+
+  return { synced: docs.length, taskUid: task.taskUid };
+}
+
+export async function syncSingleExercise(ex) {
+  const meili = getMeiliClient();
+  const index = meili.index('labs');
+
+  await index.addDocuments([exerciseToSearchDoc(ex)], { primaryKey: 'id' });
+  return { synced: 1 };
+}
+
+export async function deleteExerciseFromIndex(slug) {
+  const meili = getMeiliClient();
+  const index = meili.index('labs');
+
+  await index.deleteDocument(`exercise:${slug}`);
   return { deleted: slug };
 }

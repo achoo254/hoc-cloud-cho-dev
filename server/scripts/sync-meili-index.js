@@ -1,7 +1,7 @@
 /**
  * sync-meili-index.js
  *
- * Bulk re-sync toàn bộ lab từ MongoDB → Meilisearch index "labs".
+ * Bulk re-sync toàn bộ lab + bài tập từ MongoDB → Meilisearch index "labs".
  * Dùng khi content được ghi thẳng vào Mongo (vd seed script) không qua tiến trình
  * server đang chạy, nên post-save hook không bắn tới đúng Meili của môi trường đó.
  *
@@ -14,7 +14,7 @@
  */
 
 import { connectMongo, disconnectMongo } from '../db/mongo-client.js';
-import { syncLabsToMeilisearch } from '../db/sync-search-index.js';
+import { syncLabsToMeilisearch, syncExercisesToMeilisearch } from '../db/sync-search-index.js';
 import { getMeiliStatus } from '../db/meilisearch-client.js';
 
 async function main() {
@@ -27,8 +27,9 @@ async function main() {
       process.exitCode = 2;
       return;
     }
-    const res = await syncLabsToMeilisearch();
-    console.log('[meili] done:', JSON.stringify(res));
+    const labRes = await syncLabsToMeilisearch();
+    const exRes = await syncExercisesToMeilisearch();
+    console.log('[meili] done:', JSON.stringify({ labs: labRes, exercises: exRes }));
   } finally {
     await disconnectMongo();
   }

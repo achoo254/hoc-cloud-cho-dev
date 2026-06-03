@@ -57,7 +57,7 @@ export default function SearchPage() {
           {data.map((result: SearchResult) => (
             <Link
               key={result.slug}
-              to={`/lab/${result.slug}`}
+              to={result.type === 'exercise' ? `/exercise/${result.slug}` : `/lab/${result.slug}`}
               className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
             >
               <Card className="hover:border-primary/50 transition-colors">

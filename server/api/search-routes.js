@@ -47,6 +47,7 @@ export const searchRoutes = new Hono()
 
       const results = searchResult.hits.map(hit => ({
         slug: hit.slug,
+        type: hit.type === 'exercise' ? 'exercise' : 'lab',
         module: hit.module,
         title: hit._formatted?.title || hit.title,
         preview: pickPreview(hit._formatted).slice(0, 300),

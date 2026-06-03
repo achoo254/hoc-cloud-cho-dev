@@ -9,6 +9,8 @@ import { z } from 'zod'
 
 export const SearchResultSchema = z.object({
   slug: z.string(),
+  /** 'lab' → /lab/:slug, 'exercise' → /exercise/:slug. Default 'lab' (back-compat). */
+  type: z.enum(['lab', 'exercise']).optional(),
   title: z.string(),
   module: z.string().optional(),
   /** HTML snippet with <mark> highlights */
