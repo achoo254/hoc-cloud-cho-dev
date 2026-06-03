@@ -1,7 +1,5 @@
 import { Hono } from 'hono';
 import { Exercise } from '../db/models/index.js';
-import { requireAuth } from '../auth/require-auth.js';
-import { requireOwner } from '../auth/require-owner.js';
 
 const SLUG_RE = /^[a-z0-9-]{1,64}$/i;
 
@@ -35,11 +33,9 @@ function toIndexEntry(doc) {
   };
 }
 
-// Owner-gate áp inline trên TỪNG route (requireAuth → 401, requireOwner → 403).
-// Per-route middleware chạy đúng 1 lần và phủ chính xác route đó — không rò sang
-// route khác (labs/progress/search) khi mount chung app, không double-exec.
+// Public: ai cũng xem được mục Bài Tập (đồng nhất với labs/search — không gate).
 export const exercisesRoutes = new Hono()
-  .get('/api/exercises', requireAuth, requireOwner, async (c) => {
+  .get('/api/exercises', async (c) => {
     const rows = await Exercise.find({})
       .select('slug title topic tags estimatedMinutes updatedAt')
       .sort({ topic: 1, slug: 1 })
@@ -47,7 +43,7 @@ export const exercisesRoutes = new Hono()
     return c.json({ exercises: rows.map(toIndexEntry) });
   })
 
-  .get('/api/exercises/:slug', requireAuth, requireOwner, async (c) => {
+  .get('/api/exercises/:slug', async (c) => {
     const slug = c.req.param('slug');
     if (!SLUG_RE.test(slug)) {
       return c.json({ error: 'invalid_slug' }, 400);

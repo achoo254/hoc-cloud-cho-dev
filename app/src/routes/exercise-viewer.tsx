@@ -1,23 +1,21 @@
 /**
- * exercise-viewer.tsx — Route /exercise/:slug. Render 1 bài tập (owner-gated).
- * 403/401 → forbidden; 404 → not-found.
+ * exercise-viewer.tsx — Route /exercise/:slug. Render 1 bài tập (public).
+ * 404 → not-found; lỗi khác → error.
  */
 
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Lock } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ExerciseRenderer } from '@/components/exercise/exercise-renderer'
-import { getExerciseContent, ApiError, type ExerciseContent } from '@/lib/api'
-import { useAuth } from '@/contexts/auth-context'
+import { getExerciseContent, type ExerciseContent } from '@/lib/api'
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'found'; exercise: ExerciseContent }
   | { status: 'not-found' }
-  | { status: 'forbidden' }
   | { status: 'error'; message: string }
 
 function BackBar() {
@@ -33,15 +31,9 @@ function BackBar() {
 
 export default function ExerciseViewerPage() {
   const { slug } = useParams<{ slug: string }>()
-  const { isOwner, isLoading: authLoading } = useAuth()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
 
   useEffect(() => {
-    if (authLoading) return
-    if (!isOwner) {
-      setState({ status: 'forbidden' })
-      return
-    }
     if (!slug) {
       setState({ status: 'not-found' })
       return
@@ -55,18 +47,14 @@ export default function ExerciseViewerPage() {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-          setState({ status: 'forbidden' })
-          return
-        }
         setState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
       })
     return () => {
       cancelled = true
     }
-  }, [slug, isOwner, authLoading])
+  }, [slug])
 
-  if (state.status === 'loading' || authLoading) {
+  if (state.status === 'loading') {
     return (
       <div className="container py-8 animate-pulse">
         <div className="mb-6 h-8 w-32 rounded bg-muted" />
@@ -75,24 +63,6 @@ export default function ExerciseViewerPage() {
           <div className="h-4 w-full rounded bg-muted" />
           <div className="h-4 w-5/6 rounded bg-muted" />
         </div>
-      </div>
-    )
-  }
-
-  if (state.status === 'forbidden') {
-    return (
-      <div className="container py-8">
-        <BackBar />
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" aria-hidden="true" /> Mục riêng tư
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Bài tập chỉ dành cho owner.</p>
-          </CardContent>
-        </Card>
       </div>
     )
   }

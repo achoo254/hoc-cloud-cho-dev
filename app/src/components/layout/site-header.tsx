@@ -5,12 +5,10 @@ import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/use-theme'
 import { useReducedMotionPreference } from '@/lib/hooks/use-reduced-motion-preference'
 import { LoginButton } from '@/components/auth/login-button'
-import { useAuth } from '@/contexts/auth-context'
 
 export function SiteHeader() {
   const { theme, toggleTheme } = useTheme()
   const reduce = useReducedMotionPreference()
-  const { isOwner } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -35,14 +33,12 @@ export function SiteHeader() {
           >
             Search
           </Link>
-          {isOwner && (
-            <Link
-              to="/exercises"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Bài Tập
-            </Link>
-          )}
+          <Link
+            to="/exercises"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Bài Tập
+          </Link>
         </nav>
 
         {/* Right side actions */}
