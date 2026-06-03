@@ -15,7 +15,11 @@ import { connectMongo, disconnectMongo } from '../db/mongo-client.js';
 import { Exercise } from '../db/models/index.js';
 
 const BASE = 'https://hoc-cloud.inetdev.io.vn';
-const img = (slug, file) => `${BASE}/exercises/${slug}/screenshots/${file}`;
+// Cache-buster: site sau Cloudflare với Cache-Control immutable (max-age 1 năm).
+// Khi render lại ảnh (cùng filename), phải bump ASSET_VERSION để FE request URL mới
+// → Cloudflare MISS → fetch ảnh mới từ origin. Bump giá trị này mỗi lần đổi nội dung ảnh.
+const ASSET_VERSION = '260603';
+const img = (slug, file) => `${BASE}/exercises/${slug}/screenshots/${file}?v=${ASSET_VERSION}`;
 
 const DEMOS = {
   syslog: [
