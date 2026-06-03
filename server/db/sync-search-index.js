@@ -108,8 +108,10 @@ function labToSearchDoc(lab) {
 // Share the "labs" index with a `type` discriminator so one /api/search query
 // returns both. Exercise content is mapped into the SAME field names labs use
 // (tldrText/walkthroughText/tryAtHomeText) → preview/highlight logic in
-// search-routes.js works unchanged. Id is namespaced ("exercise:<slug>") to
-// avoid colliding with a lab that happens to share the slug.
+// search-routes.js works unchanged. Id is namespaced ("ex_<slug>") to avoid
+// colliding with a lab that shares the slug. Separator MUST be "_"/"-": Meili
+// document ids only allow [a-zA-Z0-9-_], so ":" gets the whole batch rejected.
+const EX_ID_PREFIX = 'ex_';
 
 const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ');
 
@@ -142,7 +144,7 @@ function exerciseToSearchDoc(ex) {
     ...(Array.isArray(ex.demo) ? ex.demo.map((d) => d?.command) : []),
   ];
   return {
-    id: `exercise:${ex.slug}`,
+    id: `${EX_ID_PREFIX}${ex.slug}`,
     slug: ex.slug,
     type: 'exercise',
     title: ex.title || '',
@@ -218,7 +220,12 @@ export async function syncExercisesToMeilisearch() {
   }
 
   const task = await index.addDocuments(docs, { primaryKey: 'id' });
-  await meili.tasks.waitForTask(task.taskUid);
+  const done = await meili.tasks.waitForTask(task.taskUid);
+  if (done.status !== 'succeeded') {
+    // Surface failures instead of returning a false "synced" count.
+    console.warn(`[meilisearch] exercise sync task ${done.uid} ${done.status}:`, done.error?.message || '');
+    return { synced: 0, failed: docs.length, status: done.status };
+  }
   console.log(`[meilisearch] Synced ${docs.length} exercises`);
 
   return { synced: docs.length, taskUid: task.taskUid };
@@ -236,6 +243,6 @@ export async function deleteExerciseFromIndex(slug) {
   const meili = getMeiliClient();
   const index = meili.index('labs');
 
-  await index.deleteDocument(`exercise:${slug}`);
+  await index.deleteDocument(`${EX_ID_PREFIX}${slug}`);
   return { deleted: slug };
 }
