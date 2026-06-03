@@ -4,6 +4,13 @@ Reverse-chronological. Format: `## YYYY-MM-DD — <summary>`.
 
 ---
 
+## 2026-06-03 — Mục "Bài Tập" chuyển PUBLIC + dọn dead code owner-gate
+
+- **Public hoá**: gỡ owner-gate khỏi mục Bài Tập — ai cũng xem được (đồng nhất labs/search). BE bỏ `requireAuth`/`requireOwner` khỏi `/api/exercises` + `/:slug`; FE bỏ `isOwner` gate + forbidden states (`exercises.tsx`, `exercise-viewer.tsx`), nav "Bài Tập" luôn hiện (`site-header.tsx`).
+- **Xoá hẳn dead code**: `server/auth/require-owner.js` (deleted); `isOwner` khỏi `auth-context.tsx`; env `OWNER_EMAIL`/`VITE_OWNER_EMAIL` khỏi `.env*` + `app/.env*` + `deploy.yml` (build & runtime); GitHub secret `OWNER_EMAIL` (removed).
+- **Demo SSH mới** (syslog step 5): SSH login client 172 → server 171 nhận `sshd.log` (Accepted/Failed/Invalid user). Re-render toàn bộ ảnh terminal exercises + 3 panel DHCP cho sạch comment (không lộ AI); thêm `?v` cache-buster (Cloudflare immutable). Fix UTF-8 `render_terminal.py`.
+- Verify: typecheck pass; anon `/api/exercises`→**200** (live).
+
 ## 2026-06-02 (v2) — Mục "Bài Tập" (Exercises) owner-gated + chuyển 3 lab Linux sang
 
 - Thêm tính năng **Bài Tập** riêng tư (owner-gated): collection `exercises` độc lập, mỗi bài = **Đề bài → Hướng dẫn thực hiện → Demo thực tế**. Tối giản (không quiz/flashcards/progress/Meili/SM-2).
