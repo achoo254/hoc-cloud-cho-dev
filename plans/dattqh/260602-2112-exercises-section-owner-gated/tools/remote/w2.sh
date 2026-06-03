@@ -5,4 +5,3 @@ echo 'dattqh-client@dattqh-client:~$ sudo mkswap /swapfile-demo'
 S mkswap /swapfile-demo 2>&1 | head -2
 echo 'dattqh-client@dattqh-client:~$ sudo swapon /swapfile-demo && swapon --show'
 S swapon /swapfile-demo; swapon --show
-echo '# swapfile phu priority -3, tong swap 2.0Gi -> 2.5Gi'

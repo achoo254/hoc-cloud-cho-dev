@@ -35,6 +35,10 @@ const DEMOS = {
       screenshot: { src: img('syslog', 'syslog-4-fix-received.png'),
         alt: 'sau chown syslog:syslog, find ra file, grep thấy LAB-SYSLOG-OK',
         caption: 'Sau <code>chown syslog:syslog</code>: log client lưu theo cây <code>/var/log/remote/&lt;host&gt;/&lt;prog&gt;.log</code>.' } },
+    { step: 5, what: '<strong>Demo thực tế — SSH vào client 172, server 171 nhận log sshd</strong>',
+      screenshot: { src: img('syslog', 'syslog-5-ssh-auth.png'),
+        alt: 'grep sshd.log trên server 171: Failed/Accepted/Invalid user forward từ client 172',
+        caption: 'SSH vào <code>192.168.122.172</code> (1 đăng nhập đúng + 1 sai mật khẩu): sự kiện <code>sshd</code> trên client forward TCP 514 về server, lưu tại <code>/var/log/remote/dattqh-client/sshd.log</code> — log tập trung bắt được cả <code>Accepted</code> hợp lệ lẫn <code>Failed/Invalid user</code> (dò mật khẩu), không cần đăng nhập vào từng máy.' } },
   ],
   'linux-boot-process': [
     { step: 1, what: '<strong>Đo boot + tìm thủ phạm (VM chậm 171)</strong>',

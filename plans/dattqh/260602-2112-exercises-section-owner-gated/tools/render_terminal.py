@@ -52,7 +52,9 @@ def softwrap(line):
 def main():
     out_path = sys.argv[1]
     title = sys.argv[2] if len(sys.argv) > 2 else "terminal"
-    raw = sys.stdin.read().rstrip("\n").split("\n")
+    # Decode stdin as UTF-8 explicitly — Windows default codec (cp1252) garbles
+    # non-ASCII output such as systemd's "●" status bullet.
+    raw = sys.stdin.buffer.read().decode("utf-8", "replace").rstrip("\n").split("\n")
 
     # Expand wrapped lines, remember styling per visual line.
     vlines = []  # (kind, payload)

@@ -5,4 +5,3 @@ echo 'dattqh-nat@dattqh-nat:~$ free -h'
 free -h
 echo 'dattqh-nat@dattqh-nat:~$ cat /proc/sys/vm/swappiness'
 cat /proc/sys/vm/swappiness
-echo '# swap = file /swap.img 2G, priority -2, swappiness 60'
