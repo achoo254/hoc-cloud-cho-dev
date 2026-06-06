@@ -37,6 +37,7 @@ const { searchRoutes } = await import('./api/search-routes.js');
 const { progressRoutes } = await import('./api/progress-routes.js');
 const { leaderboardRoutes } = await import('./api/leaderboard-routes.js');
 const { labsRoutes } = await import('./api/labs-routes.js');
+const { exercisesRoutes } = await import('./api/exercises-routes.js');
 const { authRoutes } = await import('./auth/firebase-auth.js');
 const { sessionMiddleware } = await import('./auth/session-middleware.js');
 
@@ -100,6 +101,7 @@ app.route('/', searchRoutes);
 app.route('/', progressRoutes);
 app.route('/', leaderboardRoutes);
 app.route('/', labsRoutes);
+app.route('/', exercisesRoutes);
 
 app.notFound((c) => c.text('Not Found', 404));
 
@@ -108,3 +110,18 @@ const port = Number(process.env.PORT) || 8387;
 serve({ fetch: app.fetch, port, hostname: process.env.HOST || '127.0.0.1' }, (info) => {
   console.log(`[hoc-cloud-labs] serving on http://${info.address}:${info.port}`);
 });
+
+// Boot-time Meilisearch sync (labs + exercises). Prod Meili is localhost-only
+// (not publicly reachable), so the running server self-indexes from Mongo on every
+// start instead of relying on a manual remote re-sync. Fire-and-forget + guarded so
+// Meili downtime never blocks serving; addDocuments is an idempotent upsert.
+(async () => {
+  try {
+    const { syncLabsToMeilisearch, syncExercisesToMeilisearch } = await import('./db/sync-search-index.js');
+    const labs = await syncLabsToMeilisearch();
+    const exercises = await syncExercisesToMeilisearch();
+    console.log('[hoc-cloud-labs] meili boot-sync:', JSON.stringify({ labs, exercises }));
+  } catch (err) {
+    console.warn('[hoc-cloud-labs] meili boot-sync skipped:', err.message);
+  }
+})();

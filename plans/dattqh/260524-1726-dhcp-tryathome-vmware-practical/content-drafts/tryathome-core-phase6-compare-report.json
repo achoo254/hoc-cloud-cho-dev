@@ -1,0 +1,32 @@
+{
+  "phaseType": "core",
+  "title": "Phase 6 — So sánh Case A vs Case B + Báo cáo",
+  "sbsSection": "§9",
+  "vmTarget": "host",
+  "estimatedMinutes": 15,
+  "why": "Tổng hợp + so sánh 2 case để hiểu rõ <strong>vị trí của cơ chế bảo vệ</strong> trong DHCP lifecycle (TRƯỚC OFFER vs SAU ACK). Phần này là deliverable cuối — bảng so sánh + best practice phòng ngừa, dùng cho báo cáo bài tập.",
+  "cmd": "# Tổng kết — so sánh 2 case (markdown table — không cần command nào)\n\n# Case A — Manual TRƯỚC: Client2 static .100 trước, Client1 DHCP sau\n#   Cơ chế: Client1 ARP Probe → conflict → DECLINE → server abandons .100\n#   Kết quả: Client1 nhận .101 (next in pool)\n#   IP pool: .100 vào trạng thái 'abandoned' → pool teo dần\n\n# Case B — Manual SAU / Clone share machine-id: 2 client cùng claim .100\n#   Cơ chế: server không re-check sau ACK; cả 2 client gán .100 → ARP flap\n#   Kết quả: cả 2 client cùng IP, traffic L3 deliver ngẫu nhiên\n#   IP pool: lease entry alternating giữa 2 MAC, vẫn 'active'",
+  "observeWith": "Bảng so sánh trong báo cáo + bài học rút ra. Không cần evidence runtime — đây là phase tổng hợp.",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Bảng so sánh 2 case",
+      "expect": "<table><thead><tr><th>Tiêu chí</th><th>Case A (manual TRƯỚC)</th><th>Case B (manual SAU / clone)</th></tr></thead><tbody><tr><td>Thời điểm conflict</td><td>Server đang OFFER, Client1 chưa commit</td><td>Cả 2 client đã ACK rồi</td></tr><tr><td>Bên phát hiện</td><td>Client1 (ARP Probe RFC 5227)</td><td>Bên ngoài (router/switch/arping)</td></tr><tr><td>Bên 'thua' xung đột</td><td>Server (abandons IP, cấp khác)</td><td>Không bên nào lùi → cả 2 cùng claim</td></tr><tr><td>Gói đặc trưng</td><td>ARP Probe (sender 0.0.0.0) + DHCPDECLINE</td><td>ARP Reply 2 MAC cùng IP (Gratuitous-like)</td></tr><tr><td>Lease DB state</td><td>binding state <code>abandoned</code></td><td>Multiple <code>active</code> entries cùng IP</td></tr><tr><td>Hậu quả lâu dài</td><td>Pool teo dần (abandoned IP không tái cấp)</td><td>Đứt mạng intermittent, ARP cache flap</td></tr><tr><td>Phát hiện qua log</td><td>dhcpd: <code>DHCPDECLINE ... abandoned</code></td><td>Lặng lẽ — dhcpd không log warning</td></tr></tbody></table>"
+    },
+    {
+      "n": 2,
+      "do": "Vai trò MAC trong toàn bộ flow",
+      "expect": "<table><thead><tr><th>Giai đoạn</th><th>Field chứa MAC</th><th>Vai trò</th></tr></thead><tbody><tr><td>DHCP Discover/Request</td><td><code>chaddr</code> (BOOTP header) + Option 61 Client-Id</td><td>Định danh Client để server tạo lease binding</td></tr><tr><td>DHCP Offer/ACK</td><td><code>chaddr</code> echo lại + lease table</td><td>Đảm bảo same MAC → same IP mỗi lần xin (sticky lease)</td></tr><tr><td>ARP Probe (RFC 5227)</td><td>Sender MAC, Sender IP=<code>0.0.0.0</code></td><td>Hỏi 'có ai dùng IP này không?' trước khi commit</td></tr><tr><td>Gratuitous ARP / IP conflict</td><td>Sender MAC, Sender IP=Target IP</td><td>Tuyên bố 'IP này của tôi' / dấu hiệu conflict khi 2 MAC cùng announce</td></tr></tbody></table>"
+    },
+    {
+      "n": 3,
+      "do": "Best practice phòng ngừa (production checklist)",
+      "expect": "<ol><li><strong>IP scheme rõ ràng</strong>: tách subnet hoặc range tĩnh ngoài DHCP pool (vd subnet <code>/24</code>, tĩnh <code>.10-.99</code>, DHCP pool <code>.100-.200</code>).</li><li><strong>DHCP Reservation</strong>: cho thiết bị cần IP cố định (printer, server, IP camera) — dùng <code>host { hardware ethernet ...; fixed-address ...; }</code> để dhcpd quản lý, tránh user setting tay.</li><li><strong>Server-side ping-check</strong>: bật <code>ping-check true; ping-timeout 1;</code> trong dhcpd.conf (Optional O2) — server ICMP echo trước OFFER, abandon IP nếu có reply. Lưu ý: yêu cầu dhcpd chạy as root để có <code>CAP_NET_RAW</code>.</li><li><strong>L2 protection ở switch</strong>: DHCP Snooping (build binding table từ DHCP traffic) + Dynamic ARP Inspection (DAI block ARP reply không khớp binding) + Source Guard.</li><li><strong>IPAM tool</strong>: NetBox / phpIPAM track cả IP tĩnh + DHCP — single source of truth, alert khi conflict.</li><li><strong>VM clone discipline</strong>: regenerate machine-id sau full clone: <code>sudo rm /etc/machine-id /var/lib/dbus/machine-id &amp;&amp; sudo systemd-machine-id-setup &amp;&amp; sudo reboot</code>. Đổi hostname để Client-Id unique.</li><li><strong>Monitoring</strong>: alert khi log dhcpd có <code>DHCPDECLINE</code> hoặc <code>abandoned</code> liên tục, hoặc ARP flap ở switch.</li></ol>"
+    }
+  ],
+  "analysis": {
+    "observation": "Hai case có cơ chế bảo vệ ở 2 vị trí khác nhau trong DHCP lifecycle: <strong>Case A bảo vệ TRƯỚC OFFER</strong> (server ping-check) hoặc <strong>TRƯỚC ACK</strong> (client ARP probe + DECLINE). <strong>Case B không có bảo vệ tự động</strong> sau ACK — phải dựa vào L2 (switch DAI) hoặc giám sát bên ngoài.",
+    "mechanism": "DHCP protocol (RFC 2131) thiết kế gốc cho mạng tin cậy: server cấp IP, client commit, không có handshake re-validation định kỳ. Cơ chế bảo vệ conflict được bổ sung qua: (1) RFC 5227 ARP Probe (client-side, mandatory cho ACD - Address Conflict Detection), (2) ISC dhcpd <code>ping-check</code> extension (server-side, optional, không trong RFC), (3) L2 mechanisms (DHCP snooping + DAI) ngoài DHCP protocol.",
+    "lesson": "Khi thiết kế hệ thống production: <strong>không tin DHCP server một mình</strong>. Combine 4 layers: (1) IP scheme tách bạch tĩnh/động, (2) DHCP reservation cho thiết bị quan trọng, (3) ping-check + ARP probe enabled, (4) L2 protection ở switch. Bài lab này demo lý do tại sao single layer KHÔNG đủ — Case A pool teo dần, Case B mạng loạn ngầm. Real-world cần defense-in-depth."
+  }
+}

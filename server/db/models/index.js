@@ -1,4 +1,5 @@
 export { Lab } from './lab-model.js';
+export { Exercise } from './exercise-model.js';
 export { User } from './user-model.js';
 export { Session } from './session-model.js';
 export { Progress } from './progress-model.js';

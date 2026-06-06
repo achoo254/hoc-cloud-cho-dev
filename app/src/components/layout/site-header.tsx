@@ -33,6 +33,12 @@ export function SiteHeader() {
           >
             Search
           </Link>
+          <Link
+            to="/exercises"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Bài Tập
+          </Link>
         </nav>
 
         {/* Right side actions */}

@@ -10,6 +10,8 @@ import { IcmpPingConceptCards } from './icmp-ping-concept-cards'
 import { IcmpPingVisualizer } from './icmp-ping-visualizer'
 import { PlaygroundShell } from './shared'
 import { MisconceptionsSection } from '../misconceptions-section'
+import { PacketDecoder } from './shared/packet-decoder'
+import { icmpPingCapture } from './shared/sample-captures/icmp-ping-capture'
 import type { DiagramComponentProps } from './registry'
 
 export function IcmpPingPlayground({ lab, seeExtraContent, tryItContent }: DiagramComponentProps) {
@@ -28,6 +30,10 @@ export function IcmpPingPlayground({ lab, seeExtraContent, tryItContent }: Diagr
           <section>
             <h3 className="text-lg font-semibold mb-4">ICMP Ping & Traceroute Animation</h3>
             <IcmpPingVisualizer />
+          </section>
+          <section>
+            <h3 className="text-lg font-semibold mb-4">tcpdump capture — ICMP echo request/reply</h3>
+            <PacketDecoder defaultPackets={icmpPingCapture} title="ICMP echo (sample capture)" />
           </section>
         </div>
       }

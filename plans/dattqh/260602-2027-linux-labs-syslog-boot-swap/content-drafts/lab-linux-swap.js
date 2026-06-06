@@ -1,0 +1,291 @@
+// Lab content — Swap: khi nào dùng, cấu hình. Shape camelCase (Mongo).
+// Practical từ output THẬT trên dattqh-nat/dattqh-client (Ubuntu 24.04, 4GB RAM, /swap.img 2G,
+// swappiness=60). Demo swapfile phụ đã chạy thật trên 172. Citations: man swapon/mkswap(8),
+// proc(5), kernel vm sysctl docs, Ubuntu SwapFaq.
+
+export default {
+  slug: 'linux-swap',
+  module: '02-linux',
+  title: 'Swap — khi nào dùng và cấu hình',
+  estimatedMinutes: 35,
+
+  misconceptions: [
+    {
+      wrong: 'Thêm swap giống thêm RAM, máy sẽ chạy nhanh hơn.',
+      right: 'Swap là vùng trên đĩa để chứa anonymous page khi RAM thiếu. Truy cập swap chậm hơn RAM nhiều bậc; thêm swap KHÔNG tăng tốc, chỉ tránh bị OOM-kill khi RAM cạn.',
+      why: 'P1: Kernel quản lý bộ nhớ theo page; "anonymous page" (heap/stack, không gắn file) khi cần giải phóng RAM chỉ có thể đẩy ra swap, khác với page cache file-backed có thể ghi lại file gốc. P2: Đọc/ghi swap đi qua block device (file <code>/swap.img</code> hoặc partition) — độ trễ µs–ms so với ns của RAM; <code>vmstat</code> cột <code>si</code>/<code>so</code> đo lượng swap-in/out. P3: Khi process active bị swap (thrashing), latency tăng vọt — thêm swap không giải quyết thiếu RAM, chỉ đổi "crash vì OOM" thành "chậm vì thrash"; giải pháp đúng là đủ RAM hoặc giảm footprint.',
+    },
+    {
+      wrong: 'Đặt vm.swappiness=0 sẽ tắt swap hoàn toàn.',
+      right: '<a href="https://docs.kernel.org/admin-guide/sysctl/vm.html">swappiness</a> chỉ chỉnh độ nghiêng giữa reclaim anonymous page (swap ra) và reclaim page cache. <code>0</code> giảm tối đa xu hướng swap nhưng kernel VẪN swap khi thực sự cần để tránh OOM.',
+      why: 'P1: swappiness (0–200, mặc định 60 trên VM lab) là tham số cho thuật toán reclaim, không phải công tắc bật/tắt swap. P2: Giá trị thấp ưu tiên giữ anonymous page trong RAM và reclaim page cache trước; giá trị cao nghiêng về swap anonymous page sớm hơn. Ở mức 0, kernel vẫn swap khi áp lực bộ nhớ buộc phải làm (memory cgroup hết hạn mức, RAM thật cạn). P3: Muốn TẮT swap thật sự phải <code>swapoff -a</code> + bỏ entry fstab; nhầm "swappiness=0 = tắt swap" dẫn đến bất ngờ khi máy vẫn swap dưới áp lực.',
+    },
+    {
+      wrong: 'Có swap thì không bao giờ bị OOM-killer giết process.',
+      right: 'Swap chỉ trì hoãn. Khi cả RAM lẫn swap đều cạn, OOM-killer vẫn chạy. Thậm chí swap thrashing có thể làm hệ gần như treo TRƯỚC khi OOM kích hoạt.',
+      why: 'P1: OOM-killer kích hoạt khi kernel không cấp phát được page và không reclaim thêm được — bao gồm cả khi SwapFree=0. P2: <code>/proc/meminfo</code> (SwapTotal/SwapFree) + <code>free -h</code> cho thấy dung lượng còn; khi swap đầy, mọi cấp phát mới đẩy hệ vào reclaim liên tục (thrash), load tăng, I/O bão hoà. P3: Vì vậy swap là lưới an toàn cho spike ngắn, không phải bảo hiểm vô hạn; giám sát SwapFree + <code>si/so</code> để cảnh báo sớm thay vì tin "có swap là an toàn".',
+    },
+    {
+      wrong: 'Swap chỉ được dùng khi RAM đã cạn sạch.',
+      right: 'Kernel có thể chủ động swap anonymous page "lạnh" (ít truy cập) ra trước khi RAM cạn, để dành RAM cho page cache — mức độ tuỳ swappiness. Ngoài ra hibernation (suspend-to-disk) bắt buộc cần swap ≥ RAM.',
+      why: 'P1: Reclaim là quá trình liên tục, không chỉ xảy ra ở ngưỡng cạn; kernel cân bằng giữa working set và cache. P2: Với swappiness=60, một số cold anonymous page có thể bị đẩy ra dù MemAvailable còn (VM lab 171 thấy <code>SwapCached 92 kB</code>, <code>swapon</code> USED 268K dù còn 3.3Gi available). P3: Hiểu điều này tránh hoảng khi thấy "đang có swap used dù còn RAM" — đó là hành vi bình thường; chỉ lo khi <code>si/so</code> cao liên tục (đang thrash).',
+    },
+  ],
+
+  tldr: [
+    {
+      what: 'Swap là gì',
+      why: 'P1: Vùng đĩa (partition hoặc file) kernel dùng để chứa anonymous page bị reclaim khi RAM thiếu. P2: VM lab dùng file <code>/swap.img</code> 2 GB, priority -2 (<code>swapon --show</code>); entry fstab <code>/swap.img none swap sw 0 0</code>. P3: Biết swap là file hay partition để resize/di chuyển đúng cách (file dễ resize hơn partition).',
+      whyBreaks: 'Tưởng swap là RAM ảo nhanh → thiết kế sai capacity, gặp thrash khi tải thật.',
+      deploymentUse: 'Cloud VM: swapfile linh hoạt hơn partition; kích thước theo mục đích (lưới an toàn nhỏ vs hibernation ≥ RAM).',
+    },
+    {
+      what: 'vm.swappiness',
+      why: 'P1: Tham số reclaim (0–200, mặc định 60) chỉnh nghiêng giữa swap anonymous page và bỏ page cache (<a href="https://docs.kernel.org/admin-guide/sysctl/vm.html">kernel vm docs</a>). P2: Đọc <code>cat /proc/sys/vm/swappiness</code>; chỉnh tạm <code>sudo sysctl vm.swappiness=10</code>; bền vững qua <code>/etc/sysctl.d/*.conf</code>. P3: Hạ thấp cho DB/latency-sensitive để giữ working set trong RAM; không phải công tắc tắt swap.',
+      whyBreaks: 'Set qua sysctl runtime nhưng quên ghi sysctl.d → mất sau reboot.',
+      deploymentUse: 'PostgreSQL/Redis host thường đặt swappiness 1–10 (giữ data trong RAM); workload batch chịu được latency có thể để 60.',
+    },
+    {
+      what: 'free -h / swapon --show',
+      why: 'P1: <code>free -h</code> tóm tắt Mem + Swap (total/used/free/available); <code>swapon --show</code> liệt kê thiết bị swap, size, used, priority. P2: VM lab: <code>Swap 2.0Gi used 0–268Ki</code>; <code>available</code> mới là chỉ số RAM thực còn dùng được (gồm cache có thể reclaim). P3: Đọc đúng <code>available</code> thay vì <code>free</code> để khỏi hoảng khi cache chiếm nhiều.',
+      whyBreaks: 'Nhìn cột <code>free</code> thấp rồi thêm RAM vô ích, trong khi <code>available</code> còn nhiều (cache reclaim được).',
+      deploymentUse: 'Alert dựa trên MemAvailable + SwapFree, không dựa trên "free" thô.',
+    },
+    {
+      what: 'vmstat si/so (paging thật)',
+      why: 'P1: <code>vmstat 1</code> cột <code>si</code> (swap-in KB/s) và <code>so</code> (swap-out KB/s) đo hoạt động swap đang diễn ra. P2: VM lab lúc nhàn rỗi <code>si=0 so=0</code>; số này cao liên tục = đang thrash. P3: Là chỉ số phân biệt "có swap dùng" (bình thường) với "đang swap liên tục" (vấn đề hiệu năng).',
+      whyBreaks: 'Chỉ nhìn "Swap used" tĩnh, bỏ qua si/so → không phát hiện thrashing đang giết hiệu năng.',
+      deploymentUse: 'Đưa si/so vào dashboard; cảnh báo khi so>0 kéo dài trên host latency-sensitive.',
+    },
+    {
+      what: 'Tạo swapfile (quy trình)',
+      why: 'P1: <a href="https://man7.org/linux/man-pages/man8/mkswap.8.html">mkswap(8)</a> + <a href="https://man7.org/linux/man-pages/man8/swapon.8.html">swapon(8)</a>: <code>fallocate -l SIZE file</code> → <code>chmod 600</code> → <code>mkswap file</code> → <code>swapon file</code>. P2: Demo thật trên 172: thêm <code>/swapfile-demo</code> 512M → <code>swapon --show</code> hiện 2 swap, priority mới <code>-3</code> (kernel tự gán âm giảm dần). P3: Quy trình này dùng để thêm/đổi swap mà không cần partition.',
+      whyBreaks: 'Quên <code>chmod 600</code> → <code>swapon</code> cảnh báo "insecure permissions"; file có lỗ hổng (sparse) → swap không ổn định.',
+      deploymentUse: 'Thêm swapfile trên cloud VM khi cần lưới an toàn; ghi fstab để bền qua reboot.',
+    },
+    {
+      what: 'fstab + priority',
+      why: 'P1: <a href="https://man7.org/linux/man-pages/man5/fstab.5.html">fstab(5)</a> entry <code>/swap.img none swap sw 0 0</code> kích hoạt swap khi boot. P2: Nhiều swap: ưu tiên qua option <code>pri=N</code> (cao dùng trước); không đặt thì kernel gán âm giảm dần (-2, -3…) như demo. P3: Sắp priority để dùng swap nhanh (NVMe) trước swap chậm.',
+      whyBreaks: 'Thêm swapfile chạy runtime nhưng quên fstab → mất sau reboot, lưới an toàn biến mất lúc cần.',
+      deploymentUse: 'Đặt swap NVMe <code>pri=100</code>, swap HDD <code>pri=10</code> để kernel ưu tiên thiết bị nhanh.',
+    },
+  ],
+
+  walkthrough: [
+    {
+      step: 1,
+      what: 'Kernel phân loại page: anonymous vs file-backed',
+      why: 'RAM chứa hai loại page chính: file-backed (page cache, có thể ghi lại/đọc lại từ file) và anonymous (heap/stack, không gắn file). Khi cần giải phóng RAM, file-backed có thể bỏ dễ; anonymous BẮT BUỘC ghi ra swap mới giải phóng được. Đây là lý do swap tồn tại.',
+      whyBreaks: 'Không có swap + RAM cạn → anonymous page không reclaim được → OOM-killer giết process sớm.',
+      observeWith: 'cat /proc/meminfo xem Cached (file-backed) vs AnonPages; free -h cột buff/cache.',
+      code: '# Phân loại bộ nhớ\ngrep -E \'MemTotal|MemAvailable|AnonPages|Cached|SwapTotal|SwapFree\' /proc/meminfo',
+    },
+    {
+      step: 2,
+      what: 'Áp lực bộ nhớ → kernel reclaim',
+      why: 'Khi cấp phát làm RAM khả dụng xuống thấp, kernel chạy reclaim: ghi/bỏ page cache và/hoặc swap anonymous page ra. Mục tiêu là giữ đủ RAM cho process active mà không OOM. Reclaim diễn ra liên tục, không chỉ ở ngưỡng cạn.',
+      whyBreaks: 'Reclaim không theo kịp tốc độ cấp phát → allocation stall, latency tăng, có thể tiến tới OOM.',
+      observeWith: 'vmstat 1 cột si/so (swap activity), free/buff-cache; /proc/vmstat pgscan*/pgsteal*.',
+      code: '# Theo dõi paging real-time (Ctrl-C để dừng)\nvmstat 1 5\n# si/so = 0 khi nhàn; >0 liên tục = đang swap nhiều',
+    },
+    {
+      step: 3,
+      what: 'swappiness điều chỉnh nghiêng về đâu',
+      why: 'vm.swappiness (0–200) quyết định kernel nghiêng về swap anonymous page hay bỏ page cache khi reclaim. Mặc định 60. Thấp → giữ anonymous trong RAM, bỏ cache trước; cao → swap anonymous sớm. Đây là núm điều chỉnh hành vi, không phải bật/tắt swap.',
+      whyBreaks: 'Đặt cao trên host DB → working set bị đẩy ra swap, query chậm; đặt 0 tưởng tắt swap nhưng kernel vẫn swap khi buộc phải.',
+      observeWith: 'cat /proc/sys/vm/swappiness; sudo sysctl vm.swappiness=N (tạm); /etc/sysctl.d/*.conf (bền).',
+      code: '# Đọc + chỉnh tạm + bền vững\ncat /proc/sys/vm/swappiness          # 60\nsudo sysctl vm.swappiness=10         # tạm, mất sau reboot\necho \'vm.swappiness=10\' | sudo tee /etc/sysctl.d/99-swappiness.conf  # bền',
+    },
+    {
+      step: 4,
+      what: 'RAM + swap cùng cạn → OOM-killer',
+      why: 'Khi không còn page để cấp phát và reclaim (gồm swap) không giải phóng đủ, kernel gọi OOM-killer chọn process theo oom_score để giết, giải phóng RAM. Swap chỉ trì hoãn thời điểm này, không loại bỏ nó.',
+      whyBreaks: 'Tin "có swap là an toàn" → không giám sát; khi SwapFree=0, hệ thrash rồi OOM bất ngờ giết process quan trọng.',
+      observeWith: 'dmesg | grep -i "killed process" / journalctl -k | grep -i oom; /proc/<pid>/oom_score.',
+      code: '# Bằng chứng OOM-killer đã hành động (nếu có)\nsudo dmesg | grep -iE \'out of memory|killed process\' | tail\njournalctl -k | grep -i oom | tail',
+    },
+    {
+      step: 5,
+      what: 'Tạo + bật swapfile, persist qua fstab',
+      why: 'Quy trình chuẩn thêm swap không cần partition: fallocate cấp file, chmod 600 (bảo mật), mkswap định dạng, swapon kích hoạt, rồi ghi fstab để bền qua reboot. Đây là cách thêm lưới an toàn trên cloud VM.',
+      whyBreaks: 'Quên chmod 600 → swapon cảnh báo insecure; quên fstab → mất swap sau reboot.',
+      observeWith: 'swapon --show (hiện thiết bị mới + priority); free -h (Swap total tăng); cat /proc/swaps.',
+      code: '# Thêm swapfile 512M\nsudo fallocate -l 512M /swapfile\nsudo chmod 600 /swapfile\nsudo mkswap /swapfile\nsudo swapon /swapfile\nswapon --show\n# Persist:\necho \'/swapfile none swap sw 0 0\' | sudo tee -a /etc/fstab',
+    },
+    {
+      step: 6,
+      what: 'Quyết định: KHI NÀO dùng swap',
+      why: 'Swap hữu ích khi: (1) cần lưới an toàn cho spike RAM ngắn tránh OOM; (2) hibernation/suspend-to-disk (cần swap ≥ RAM); (3) có nhiều cold anonymous page để reclaim dành RAM cho cache. KHÔNG dùng thay RAM cho workload active lớn; nhiều môi trường container/k8s tắt swap để hành vi bộ nhớ tất định.',
+      whyBreaks: 'Dùng swap thay vì cấp đủ RAM cho DB active → thrash; bật swap trên node k8s khi kubelet không cấu hình hỗ trợ → scheduling/QoS sai lệch.',
+      observeWith: 'Quyết định theo workload: swapon --show + vmstat si/so + bản chất app (latency-sensitive?).',
+      code: '# Tắt swap (khi cần hành vi tất định, vd node k8s cổ điển)\nsudo swapoff -a\n# rồi comment dòng swap trong /etc/fstab để không bật lại khi boot',
+    },
+  ],
+
+  quiz: [
+    {
+      q: 'Vì sao thêm swap KHÔNG làm máy chạy nhanh hơn?',
+      options: [
+        'Vì swap chỉ dùng cho file tạm',
+        'Vì swap nằm trên đĩa, truy cập chậm hơn RAM nhiều bậc; nó tránh OOM chứ không tăng tốc',
+        'Vì swapping làm CPU nóng',
+        'Vì swap chỉ hoạt động khi tắt máy',
+      ],
+      correct: 1,
+      whyCorrect: 'Swap là vùng đĩa chứa anonymous page khi RAM thiếu; độ trễ đĩa lớn hơn RAM nhiều bậc. Nó là lưới an toàn tránh OOM/thrash crash, không phải "RAM nhanh".',
+      whyOthersWrong: {
+        '0': 'Swap chứa anonymous page (heap/stack), không phải file tạm; file tạm là page cache.',
+        '2': 'Không liên quan nhiệt CPU.',
+        '3': 'Swap dùng khi máy đang chạy dưới áp lực bộ nhớ.',
+      },
+    },
+    {
+      q: 'vm.swappiness=0 có ý nghĩa gì?',
+      options: [
+        'Tắt swap hoàn toàn',
+        'Giảm tối đa xu hướng swap anonymous page, nhưng kernel vẫn swap khi buộc phải để tránh OOM',
+        'Xoá swapfile',
+        'Đặt swap ưu tiên cao nhất',
+      ],
+      correct: 1,
+      whyCorrect: '<a href="https://docs.kernel.org/admin-guide/sysctl/vm.html">swappiness</a> là tham số reclaim, không phải công tắc. 0 nghiêng tối đa về giữ anonymous trong RAM/bỏ cache trước, nhưng vẫn swap khi RAM thật cạn.',
+      whyOthersWrong: {
+        '0': 'Tắt swap thật sự cần swapoff -a + sửa fstab.',
+        '2': 'swappiness không xoá file swap.',
+        '3': 'Ưu tiên thiết bị swap đặt bằng pri= trong fstab/swapon, không phải swappiness.',
+      },
+    },
+    {
+      q: 'Khi thêm swapfile thứ hai mà không đặt pri=, kernel gán priority thế nào (theo demo trên VM)?',
+      options: [
+        'Cùng priority với swap cũ',
+        'Priority dương tăng dần',
+        'Priority âm giảm dần (vd swap cũ -2, swap mới -3)',
+        'Priority luôn bằng 0',
+      ],
+      correct: 2,
+      whyCorrect: 'Demo thật: /swap.img có pri -2, thêm /swapfile-demo nhận pri -3. Không đặt pri=, kernel gán giá trị âm giảm dần; swap pri cao hơn (gần 0) được dùng trước.',
+      whyOthersWrong: {
+        '0': 'Mỗi swap mới nhận giá trị khác (giảm dần), không trùng.',
+        '1': 'Mặc định là âm giảm dần, không dương.',
+        '3': 'pri=0 chỉ khi đặt rõ; mặc định ở đây là -2/-3.',
+      },
+    },
+    {
+      q: 'Chỉ số nào phân biệt "có swap được dùng" (bình thường) với "đang thrash" (vấn đề)?',
+      options: [
+        'Cột used trong swapon --show',
+        'vmstat cột si/so (swap-in/out KB/s) cao liên tục',
+        'Số lượng swapfile',
+        'Giá trị swappiness',
+      ],
+      correct: 1,
+      whyCorrect: '<code>vmstat</code> si/so đo hoạt động swap đang diễn ra. Used tĩnh > 0 là bình thường; si/so cao liên tục nghĩa kernel đang swap qua lại liên tục = thrash, giết hiệu năng.',
+      whyOthersWrong: {
+        '0': 'used chỉ là tổng tĩnh đang nằm trong swap, không cho biết tốc độ.',
+        '2': 'Số swapfile không phản ánh hoạt động paging.',
+        '3': 'swappiness là cấu hình, không phải đo hoạt động.',
+      },
+    },
+    {
+      q: 'Trường hợp nào dưới đây swap là LỰA CHỌN hợp lý?',
+      options: [
+        'Thay cho việc cấp đủ RAM cho một DB active lớn',
+        'Lưới an toàn cho spike RAM ngắn để tránh OOM, hoặc cần hibernation (swap ≥ RAM)',
+        'Để tăng tốc đọc file',
+        'Để giảm nhiệt CPU',
+      ],
+      correct: 1,
+      whyCorrect: 'Swap hợp lý làm lưới an toàn cho spike ngắn và bắt buộc cho hibernation (cần swap ≥ RAM). Không thay RAM cho working set active lớn.',
+      whyOthersWrong: {
+        '0': 'DB active lớn cần đủ RAM; swap sẽ gây thrash, không thay được.',
+        '2': 'Tăng tốc đọc file là vai trò page cache, không phải swap.',
+        '3': 'Không liên quan nhiệt CPU.',
+      },
+    },
+  ],
+
+  flashcards: [
+    { front: 'Swap chứa loại page nào khi RAM thiếu?', back: 'Anonymous page (heap/stack) — loại không gắn file nên chỉ swap ra mới giải phóng được', why: 'Phân biệt với page cache file-backed (bỏ/ghi lại được); lý do swap tồn tại.' },
+    { front: 'vm.swappiness mặc định + ý nghĩa?', back: '60 (Ubuntu). Chỉnh nghiêng giữa swap anonymous vs bỏ page cache khi reclaim; không phải công tắc tắt swap', why: 'Hạ thấp cho DB/latency-sensitive; hiểu đúng tránh nhầm "0 = tắt swap".' },
+    { front: 'Chỉ số đo thrashing?', back: 'vmstat si/so cao liên tục (swap-in/out KB/s)', why: 'Phân biệt swap dùng bình thường với thrash giết hiệu năng.' },
+    { front: 'Quy trình tạo swapfile?', back: 'fallocate -l SIZE file → chmod 600 → mkswap → swapon → ghi fstab', why: 'Thêm swap không cần partition; quên chmod 600 → cảnh báo insecure, quên fstab → mất sau reboot.' },
+    { front: 'Có swap có chắc tránh được OOM-killer?', back: 'Không — khi RAM + swap cùng cạn, OOM-killer vẫn chạy; thrash có thể treo trước cả OOM', why: 'Swap chỉ trì hoãn; phải giám sát SwapFree + si/so.' },
+    { front: 'Khi nào BẮT BUỘC cần swap?', back: 'Hibernation/suspend-to-disk — cần swap ≥ RAM để lưu toàn bộ RAM', why: 'Một trong các tiêu chí "khi nào dùng swap" rõ ràng nhất.' },
+    { front: 'Đọc RAM thực còn dùng được?', back: 'Cột available trong free -h (gồm cache reclaim được), không phải free', why: 'Tránh hoảng/ thêm RAM vô ích khi cache chiếm nhiều nhưng available còn.' },
+    { front: 'Tắt swap thật sự?', back: 'sudo swapoff -a + comment dòng swap trong /etc/fstab', why: 'Cần cho node k8s cổ điển/hành vi bộ nhớ tất định; swappiness=0 KHÔNG tắt swap.' },
+  ],
+
+  tryAtHome: [
+    {
+      phaseType: 'core',
+      title: 'Phase 1 — Đọc trạng thái swap hiện tại',
+      vmTarget: 'server',
+      estimatedMinutes: 10,
+      why: 'P1: Trước khi chỉnh, phải đọc được hiện trạng: thiết bị swap, dung lượng, priority, swappiness, entry fstab (<a href="https://man7.org/linux/man-pages/man8/swapon.8.html">swapon(8)</a>, <a href="https://man7.org/linux/man-pages/man5/proc.5.html">proc(5)</a>). P2: VM lab có sẵn <code>/swap.img</code> 2 GB, swappiness 60. P3: Đây là baseline để so sánh sau khi thêm swap hoặc đổi swappiness.',
+      cmd: '# Trên dattqh-nat (192.168.122.171)\nswapon --show\nfree -h\ncat /proc/swaps\necho "swappiness=$(cat /proc/sys/vm/swappiness)"\ngrep -i swap /etc/fstab\ngrep -E \'MemTotal|MemAvailable|SwapTotal|SwapFree|SwapCached\' /proc/meminfo',
+      observeWith: '<code>swapon --show</code> → <code>/swap.img file 2G &lt;used&gt; -2</code>. <code>free -h</code> → <code>Swap 2.0Gi</code>. <code>swappiness=60</code>. fstab: <code>/swap.img none swap sw 0 0</code>. meminfo: <code>SwapTotal 2044924 kB</code>.',
+      analysis: {
+        observation: 'Swap là file <code>/swap.img</code> 2 GB priority -2; trên 171 có thể thấy USED nhỏ (vd 268K) và <code>SwapCached</code> > 0 dù MemAvailable còn ~3.3 GB.',
+        mechanism: 'Hệ dùng swapfile (không phải partition) theo fstab. Việc có một ít swap USED dù còn RAM là bình thường: với swappiness=60 kernel đẩy vài cold anonymous page ra để dành RAM cho cache; đó không phải dấu hiệu thiếu RAM.',
+        lesson: 'Đọc đúng các chỉ số: <code>available</code> (RAM thực còn), <code>SwapFree</code> (đệm còn), và phân biệt "swap used tĩnh" với "đang swap" (cần vmstat si/so ở Phase 3). Baseline rõ ràng trước khi can thiệp.',
+      },
+      steps: [
+        { n: 1, do: '<code>swapon --show</code> và <code>free -h</code>.', expect: '<code>/swap.img file 2G &lt;used&gt; -2</code>; <code>free -h</code> dòng Swap total <code>2.0Gi</code>. Cột Mem <code>available</code> ~3.3–3.4Gi.' },
+        { n: 2, do: '<code>cat /proc/swaps</code> và <code>echo swappiness=$(cat /proc/sys/vm/swappiness)</code>.', expect: '<code>/swap.img file 2044924 &lt;used&gt; -2</code>; <code>swappiness=60</code>.' },
+        { n: 3, do: '<code>grep -i swap /etc/fstab</code> và <code>grep -E \'SwapTotal|SwapFree\' /proc/meminfo</code>.', expect: 'fstab: <code>/swap.img none swap sw 0 0</code>; meminfo <code>SwapTotal: 2044924 kB</code>, <code>SwapFree</code> gần bằng total.' },
+      ],
+      troubleshooting: [
+        { symptom: '<code>swapon --show</code> trống (không có swap).', fix: 'Máy chưa bật swap. Kiểm <code>grep swap /etc/fstab</code>; nếu có entry thì <code>sudo swapon -a</code>. Nếu không có swap nào → sang Phase 2 để tạo.' },
+      ],
+    },
+    {
+      phaseType: 'core',
+      title: 'Phase 2 — Tạo + bật swapfile phụ rồi dọn (172)',
+      vmTarget: 'client1',
+      estimatedMinutes: 12,
+      why: 'P1: Quy trình chuẩn thêm swap: <code>fallocate</code> → <code>chmod 600</code> → <a href="https://man7.org/linux/man-pages/man8/mkswap.8.html">mkswap</a> → <a href="https://man7.org/linux/man-pages/man8/swapon.8.html">swapon</a>. P2: Quan sát priority kernel tự gán cho swap mới và tổng swap tăng. P3: Dọn sạch (swapoff + rm) để VM về baseline — đây là demo đã chạy thật trên 172.',
+      cmd: '# Trên dattqh-client (192.168.122.172)\nsudo fallocate -l 512M /swapfile-demo\nsudo chmod 600 /swapfile-demo\nsudo mkswap /swapfile-demo\nsudo swapon /swapfile-demo\nswapon --show\nfree -h | grep -i swap\n# --- DỌN về baseline ---\nsudo swapoff /swapfile-demo\nsudo rm -f /swapfile-demo\nswapon --show',
+      observeWith: 'Sau <code>swapon</code>: <code>swapon --show</code> hiện 2 dòng — <code>/swap.img 2G -2</code> và <code>/swapfile-demo 512M -3</code>; <code>free -h</code> Swap total <code>2.5Gi</code>. Sau dọn: chỉ còn <code>/swap.img 2G -2</code> (baseline).',
+      analysis: {
+        observation: 'Swapfile mới nhận priority <code>-3</code> (thấp hơn /swap.img <code>-2</code>); tổng swap tăng từ 2.0Gi lên 2.5Gi; sau swapoff + rm trở về baseline.',
+        mechanism: 'Không đặt <code>pri=</code>, kernel gán priority âm giảm dần cho mỗi swap mới; swap priority cao hơn (gần 0) được ưu tiên dùng trước. <code>mkswap</code> ghi signature + UUID lên file; <code>swapon</code> đăng ký với kernel; <code>swapoff</code> di chuyển page về RAM/swap khác trước khi gỡ.',
+        lesson: 'Thêm swap runtime KHÔNG bền qua reboot trừ khi ghi fstab. Muốn swap mới được ưu tiên (vd trên NVMe), đặt <code>pri=N</code> cao. swapoff có thể chậm/khó nếu swap đang đầy (phải dồn page về nơi khác).',
+      },
+      steps: [
+        { n: 1, do: '<code>sudo fallocate -l 512M /swapfile-demo && sudo chmod 600 /swapfile-demo</code>.', expect: '<code>ls -lh /swapfile-demo</code> → <code>-rw------- root root 512M</code> (quyền 600 bắt buộc).' },
+        { n: 2, do: '<code>sudo mkswap /swapfile-demo</code> rồi <code>sudo swapon /swapfile-demo</code>.', expect: 'mkswap: <code>Setting up swapspace version 1, size = 512 MiB ... UUID=...</code>. swapon không báo lỗi.' },
+        { n: 3, do: '<code>swapon --show</code> và <code>free -h | grep -i swap</code>.', expect: '2 dòng swap: <code>/swap.img 2G -2</code> + <code>/swapfile-demo 512M -3</code>; <code>Swap 2.5Gi</code> total.' },
+        { n: 4, do: 'DỌN: <code>sudo swapoff /swapfile-demo && sudo rm -f /swapfile-demo</code> rồi <code>swapon --show</code>.', expect: 'Chỉ còn <code>/swap.img 2G -2</code> — VM về đúng baseline.' },
+      ],
+      troubleshooting: [
+        { symptom: '<code>swapon</code> báo "insecure permissions 0644".', fix: 'Quên <code>chmod 600</code>. Chạy <code>sudo chmod 600 /swapfile-demo</code> rồi swapon lại.' },
+        { symptom: '<code>swapoff</code> treo lâu.', fix: 'Swap đang chứa nhiều page, kernel phải dồn về RAM/swap khác. Đảm bảo còn đủ RAM; nếu RAM cũng thiếu, swapoff có thể fail — giải phóng bộ nhớ trước.' },
+        { symptom: 'fallocate báo "operation not supported".', fix: 'Một số filesystem không hỗ trợ fallocate cho swap (vd ZFS/Btrfs). Dùng <code>dd if=/dev/zero of=/swapfile-demo bs=1M count=512</code> thay thế.' },
+      ],
+    },
+    {
+      phaseType: 'core',
+      title: 'Phase 3 — swappiness + theo dõi paging (quyết định khi nào dùng)',
+      vmTarget: 'client1',
+      estimatedMinutes: 10,
+      why: 'P1: <a href="https://docs.kernel.org/admin-guide/sysctl/vm.html">swappiness</a> chỉnh hành vi reclaim; <code>vmstat</code> si/so cho thấy paging thật. P2: Chỉnh tạm bằng sysctl rồi revert, quan sát giá trị; xem si/so lúc nhàn để biết baseline. P3: Kết nối số liệu với quyết định "khi nào dùng/không dùng swap" cho từng loại workload.',
+      cmd: '# Trên dattqh-client (192.168.122.172)\ncat /proc/sys/vm/swappiness          # 60\nsudo sysctl vm.swappiness=10         # chỉnh tạm\ncat /proc/sys/vm/swappiness          # 10\nsudo sysctl vm.swappiness=60         # revert\nvmstat 1 3                           # cot si/so\n# Bền vững (tham khảo, không bắt buộc trên VM lab):\n#   echo \'vm.swappiness=10\' | sudo tee /etc/sysctl.d/99-swappiness.conf',
+      observeWith: '<code>sysctl vm.swappiness=10</code> → <code>vm.swappiness = 10</code>, đọc lại thấy 10; revert về 60. <code>vmstat 1 3</code> cột <code>si</code>/<code>so</code> = 0 khi VM nhàn (không thrash).',
+      analysis: {
+        observation: 'swappiness đổi tức thì qua sysctl (60→10→60); <code>vmstat</code> si/so = 0 trên VM nhàn rỗi dù có swap.',
+        mechanism: 'sysctl ghi vào /proc/sys/vm/swappiness có hiệu lực ngay nhưng KHÔNG bền qua reboot trừ khi ghi /etc/sysctl.d. si/so = 0 nghĩa kernel chưa cần swap-in/out — có swap "dự phòng" khác với "đang swap".',
+        lesson: 'Quyết định dùng swap theo workload: host DB/latency-sensitive → swappiness thấp (1–10) + đủ RAM; máy desktop/cần hibernation → giữ swap ≥ RAM; node k8s cổ điển → có thể tắt swap cho hành vi tất định. Số liệu si/so + available là căn cứ, không phải cảm tính.',
+      },
+      steps: [
+        { n: 1, do: '<code>cat /proc/sys/vm/swappiness</code>; <code>sudo sysctl vm.swappiness=10</code>; đọc lại.', expect: 'before <code>60</code>; lệnh in <code>vm.swappiness = 10</code>; đọc lại <code>10</code>.' },
+        { n: 2, do: 'Revert: <code>sudo sysctl vm.swappiness=60</code>.', expect: '<code>vm.swappiness = 60</code>; đọc lại <code>60</code> — về mặc định.' },
+        { n: 3, do: 'Theo dõi paging: <code>vmstat 1 3</code>, đọc cột <code>si</code> và <code>so</code>.', expect: '<code>si</code>/<code>so</code> ≈ <code>0</code> trên VM nhàn — có swap nhưng không đang swap; đây là trạng thái khoẻ mạnh.' },
+      ],
+      troubleshooting: [
+        { symptom: 'sysctl đổi nhưng sau reboot về 60.', fix: 'sysctl runtime không bền. Ghi <code>/etc/sysctl.d/99-swappiness.conf</code> với <code>vm.swappiness=N</code> rồi <code>sudo sysctl --system</code>.' },
+        { symptom: 'si/so luôn 0 nên không thấy swap hoạt động.', fix: 'VM nhàn nên không có áp lực bộ nhớ — đúng như mong đợi. Tạo áp lực có kiểm soát (vd <code>stress-ng --vm</code>) ngoài phạm vi lab này; không nên ép thrash trên VM dùng chung.' },
+      ],
+    },
+  ],
+}

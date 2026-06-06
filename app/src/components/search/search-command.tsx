@@ -127,12 +127,13 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   const handleSelect = useCallback(
-    (slug: string) => {
+    (slug: string, type?: string) => {
       onOpenChange(false)
+      const base = type === 'exercise' ? '/exercise' : '/lab'
       const trimmed = query.trim()
       const target = trimmed.length >= 2
-        ? `/lab/${slug}?q=${encodeURIComponent(trimmed)}`
-        : `/lab/${slug}`
+        ? `${base}/${slug}?q=${encodeURIComponent(trimmed)}`
+        : `${base}/${slug}`
       navigate(target)
     },
     [navigate, onOpenChange, query],
@@ -154,7 +155,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} shouldFilter={false}>
       <CommandInput
-        placeholder="Tìm lab… (vpc, dns, osi…)"
+        placeholder="Tìm lab / bài tập… (dns, syslog, swap…)"
         value={inputValue}
         onValueChange={setInputValue}
       />
@@ -179,7 +180,7 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
         {/* Empty state */}
         {isEmpty && (
           <CommandEmpty>
-            Không tìm thấy lab nào cho &ldquo;{query}&rdquo;
+            Không tìm thấy kết quả nào cho &ldquo;{query}&rdquo;
           </CommandEmpty>
         )}
 
@@ -192,15 +193,15 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
 
         {/* Results */}
         {results.length > 0 && !isSearching && !isError && (
-          <CommandGroup heading="Labs">
+          <CommandGroup heading="Kết quả">
             {results.map((result, i) => (
               <CommandItem
                 key={result.slug}
                 value={result.slug}
-                onSelect={() => handleSelect(result.slug)}
+                onSelect={() => handleSelect(result.slug, result.type)}
                 className="flex flex-col items-start gap-1 py-3 cursor-pointer animate-in fade-in slide-in-from-top-1"
                 style={reduce ? undefined : { animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}
-                onClick={() => handleSelect(result.slug)}
+                onClick={() => handleSelect(result.slug, result.type)}
               >
                 {/* Title row */}
                 <div className="flex w-full items-center gap-2">
@@ -208,6 +209,11 @@ export function SearchCommand({ open, onOpenChange }: SearchCommandProps) {
                   <span className="font-medium text-sm flex-1 truncate">
                     {renderDelimited(result.title)}
                   </span>
+                  {result.type === 'exercise' && (
+                    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      Bài tập
+                    </span>
+                  )}
                 </div>
 
                 {/* Snippet */}

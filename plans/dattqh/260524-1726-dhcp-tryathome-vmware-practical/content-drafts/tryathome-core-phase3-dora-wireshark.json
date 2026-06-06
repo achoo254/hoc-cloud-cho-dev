@@ -1,0 +1,66 @@
+{
+  "phaseType": "core",
+  "title": "Phase 3 — Bắt DORA + phân tích field bằng tcpdump",
+  "sbsSection": "§5",
+  "vmTarget": "server",
+  "estimatedMinutes": 25,
+  "why": "<a href=\"https://datatracker.ietf.org/doc/html/rfc2131\">RFC 2131</a> đặc tả 4 message types cốt lõi (DISCOVER/OFFER/REQUEST/ACK) + 1 phụ (RELEASE). Phân tích pcap bằng <code>tcpdump -vv</code> cho phép verify từng field/option (Message Type 53, Lease 51, Server ID 54, Requested IP 50, chaddr, yiaddr) khớp đặc tả. Skip <code>tshark</code> + Wireshark GUI vì lab này Server không có internet (theo plan skip Optional NAT) — <code>tcpdump -vv</code> đủ thông tin.",
+  "cmd": "# 1. Server: bắt gói nền qua systemd-run (không HUP khi SSH đứt)\nsudo systemctl reset-failed lab-tcpdump.service 2>/dev/null\nsudo systemd-run --unit=lab-tcpdump --collect \\\n  /usr/bin/tcpdump -i ens33 -n -e -p -U \\\n  -w /tmp/dora.pcap '(udp port 67 or udp port 68) or arp or icmp'\n\n# 2. Client1: ép release + xin lại trên console (KHÔNG SSH vì stop networkd sẽ disconnect)\n# Trên console Client1:\nsudo systemctl stop systemd-networkd systemd-networkd.socket\nsudo rm -f /run/systemd/netif/leases/*\nsudo ip addr flush dev ens33\nsudo ip link set ens33 down; sleep 1; sudo ip link set ens33 up; sleep 1\nsudo systemctl start systemd-networkd\nsleep 6\nip -br a\n\n# 3. Server: stop tcpdump, đọc pcap\nsudo systemctl stop lab-tcpdump.service\nsudo chmod a+r /tmp/dora.pcap\n\n# 4. Liệt kê các gói DHCP\nsudo tcpdump -nn -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'\n\n# 5. Verbose: xem options + xid + chaddr/yiaddr\nsudo tcpdump -nn -vv -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'",
+  "observeWith": "Output <code>tcpdump -nn -tttt</code> hiển thị chuỗi: <code>0.0.0.0.68 → 255.255.255.255.67</code> (DISCOVER), <code>Server.67 → Client.68</code> (OFFER), <code>0.0.0.0.68 → 255.255.255.255.67</code> (REQUEST), <code>Server.67 → Client.68</code> (ACK) — 4 gói cách nhau dưới 1 giây. <code>-vv</code> hiển thị <code>xid</code> giống nhau qua 4 gói (vd <code>0x690b711b</code>), <code>chaddr</code> MAC Client, <code>yiaddr</code> IP cấp, options <code>53/54/51/3/6</code> chi tiết. RELEASE optional xuất hiện trước nếu client clean lease.",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Trên <strong>Server</strong> qua SSH: bắt gói nền qua <code>systemd-run --unit=lab-tcpdump --collect</code> ghi vào <code>/tmp/dora.pcap</code> với filter <code>(udp port 67 or udp port 68) or arp or icmp</code>. systemd-run giúp tcpdump không bị HUP khi SSH session đứt.",
+      "expect": "<code>sudo systemctl status lab-tcpdump</code> hiển thị <code>active (running)</code>, <code>Main PID</code> là tcpdump. <code>ls /tmp/dora.pcap</code> thấy file đang grow."
+    },
+    {
+      "n": 2,
+      "do": "Trên <strong>Client1 CONSOLE</strong> (không SSH vì <code>systemctl stop systemd-networkd</code> sẽ làm rớt SSH): chuỗi flush mạnh — stop networkd + xoá lease cache + flush addr + bounce link + start lại networkd. Mục tiêu: ép Client gửi DHCPDISCOVER mới (không INIT-REBOOT REQUEST IP cũ).",
+      "expect": "<code>ip -br a</code> trên Client1 sau ~6s hiển thị <code>ens33 UP 192.168.81.100/24</code> (vẫn pool, MAC cũ → server cấp lại cùng IP). Trên Server: <code>journalctl -u isc-dhcp-server -n 20</code> thấy <code>DHCPDISCOVER → DHCPOFFER → DHCPREQUEST → DHCPACK</code>."
+    },
+    {
+      "n": 3,
+      "do": "Trên Server: dừng tcpdump + chmod readable + liệt kê các gói: <code>sudo tcpdump -nn -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'</code>",
+      "expect": "Output hiển thị 4 gói (hoặc 5 nếu có Release):<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request from &lt;MAC&gt;</code> (DISCOVER)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (OFFER)<br><code>0.0.0.0.68 → 255.255.255.255.67 BOOTP/DHCP, Request</code> (REQUEST)<br><code>Server.67 → Client.68 BOOTP/DHCP, Reply</code> (ACK)<br>Cách nhau dưới 1 giây.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase3-01-dora-packet-list.png",
+        "alt": "Server tcpdump output — 5 packets: Release + DORA",
+        "caption": "<code>tcpdump -nn -tttt</code> đọc <code>/tmp/dora.pcap</code> — 5 packet: 1 Release (Client1 stop networkd) + 4 DORA (Discover/Offer/Request/Ack). Thời gian giữa Discover và ACK ~1 giây. Src <code>0.0.0.0</code> ở DISCOVER+REQUEST = broadcast vì Client1 chưa commit IP."
+      }
+    },
+    {
+      "n": 4,
+      "do": "Phân tích chi tiết options bằng <code>sudo tcpdump -nn -vv -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'</code>. Tìm: (a) <code>xid</code> giống nhau qua 4 gói, (b) <code>chaddr</code> = MAC Client, (c) <code>yiaddr</code> trong OFFER/ACK = IP cấp, (d) Option 53 Message-Type {1,2,3,5}, (e) Option 54 Server-ID, (f) Option 51 Lease-Time, (g) Option 50 Requested-IP trong REQUEST.",
+      "expect": "DISCOVER có <code>DHCP-Message (53): Discover</code>, <code>Parameter-Request (55): Subnet-Mask, Default-Gateway, DNS, Hostname...</code>, <code>Hostname: dhcp-client-1</code>. OFFER có <code>DHCP-Message: Offer</code>, <code>Your-IP 192.168.81.100</code>, <code>Server-ID 192.168.81.10</code>, <code>Lease-Time 300</code>, <code>Subnet-Mask 255.255.255.0</code>, <code>Default-Gateway 192.168.81.10</code>, <code>Domain-Name-Server 8.8.8.8, 1.1.1.1</code>. REQUEST có <code>Requested-IP (50) 192.168.81.100</code>, <code>Server-ID (54) 192.168.81.10</code> — client cam kết chọn server này. ACK echo lại lease params.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase3-02-dora-options-verbose.png",
+        "alt": "tcpdump -vv excerpt — DHCP Options chi tiết của 4 gói DORA",
+        "caption": "<code>tcpdump -vv</code> hiển thị field/option chi tiết: <code>xid 0x690b711b</code> nhất quán 4 gói; OFFER+ACK chứa Option 54 (Server-ID), 51 (Lease-Time 300s), 1/3/6 (Subnet-Mask + Gateway + DNS); REQUEST chứa Option 50 (Requested-IP) + 54 (Server-ID echo) để cam kết chọn server."
+      }
+    },
+    {
+      "n": 5,
+      "do": "Verify <code>xid</code> khớp giữa Discover/Offer/Request/Ack — đây là Transaction ID random, dùng để server/client khớp request-reply trong cùng 1 lượt DORA. Output mẫu từ lab session: <code>xid 0x690b711b</code> ở cả 4 gói.",
+      "expect": "Trong output <code>tcpdump -vv</code>, dòng đầu mỗi gói DHCP có <code>xid 0x&lt;hex&gt;</code> — phải GIỐNG NHAU qua 4 gói DORA của cùng 1 lượt. Nếu khác → là 2 lượt khác nhau xen lẫn."
+    },
+    {
+      "n": 6,
+      "do": "(Tuỳ chọn) Pull pcap về host để phân tích trong Wireshark GUI (nếu cài): <code>scp dhcp-username@192.168.81.10:/tmp/dora.pcap .</code> trên Windows PowerShell. Mở Wireshark → display filter <code>bootp</code> hoặc <code>dhcp</code>. Lab này dùng <code>tcpdump -vv</code> CLI vì Server không có internet và Wireshark GUI tốn thời gian setup.",
+      "expect": "Wireshark hiển thị packet list, expand từng gói thấy DHCP Options block với Message Type, Lease Time, Server ID, Requested IP highlight rõ ràng."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "symptom": "<code>tcpdump -r /tmp/dora.pcap</code> không hiển thị gói DHCP nào.",
+      "fix": "Có thể Client1 chỉ làm INIT-REBOOT (REQUEST IP cũ) thay vì DISCOVER mới. Xác minh bằng <code>tcpdump -nn -tttt -r /tmp/dora.pcap 'udp port 67 or udp port 68'</code> — nếu chỉ thấy gói từ <code>192.168.81.100.68</code> (không phải <code>0.0.0.0.68</code>) → INIT-REBOOT. Cần flush mạnh hơn: <code>rm /run/systemd/netif/leases/*</code> + <code>ip addr flush</code> + <code>ip link down/up</code> trước khi start networkd lại."
+    },
+    {
+      "symptom": "<code>tshark</code> command not found.",
+      "fix": "tshark không cài mặc định trên Ubuntu Server. Phải <code>apt install tshark</code> — nhưng yêu cầu internet. Lab này skip vì Server không có NAT. Dùng <code>tcpdump -vv</code> thay thế, output tương đương."
+    },
+    {
+      "symptom": "Lease-Time trong OFFER = 300 nhưng dhcpd.conf đặt <code>default-lease-time 120</code>.",
+      "fix": "Client gửi Option 51 yêu cầu lease cụ thể trong REQUEST → server cấp đúng yêu cầu (capped ở <code>max-lease-time 300</code>). Nếu client không yêu cầu → server cấp <code>default-lease-time 120</code>. systemd-networkd default xin lease dài để giảm renew overhead."
+    }
+  ]
+}

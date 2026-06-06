@@ -22,6 +22,11 @@ app/src/
 │   ├── lab/                # Lab content rendering
 │   │   ├── lab-renderer.tsx         # THINK/SEE/TRY IT top-level renderer
 │   │   ├── misconceptions-section.tsx  # Renders misconceptions[] above TL;DR on THINK tab
+│   │   ├── shared/                  # Shared lab UI components
+│   │   │   └── packet-decoder/      # 3-panel PCAP viewer (summary list / layer tree / hex view)
+│   │   │       ├── packet-decoder.tsx       # Root component
+│   │   │       ├── pcap-parser.ts           # Vanilla client-side PCAP parser (DataView + TextDecoder, max 5MB / 200 packets)
+│   │   │       └── ...                      # Panel sub-components
 │   │   ├── diagrams/                # Interactive playground components
 │   │   │   ├── registry.ts          # Lazy-loaded diagram registry
 │   │   │   ├── export-utils.ts      # SVG export + DOMPurify
@@ -47,7 +52,10 @@ app/src/
 │   ├── firebase.ts         # Firebase client init (VITE_FIREBASE_CONFIG)
 │   ├── api.ts              # Fetch helpers: getLabsIndex, getLabContent, search
 │   ├── schema-lab.ts       # Zod schema v3
-│   └── sm2.ts              # SM-2 spaced-repetition algorithm
+│   ├── sm2.ts              # SM-2 spaced-repetition algorithm
+│   └── hooks/
+│       ├── use-media-query.ts   # useMediaQuery + useIsDesktop
+│       └── ...                  # other hooks
 └── hooks/                  # useLabsIndex (React Query) + others
 ```
 
@@ -67,6 +75,8 @@ server/
 │   └── session-middleware.js  # HttpOnly cookie verification
 ├── db/
 │   └── mongoose-models/    # MongoDB models (labs, progress, users)
+├── scripts/
+│   └── update-lab-tcpdump.js   # Idempotent MongoDB content update for tcpdump sections (tryAtHome, misconceptions, tldr, walkthrough, quiz, flashcards)
 ├── lib/
 │   └── csp-middleware.js   # Content Security Policy
 └── ecosystem.config.cjs    # PM2 config (fork mode)

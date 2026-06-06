@@ -1,0 +1,47 @@
+{
+  "phaseType": "core",
+  "title": "Phase 5 — Case B: Manual đặt SAU + Cloned VM share machine-id surprise",
+  "sbsSection": "§8",
+  "vmTarget": "client2",
+  "estimatedMinutes": 20,
+  "why": "Kịch bản: Client1 đang giữ IP DHCP. User cấu hình thiết bị thứ 2 (Client2) static trùng IP, hoặc 2 thiết bị share Client-Id sau full clone. Server <strong>không re-check sau khi ACK</strong> — không có cơ chế giám sát IP conflict post-commit. Hậu quả: ARP cache flap trên router/switch/other host, traffic mất gói. <a href=\"https://datatracker.ietf.org/doc/html/rfc2131#section-3.1\">RFC 2131 §3.1</a> mô tả DHCP state machine nhưng không bắt buộc server gửi ARP probe định kỳ.",
+  "cmd": "# Setup: Client1 DHCP, Client2 cũng DHCP (hoặc static trùng)\n# Trong lab session này: Client2 là full clone của Client1 → share machine-id\n# → cả 2 cùng claim 192.168.81.100\n\n# Trên Server: probe ARP nhiều round để bắt MAC flap\nsudo arping -c 2 -w 1 -I ens33 192.168.81.100\n# Lặp 4-6 lần để thấy 2 MAC reply luân phiên\n\n# Xem lease DB — cả 2 MAC cùng có lease entry\nsudo cat /var/lib/dhcp/dhcpd.leases | grep -B1 -A6 'lease 192.168.81.100'\n\n# Xem dhcpd journal — ACK cấp .100 cho cả 2 MAC\nsudo journalctl -u isc-dhcp-server -n 20 --no-pager | grep -E 'DHCPACK|DHCPOFFER'",
+  "observeWith": "Output <code>arping</code> cho thấy <strong>2 MAC khác nhau cùng reply</strong> từ IP <code>192.168.81.100</code> trong cùng 1 broadcast probe. Thứ tự reply không deterministic (race condition L2). Server journal có 2+ dòng <code>DHCPACK on 192.168.81.100</code> với MAC khác nhau. Lease DB có nhiều entry cho cùng IP <code>.100</code> với <code>hardware ethernet</code> khác nhau, alternating active state.",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Setup state: 2 VM Client (Client1 + Client2 clone) cùng VMnet1, đều dhcp4: true, share machine-id (do full clone không regenerate). Power on cả 2 → cả 2 xin DHCP → cùng nhận <code>.100</code>.",
+      "expect": "Trên Server: <code>journalctl -u isc-dhcp-server</code> thấy 2 chuỗi DORA gần nhau với MAC khác nhau, cả 2 đều <code>DHCPACK on 192.168.81.100</code>. Lý do: <code>dhcp-client-1</code> hostname giống nhau + machine-id share → Option 61 Client-Id giống → dhcpd treat 2 VM là 1 client."
+    },
+    {
+      "n": 2,
+      "do": "Trên Server: <code>sudo arping -c 2 -w 1 -I ens33 192.168.81.100</code>, lặp 4 lần để bắt nhiều round.",
+      "expect": "Mỗi round arping broadcast 1 request → nhận <strong>2 reply</strong> từ 2 MAC khác nhau (MAC Client1 + MAC Client2). Thứ tự reply có thể đảo giữa các round. Đây chính là 'ARP cache flapping' — hiện tượng đặc trưng IP conflict.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase5-01-arping-2-mac-flap.png",
+        "alt": "Server arping 4 round — 2 MAC reply cùng 192.168.81.100",
+        "caption": "Lab session live: <code>00:0C:29:4C:8B:DA</code> (Client2 clone) + <code>00:0C:29:C7:BE:73</code> (Client1) cùng claim <code>.100</code>. Thứ tự reply đảo round 4 — race condition L2. Server dhcpd log cũng có DHCPACK cấp <code>.100</code> cho cả 2 MAC vì shared machine-id → Client-ID Option 61 trùng."
+      }
+    },
+    {
+      "n": 3,
+      "do": "Đọc lease DB Server: <code>sudo cat /var/lib/dhcp/dhcpd.leases | grep -A4 'lease 192.168.81.100'</code>. Tìm nhiều entry cho cùng <code>.100</code> với <code>hardware ethernet</code> khác nhau.",
+      "expect": "Lease DB có 4+ entry <code>lease 192.168.81.100 { ... }</code> alternating active state với 2 MAC khác nhau (<code>00:0c:29:c7:be:73</code> và <code>00:0c:29:4c:8b:da</code>). Mỗi lần ACK ghi entry mới đè entry cũ — nhưng dhcpd KHÔNG báo conflict trong log."
+    }
+  ],
+  "analysis": {
+    "observation": "Cùng 1 IP <code>192.168.81.100</code> có 2 MAC khác nhau cùng reply ARP. Server log có nhiều <code>DHCPACK on 192.168.81.100</code> với MAC khác nhau, không có warning. Lease DB chứa lịch sử lease alternating giữa 2 MAC. Network impact: traffic L3 tới <code>.100</code> bị deliver ngẫu nhiên cho 1 trong 2 client tuỳ ARP cache của router/switch tại thời điểm forward.",
+    "mechanism": "Có 2 mechanism dẫn đến state này: (1) <strong>Manual conflict</strong> — Client2 đặt static trùng IP Client1 đang DHCP. Server không biết, không có cơ chế re-check sau ACK. (2) <strong>Cloned VM share machine-id</strong> — full clone copy <code>/etc/machine-id</code> → systemd-networkd generate Client-Id (Option 61) giống nhau → dhcpd dùng Client-Id làm binding key → treat 2 VM là cùng 1 client → cấp same IP. Cả 2 case đều dẫn đến 'IP collision' nhưng cơ chế gốc khác nhau. Phòng phía Client: <code>dhcpcd</code> với strict ARP DAD sẽ DECLINE và fallback APIPA <code>169.254.x.x</code> (Optional O3). systemd-networkd mặc định KHÔNG gửi DECLINE → cứ gán bừa.",
+    "lesson": "<strong>DHCP server một mình không phòng được IP conflict do hành vi user/clone</strong>. Defense-in-depth: (1) <strong>Network-level</strong>: bật <a href=\"https://en.wikipedia.org/wiki/DHCP_snooping\">DHCP snooping</a> + <a href=\"https://en.wikipedia.org/wiki/Dynamic_ARP_inspection\">Dynamic ARP Inspection (DAI)</a> ở switch — block ARP reply không khớp DHCP binding table. (2) <strong>IPAM</strong>: tool quản lý cả IP tĩnh lẫn DHCP (vd NetBox, phpIPAM) — single source of truth. (3) <strong>VM clone discipline</strong>: sau full clone PHẢI regenerate machine-id (<code>sudo rm /etc/machine-id; sudo systemd-machine-id-setup; sudo reboot</code>) + đổi hostname để Client-Id unique. (4) <strong>Monitoring</strong>: alert khi DHCPACK liên tục cho same IP với MAC khác trong window ngắn."
+  },
+  "troubleshooting": [
+    {
+      "symptom": "Sau khi regenerate machine-id Client2, cả 2 client vẫn nhận same IP.",
+      "fix": "Có thể cache ở lease DB Server. Wipe: <code>sudo systemctl stop isc-dhcp-server; sudo sh -c 'echo -n &gt; /var/lib/dhcp/dhcpd.leases'; sudo systemctl start isc-dhcp-server</code>. Trên Client2: <code>sudo systemctl restart systemd-networkd</code>. Verify Client-Id mới: <code>cat /etc/machine-id</code> trên 2 VM phải khác nhau."
+    },
+    {
+      "symptom": "arping không thấy 2 MAC, chỉ thấy 1.",
+      "fix": "Có thể 1 client đã shutdown/sleep network. Power on lại + verify <code>ping -c 1 192.168.81.10</code> từ cả 2 client thành công trước khi arping."
+    }
+  ]
+}

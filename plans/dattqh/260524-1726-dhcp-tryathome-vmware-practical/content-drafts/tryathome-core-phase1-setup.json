@@ -1,0 +1,56 @@
+{
+  "phaseType": "core",
+  "title": "Phase 1 — Setup VMware + 3 VM trên VMnet1 host-only",
+  "sbsSection": "§2 + §3.2",
+  "vmTarget": "host",
+  "estimatedMinutes": 20,
+  "why": "Tách lab DHCP ra mạng host-only riêng (<code>VMnet1</code>) để (1) DHCP server của ta không tranh OFFER với DHCP của VMware NAT, (2) tách traffic lab khỏi mạng văn phòng. Server cần IP tĩnh để Client trỏ tới làm <strong>gateway + DHCP server</strong>. Bài này dùng <code>192.168.81.10/24</code> cho Server vì <code>.1</code> mặc định đã bị VMware host adapter chiếm.",
+  "cmd": "# Trên host (Windows): VMware Workstation → Edit → Virtual Network Editor\n#   VMnet1 → Host-only → Subnet 192.168.81.0/24 → tắt 'Use local DHCP service'\n\n# Trên Server VM (console hoặc SSH):\nsudo nano /etc/netplan/50-cloud-init.yaml\n#   network:\n#     version: 2\n#     renderer: networkd\n#     ethernets:\n#       ens33:\n#         dhcp4: false\n#         addresses: [192.168.81.10/24]\nsudo chmod 600 /etc/netplan/50-cloud-init.yaml\nsudo netplan apply\nip -br link\nip -br a\n\n# (Nếu IP cũ vẫn dính): kiểm tra file netplan khác conflict\nls -la /etc/netplan/\nsudo cat /etc/netplan/*.yaml\n# Move file conflict ra /tmp, apply lại\nsudo mv /etc/netplan/99-lab.yaml /tmp/99-lab.yaml.bak\nsudo netplan apply\nsudo ip addr del 192.168.81.128/24 dev ens33 2>/dev/null",
+  "observeWith": "<code>ip -br a show ens33</code> chỉ hiển thị 1 IP <code>192.168.81.10/24</code> (không có IP cached cũ). <code>ls /etc/netplan/</code> chỉ còn 1 file netplan tham chiếu đến ens33.",
+  "steps": [
+    {
+      "n": 1,
+      "do": "Mở <strong>VMware Workstation → Edit menu → Virtual Network Editor</strong> (cần admin). Chọn <code>VMnet1</code> trong danh sách. Verify: Type=<code>Host-only</code>, Subnet=<code>192.168.81.0/24</code>, checkbox <strong>'Use local DHCP service to distribute IP addresses to VMs'</strong> ĐÃ BỎ TICK.",
+      "expect": "Cột DHCP trong list hiển thị <code>-</code> (rỗng) cho VMnet1. Panel dưới cùng: Subnet IP 192.168.81.0, Subnet mask 255.255.255.0, DHCP checkbox unchecked.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase1-01-vmnet1-dhcp-off.png",
+        "alt": "VMware Virtual Network Editor — VMnet1 host-only, DHCP service disabled",
+        "caption": "Virtual Network Editor (VMware Workstation Pro 25H2): VMnet1 host-only, subnet <code>192.168.81.0/24</code>, <code>Use local DHCP service</code> <strong>unchecked</strong>. Tắt DHCP của VMware để ISC dhcpd của ta độc quyền cấp IP trên VMnet1."
+      }
+    },
+    {
+      "n": 2,
+      "do": "Mở <strong>VM Settings của Server</strong> (right-click VM trong VMware Workstation → Settings). Tab Hardware → Network Adapter. Verify: <code>Custom: Specific virtual network → VMnet1 (Host-only)</code>. Verify tương tự cho Client1, Client2.",
+      "expect": "VM Settings dialog cho thấy Network Adapter của Server gắn vào VMnet1 host-only (không phải NAT/Bridged).",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase1-02-vm-settings-server.png",
+        "alt": "VMware VM Settings — Server Network Adapter custom VMnet1 Host-only",
+        "caption": "Settings của Server VM: Network Adapter chọn <code>Custom: VMnet1 (Host-only)</code>. Client1/Client2 cấu hình giống. Toàn bộ 3 VM ở cùng VMnet1, không có uplink internet — đúng yêu cầu sandbox lab."
+      }
+    },
+    {
+      "n": 3,
+      "do": "Trên Server VM, đặt IP tĩnh <code>192.168.81.10/24</code> qua netplan. Edit <code>/etc/netplan/50-cloud-init.yaml</code> bằng <code>sudo nano</code> với nội dung: <code>dhcp4: false</code> + <code>addresses: [192.168.81.10/24]</code> cho <code>ens33</code>. <code>chmod 600</code> + <code>sudo netplan apply</code>.",
+      "expect": "<code>ip -br a</code> trên Server chỉ hiển thị <code>ens33 UP 192.168.81.10/24 ...</code>. Nếu thấy thêm IP cũ (vd <code>.128</code>) → kiểm tra file netplan conflict, move file thừa ra <code>/tmp</code>, <code>netplan apply</code> lại, <code>ip addr del</code> IP cũ.",
+      "screenshot": {
+        "src": "/labs/dhcp/screenshots/core/phase1-03-ip-br-link.png",
+        "alt": "Server VM ip -br a output showing single IP 192.168.81.10/24 on ens33",
+        "caption": "Server VM sau khi apply netplan: <code>ens33 UP 192.168.81.10/24</code> duy nhất. Đây sẽ là IP gateway + DHCP server cho VMnet1. Lưu ý: <code>.1</code> bị host VMware adapter chiếm nên Server dùng <code>.10</code>."
+      }
+    }
+  ],
+  "troubleshooting": [
+    {
+      "symptom": "Sau <code>netplan apply</code>, ens33 vẫn có cả IP mới lẫn IP cũ (vd <code>.10</code> + <code>.128</code>).",
+      "fix": "Có file netplan khác trong <code>/etc/netplan/</code> đang khai báo IP cũ. <code>ls -la /etc/netplan/</code> + <code>sudo cat /etc/netplan/*.yaml</code> để xác định. Move file thừa: <code>sudo mv /etc/netplan/99-lab.yaml /tmp/</code> rồi <code>sudo netplan apply</code>. Xoá IP cũ runtime: <code>sudo ip addr del 192.168.81.128/24 dev ens33</code>."
+    },
+    {
+      "symptom": "SSH từ host Windows tới <code>192.168.81.1</code> bị <code>Connection refused</code>.",
+      "fix": "Host VMware Network Adapter VMnet1 thường chiếm <code>192.168.81.1</code>. Nếu Server cũng <code>.1</code> → ARP conflict, kernel host route loopback. Đổi Server sang <code>.10</code> (hoặc IP khác trong subnet, ngoài DHCP pool <code>.100-.110</code>). Verify bằng <code>ipconfig | findstr 192.168.81</code> trên host."
+    },
+    {
+      "symptom": "Heredoc <code>&lt;&lt;'EOF'</code> trên SSH bị kẹt, prompt hiển thị <code>&gt;</code>.",
+      "fix": "Paste vào terminal qua SSH thường thêm 2 space đầu dòng → <code>EOF</code> không nhận diện. Ctrl+C để hủy, dùng <code>sudo nano</code> edit file trực tiếp thay vì heredoc."
+    }
+  ]
+}
