@@ -8,18 +8,19 @@
 
 👉 **Truy cập [hoc-cloud.inetdev.io.vn](https://hoc-cloud.inetdev.io.vn/)** để học 8 chủ đề mạng cơ bản với playground tương tác. Đăng nhập Google để lưu tiến độ, theo dõi heatmap và leaderboard.
 
-## Labs (8 chủ đề)
+## Labs
 
-| Slug | Chủ đề | Playground nổi bật |
-|------|--------|--------------------|
-| `arp` | Address Resolution Protocol | ARP request/reply animation |
-| `dhcp` | DHCP DORA Process | 4-bước DORA visualizer |
-| `dns` | DNS Hierarchical Resolution | Recursive resolver animation |
-| `http` | HTTP Protocol | 51 animated scenarios |
-| `icmp-ping` | ICMP Ping Request/Reply | RTT + TTL visualizer |
-| `subnet-cidr` | Subnet & CIDR | Binary mask + host calculator |
-| `tcp-ip-packet-journey` | Packet Journey qua OSI layers | Layer encapsulation step-by-step |
-| `tcp-udp` | TCP vs UDP | 3-way handshake + connection comparison |
+| Module | Slug | Chủ đề | Playground nổi bật |
+|--------|------|--------|--------------------|
+| 01-networking | `arp` | Address Resolution Protocol | ARP request/reply animation |
+| 01-networking | `dhcp` | DHCP DORA Process | 4-bước DORA visualizer |
+| 01-networking | `dns` | DNS Hierarchical Resolution | Recursive resolver animation |
+| 01-networking | `http` | HTTP Protocol | 51 animated scenarios |
+| 01-networking | `icmp-ping` | ICMP Ping Request/Reply | RTT + TTL visualizer |
+| 01-networking | `subnet-cidr` | Subnet & CIDR | Binary mask + host calculator |
+| 01-networking | `tcp-ip-packet-journey` | Packet Journey qua OSI layers | Layer encapsulation step-by-step |
+| 01-networking | `tcp-udp` | TCP vs UDP | 3-way handshake + connection comparison |
+| 02-observability | `victorialogs` | VictoriaLogs — Thu thập & truy vấn log | Architecture explorer + LogsQL evaluator + pipeline stepper |
 
 ## Tech Stack
 

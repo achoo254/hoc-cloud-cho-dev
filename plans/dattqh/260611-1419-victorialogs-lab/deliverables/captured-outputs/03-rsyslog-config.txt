@@ -1,0 +1,4 @@
+== CONF ==
+*.* action(type="omfwd" target="127.0.0.1" port="5410" protocol="tcp" template="RSYSLOG_SyslogProtocol23Format")
+[sudo] password for dattqh-nat: == RSYSLOG-ACTIVE ==
+active

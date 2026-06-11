@@ -4,6 +4,17 @@ Reverse-chronological. Format: `## YYYY-MM-DD — <summary>`.
 
 ---
 
+## 2026-06-11 — Lab VictoriaLogs observability + playground 3 mode
+
+- **Thêm lab observability đầu tiên**: slug `victorialogs`, module `02-observability`, title "VictoriaLogs — Thu thập & truy vấn log tập trung" (45 phút). Tổng labs: 8 → 9.
+- **VictoriaLogsPlayground** gồm 3 mode trong tab SEE: (1) Kiến trúc & Luồng dữ liệu (SVG animated, clickable explorer, toggle single/cluster), (2) LogsQL mini-evaluator (parser tập con chạy trên mock data), (3) Pipeline stepper (5 bước quá trình xử lý log từ ingest → stored → queried).
+- **Playground components**: `victorialogs-playground.tsx` (root tab manager), `vlogs-architecture-flow.tsx` (animated SVG + clickable mode toggle), `vlogs-logsql-playground.tsx` (mini-evaluator + sample queries), `vlogs-logsql-parser.ts` (LogsQL subset parser), `vlogs-pipeline-stepper.tsx` (5-step visualization), `vlogs-mock-data.ts` (mock log fixtures).
+- **MongoDB content**: seed qua `server/scripts/seed-victorialogs-lab.js` (idempotent) — lab ghi trực tiếp vào DB, Meili auto-sync. Lab có 3 misconceptions, 6 TL;DR, 6 walkthrough, 4 quiz, 7 flashcards, 4 tryAtHome.
+- **Registry**: `VictoriaLogsPlayground` đã đăng ký trong `app/src/components/lab/diagrams/registry.ts`.
+- Verify: typecheck pass; `/api/labs/victorialogs` trả lab content; playground render 3 mode trong SEE (live).
+
+---
+
 ## 2026-06-03 — Mục "Bài Tập" chuyển PUBLIC + dọn dead code owner-gate
 
 - **Public hoá**: gỡ owner-gate khỏi mục Bài Tập — ai cũng xem được (đồng nhất labs/search). BE bỏ `requireAuth`/`requireOwner` khỏi `/api/exercises` + `/:slug`; FE bỏ `isOwner` gate + forbidden states (`exercises.tsx`, `exercise-viewer.tsx`), nav "Bài Tập" luôn hiện (`site-header.tsx`).

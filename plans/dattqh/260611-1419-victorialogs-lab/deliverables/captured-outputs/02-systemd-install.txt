@@ -1,0 +1,19 @@
+== UNIT ==
+[Unit]
+Description=VictoriaLogs
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/victoria-logs -storageDataPath=/var/lib/victoria-logs -httpListenAddr=:9428 -syslog.listenAddr.tcp=:5410
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+== INSTALL ==
+[sudo] password for dattqh-nat: Created symlink /etc/systemd/system/multi-user.target.wants/victorialogs.service → /etc/systemd/system/victorialogs.service.
+== ACTIVE ==
+active
+== PORTS ==
+LISTEN 0      4096         0.0.0.0:9428      0.0.0.0:*          
+LISTEN 0      4096         0.0.0.0:5410      0.0.0.0:*          

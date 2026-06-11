@@ -99,7 +99,11 @@ Field `tldr[].why` và `walkthrough[].why` hỗ trợ HTML inline link — rende
 ## Key Patterns
 
 ### Diagram Registry
-`app/src/components/lab/diagrams/registry.ts` maps fixture `diagram.component` string → lazy React component. Unknown keys = safe no-op (console.warn).
+`app/src/components/lab/diagrams/registry.ts` maps fixture `diagram.component` string → lazy React component. Unknown keys = safe no-op (console.warn). Playgrounds:
+- **VictoriaLogsPlayground** (new): 3-mode observability playground — kiến trúc animated, LogsQL evaluator, pipeline stepper
+- **DhcpPlayground**: DORA 4-bước visualizer + 2 sample pcap (conflict scenarios A/B)
+- **HttpPlayground**: 51 scenarios (auth, redirect, POST, streaming, etc.)
+- And others: ARP, DNS, ICMP, TCP/UDP, CIDR.
 
 ### Feature Flag
 `VITE_ENABLE_DIAGRAM_PLAYGROUND` (build-time) + `?textMode=1` (runtime) — disable playground, fall back to text.

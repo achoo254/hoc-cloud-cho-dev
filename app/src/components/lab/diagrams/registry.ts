@@ -57,6 +57,11 @@ export const diagramRegistry = {
       default: m.DnsPlayground,
     }))
   ),
+  VictoriaLogsPlayground: lazy(() =>
+    import('./victorialogs-playground').then((m) => ({
+      default: m.VictoriaLogsPlayground,
+    }))
+  ),
 } as const satisfies Record<string, React.LazyExoticComponent<DiagramComponent>>
 
 export type DiagramRegistryKey = keyof typeof diagramRegistry

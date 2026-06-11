@@ -1,0 +1,26 @@
+== Q1: _stream:{app_name="demo"} ==
+{"_msg":" hello victorialogs from rsyslog","_stream":"{app_name=\"demo\",hostname=\"dattqh-nat\",proc_id=\"-\"}","_stream_id":"00000000000000004b938d00907ea095fd4787a9a2d191ee","_time":"2026-06-11T08:02:40.975706Z","app_name":"demo","facility":"1","facility_keyword":"user","format":"rfc5424","hostname":"dattqh-nat","level":"notice","msg_id":"-","priority":"13","proc_id":"-","severity":"5"}
+{"_msg":" simulated error connection refused to db","_stream":"{app_name=\"demo\",hostname=\"dattqh-nat\",proc_id=\"-\"}","_stream_id":"00000000000000004b938d00907ea095fd4787a9a2d191ee","_time":"2026-06-11T08:02:40.978213Z","app_name":"demo","facility":"1","facility_keyword":"user","format":"rfc5424","hostname":"dattqh-nat","level":"error","msg_id":"-","priority":"11","proc_id":"-","severity":"3"}
+
+== Q2: word error (trong _msg) ==
+{"_msg":" simulated error connection refused to db","_stream":"{app_name=\"demo\",hostname=\"dattqh-nat\",proc_id=\"-\"}","_stream_id":"00000000000000004b938d00907ea095fd4787a9a2d191ee","_time":"2026-06-11T08:02:40.978213Z","app_name":"demo","facility":"1","facility_keyword":"user","format":"rfc5424","hostname":"dattqh-nat","level":"error","msg_id":"-","priority":"11","proc_id":"-","severity":"3"}
+
+== Q3: stats by (app_name) count() ==
+{"app_name":"demo","count(*)":"2"}
+{"app_name":"kernel","count(*)":"1"}
+{"app_name":"rsyslogd","count(*)":"5"}
+{"app_name":"sshd","count(*)":"8"}
+{"app_name":"sudo","count(*)":"1"}
+{"app_name":"systemd","count(*)":"10"}
+{"app_name":"systemd-logind","count(*)":"8"}
+{"app_name":"victoria-logs","count(*)":"1"}
+{"app_name":"webapp","count(*)":"2"}
+
+== Q4: _time:5m level:error ==
+{"_msg":" simulated error connection refused to db","_stream":"{app_name=\"demo\",hostname=\"dattqh-nat\",proc_id=\"-\"}","_stream_id":"00000000000000004b938d00907ea095fd4787a9a2d191ee","_time":"2026-06-11T08:02:40.978213Z","app_name":"demo","facility":"1","facility_keyword":"user","format":"rfc5424","hostname":"dattqh-nat","level":"error","msg_id":"-","priority":"11","proc_id":"-","severity":"3"}
+
+== Q5: stats by (level) count() ==
+{"level":"notice","count(*)":"4"}
+{"level":"warning","count(*)":"1"}
+{"level":"info","count(*)":"32"}
+{"level":"error","count(*)":"1"}

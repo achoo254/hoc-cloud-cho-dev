@@ -1,0 +1,10 @@
+== query * (limit 3) ==
+{"_msg":" Removed session 2423.","_stream":"{app_name=\"systemd-logind\",hostname=\"dattqh-nat\",proc_id=\"809\"}","_stream_id":"0000000000000000b56b76c587da25447203100ccb990fc5","_time":"2026-06-11T08:02:45.013366Z","app_name":"systemd-logind","facility":"4","facility_keyword":"auth","format":"rfc5424","hostname":"dattqh-nat","level":"info","msg_id":"-","priority":"38","proc_id":"809","severity":"6"}
+{"_msg":" Session 2423 logged out. Waiting for processes to exit.","_stream":"{app_name=\"systemd-logind\",hostname=\"dattqh-nat\",proc_id=\"809\"}","_stream_id":"0000000000000000b56b76c587da25447203100ccb990fc5","_time":"2026-06-11T08:02:45.012269Z","app_name":"systemd-logind","facility":"4","facility_keyword":"auth","format":"rfc5424","hostname":"dattqh-nat","level":"info","msg_id":"-","priority":"38","proc_id":"809","severity":"6"}
+{"_msg":" session-2423.scope: Deactivated successfully.","_stream":"{app_name=\"systemd\",hostname=\"dattqh-nat\",proc_id=\"1\"}","_stream_id":"000000000000000093a6c686f0ab0ecb5b38be672b86673d","_time":"2026-06-11T08:02:45.010978Z","app_name":"systemd","facility":"3","facility_keyword":"daemon","format":"rfc5424","hostname":"dattqh-nat","level":"info","msg_id":"-","priority":"30","proc_id":"1","severity":"6"}
+
+== query hello ==
+{"_msg":" hello victorialogs from rsyslog","_stream":"{app_name=\"demo\",hostname=\"dattqh-nat\",proc_id=\"-\"}","_stream_id":"00000000000000004b938d00907ea095fd4787a9a2d191ee","_time":"2026-06-11T08:02:40.975706Z","app_name":"demo","facility":"1","facility_keyword":"user","format":"rfc5424","hostname":"dattqh-nat","level":"notice","msg_id":"-","priority":"13","proc_id":"-","severity":"5"}
+
+== count all ==
+{"count(*)":"30"}
