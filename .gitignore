@@ -20,3 +20,8 @@ app/src/generated/*.json
 server/generated/
 dist-server/
 hoc-cloud-cho-dev-firebase-adminsdk-fbsvc-f941803336.json
+
+# ctxsync-secrets: env & Claude transient — NEVER commit
+.claude/session-state/
+.claude/agent-memory/
+.claude/settings.local.json
