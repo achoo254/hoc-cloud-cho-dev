@@ -10,7 +10,7 @@ VictoriaMetrics chỉ được nhắc tới như phần còn lại của cùng h
 
 VictoriaLogs là cơ sở dữ liệu log mã nguồn mở của nhóm VictoriaMetrics. Từ giữa năm 2025 nó được tách thành kho mã riêng `github.com/VictoriaMetrics/VictoriaLogs`, không còn nằm chung với VictoriaMetrics core. Bản dùng trong báo cáo là `v1.50.0`.
 
-Điểm khác với Elasticsearch — vốn hay được mặc định khi nói tới "lưu log" — nằm ở hai chỗ. Thứ nhất, dữ liệu được lưu theo cột và nén theo từng luồng log thay vì theo mô hình tài liệu của Lucene. Thứ hai, truy vấn dùng ngôn ngữ riêng LogsQL chứ không phải Query DSL; khả năng tương thích Elasticsearch chỉ có ở khâu nhận log (API `_bulk`), theo tài liệu [data ingestion: Elasticsearch](https://docs.victoriametrics.com/victorialogs/data-ingestion/elasticsearch/). Vì vậy không cắm Kibana vào VictoriaLogs; phần xem log dùng giao diện tích hợp `vmui` hoặc datasource VictoriaLogs trong Grafana.
+Điểm khác với Elasticsearch — vốn hay được mặc định khi nói tới "lưu log" — nằm ở hai chỗ. Thứ nhất, dữ liệu được lưu theo cột và nén theo từng luồng log thay vì theo mô hình tài liệu của Lucene. Thứ hai, truy vấn dùng ngôn ngữ riêng LogsQL chứ không phải Query DSL; khả năng tương thích Elasticsearch chỉ có ở khâu nhận log (API `_bulk`), theo tài liệu [data ingestion: Elasticsearch bulk API](https://docs.victoriametrics.com/victorialogs/data-ingestion/#elasticsearch-bulk-api). Vì vậy không cắm Kibana vào VictoriaLogs; phần xem log dùng giao diện tích hợp `vmui` hoặc datasource VictoriaLogs trong Grafana.
 
 Quan hệ với VictoriaMetrics: hai sản phẩm cùng nhóm, cùng triết lý vận hành nhẹ, nhưng tách biệt. VictoriaMetrics + MetricsQL lo metrics; VictoriaLogs + LogsQL lo logs.
 
@@ -163,7 +163,7 @@ Hướng tìm hiểu tiếp: thử các đường ingest khác (Vector, OpenTele
 - [2] Key concepts (fields, streams). https://docs.victoriametrics.com/victorialogs/keyconcepts/
 - [3] LogsQL. https://docs.victoriametrics.com/victorialogs/logsql/
 - [4] Data ingestion: syslog. https://docs.victoriametrics.com/victorialogs/data-ingestion/syslog/
-- [5] Data ingestion: Elasticsearch. https://docs.victoriametrics.com/victorialogs/data-ingestion/elasticsearch/
+- [5] Data ingestion: Elasticsearch bulk API. https://docs.victoriametrics.com/victorialogs/data-ingestion/#elasticsearch-bulk-api
 - [6] Querying. https://docs.victoriametrics.com/victorialogs/querying/
 - [7] Cluster. https://docs.victoriametrics.com/victorialogs/cluster/
 - [8] Quickstart. https://docs.victoriametrics.com/victorialogs/quickstart/
