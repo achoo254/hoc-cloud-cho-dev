@@ -49,7 +49,7 @@ app/src/
 ├── contexts/
 │   └── auth-context.tsx    # Firebase Auth state provider
 ├── lib/
-│   ├── firebase.ts         # Firebase client init (VITE_FIREBASE_CONFIG)
+│   ├── firebase.ts         # Firebase client init (VITE_FIREBASE_* keys)
 │   ├── api.ts              # Fetch helpers: getLabsIndex, getLabContent, search
 │   ├── schema-lab.ts       # Zod schema v3
 │   ├── sm2.ts              # SM-2 spaced-repetition algorithm

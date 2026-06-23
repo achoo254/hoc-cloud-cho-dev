@@ -28,7 +28,12 @@ FE build chạy `tsc --noEmit` → `vite build`. Lab content được fetch runt
 | Variable | Default | Description |
 |---|---|---|
 | `VITE_ENABLE_DIAGRAM_PLAYGROUND` | `true` | Set `"false"` để disable playground, fallback text-only. |
-| `VITE_FIREBASE_CONFIG` | — | **Required.** Firebase client config (JSON hoặc JS object literal). CI accept cả 2 định dạng; fail-fast nếu thiếu field bắt buộc. |
+| `VITE_FIREBASE_API_KEY` | — | **Required.** Firebase Web config (giá trị public). |
+| `VITE_FIREBASE_AUTH_DOMAIN` | — | **Required.** |
+| `VITE_FIREBASE_PROJECT_ID` | — | **Required.** |
+| `VITE_FIREBASE_APP_ID` | — | **Required.** |
+
+> CI không nhận từng key — nhận **1 Actions Variable `FIREBASE_WEB_CONFIG`** (JSON hoặc JS object literal), `deploy.yml` parse + fail-fast nếu thiếu field (`apiKey`/`authDomain`/`projectId`/`appId`) rồi tách thành 4 `VITE_FIREBASE_*` ở trên. Dev: điền trực tiếp 4 key vào `app/.env`.
 
 Runtime override: append `?textMode=1` lên lab URL → ép text mode bất kể build flag.
 
@@ -38,16 +43,22 @@ Runtime override: append `?textMode=1` lên lab URL → ép text mode bất kể
 |---|---|
 | `NODE_ENV` | **Phải là `production`** khi chạy via PM2 (set trong `ecosystem.config.cjs`). |
 | `PORT` | Default `8387`. |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account JSON cho firebase-admin (verify ID token, set session cookie). |
-| `SESSION_COOKIE_SECRET` | HMAC secret cho session cookie. |
+| `HOST` | Bind address, default `127.0.0.1` (optional). |
+| `APP_VERSION` | Hiển thị ở `/healthz`, default `dev` (optional; CI set = git sha). |
 | `MONGODB_URI` | **Required.** MongoDB connection string (e.g. `mongodb://localhost:27017/hoccloud`). |
 | `MEILISEARCH_HOST` | **Required.** Meilisearch base URL (e.g. `http://localhost:7700`). |
 | `MEILISEARCH_API_KEY` | Meilisearch master/admin API key. |
+| `FIREBASE_PROJECT_ID` | Firebase project id cho firebase-admin. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Service account JSON cho firebase-admin (verify ID token). Raw JSON hoặc base64. |
+| `PUBLIC_BASE_URL` | Absolute base URL cho canonical meta tags. |
+| `COOKIE_SECURE` | `"1"` ép Secure flag cho cookie (optional; auto-bật khi sau HTTPS proxy). |
+
+> Cookie session (`sid`) là token ngẫu nhiên, hash SHA256 lưu DB — **không** dùng HMAC secret, nên **không** có biến `SESSION_COOKIE_SECRET`.
 
 ## CI/CD Flow (`.github/workflows/deploy.yml`)
 
 1. Checkout + `npm ci` (root + `app/`)
-2. Inject `VITE_FIREBASE_CONFIG` từ GitHub Secrets
+2. Parse Actions Variable `FIREBASE_WEB_CONFIG` → tách thành 4 `VITE_FIREBASE_*` (fail-fast nếu thiếu field)
 3. `npm run build --prefix app` + `npm run build:server`
 4. Smoke test: spawn node server với bundle, curl `/healthz`
 5. Tar: `app/dist/` + `dist-server/server.bundle.js`
@@ -80,7 +91,7 @@ npm run typecheck --prefix app   # tsc --noEmit
 
 ## Troubleshooting
 
-- **Firebase config missing fields**: CI fail-fast với tên field thiếu. Kiểm tra `VITE_FIREBASE_CONFIG` secret.
+- **Firebase config missing fields**: CI fail-fast với tên field thiếu. Kiểm tra Actions Variable `FIREBASE_WEB_CONFIG`.
 - **PM2 chạy sai NODE_ENV**: script deploy export `NODE_ENV=production` trước `pm2 start/restart` (commit `b9cdb41`).
 - **OAuth redirect lỗi**: Nginx phải proxy `/auth/*` — xem commit `e136584`.
 - **MongoDB connection refused**: Đảm bảo `MONGODB_URI` đúng và MongoDB service đang chạy trước khi PM2 start.

@@ -131,7 +131,7 @@ CSS-only switch — no JS-based device detection.
 | SVG export | DOMPurify (`svg` + `svgFilters` profiles, block `script`/`foreignObject`/inline events) |
 | CSP | `server/lib/csp-middleware.js` — strict default-src + nonce-based script |
 | Auth token | Firebase ID token exchanged server-side, never stored client-side |
-| CI secrets | `VITE_FIREBASE_CONFIG` + `FIREBASE_SERVICE_ACCOUNT_JSON` via GitHub Secrets |
+| CI config | `FIREBASE_WEB_CONFIG` (Actions Variable, public) → tách thành `VITE_FIREBASE_*`; `FIREBASE_SERVICE_ACCOUNT_JSON` (Secret) |
 
 ## Progress State Machine
 
@@ -183,7 +183,7 @@ See `docs/deployment-guide.md` for full detail.
 ```
 push master → GitHub Actions
   → npm ci (root + app/)
-  → inject VITE_FIREBASE_CONFIG
+  → parse FIREBASE_WEB_CONFIG → VITE_FIREBASE_* keys
   → build FE (vite) + BE (esbuild single bundle)
   → smoke test /healthz
   → tar: dist/ + server.bundle.js

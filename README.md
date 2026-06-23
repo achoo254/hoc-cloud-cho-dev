@@ -64,7 +64,7 @@ Mở `http://localhost:5173`.
 
 ### Env vars
 
-Client cần `VITE_FIREBASE_CONFIG` (JSON config từ Firebase Console). Server cần `MONGODB_URI`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` + credentials của Firebase Admin (service account JSON) — xem `docs/deployment-guide.md`.
+Client cần 4 key `VITE_FIREBASE_*` (API key, auth domain, project id, app id — điền vào `app/.env`; CI tách từ Actions Variable `FIREBASE_WEB_CONFIG`). Server cần `MONGODB_URI`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` + credentials của Firebase Admin (service account JSON) — xem `docs/deployment-guide.md`.
 
 ## Build & Deploy
 
