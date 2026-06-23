@@ -29,10 +29,11 @@ Non-target: người tìm cert prep (AWS/Azure/GCP), enterprise training.
 
 | Req | Description | Status |
 |-----|-------------|--------|
-| FR-1 | 8+ labs mạng cơ bản với playground tương tác | ✅ 8 labs live |
+| FR-1 | 8+ labs mạng cơ bản với playground tương tác | ✅ 9 labs live (8 networking + VictoriaLogs observability) |
+| FR-1b | Exercises (practical hands-on: syslog, boot, swap) | ✅ 3 exercises public |
 | FR-2 | THINK/SEE/TRY IT structure per lab (TL;DR → walkthrough → quiz) | ✅ |
 | FR-3 | Desktop shows playground, mobile falls back to text | ✅ CSS-only switch |
-| FR-4 | Full-text search across labs với highlight | ✅ Meilisearch + typo-tolerance |
+| FR-4 | Full-text search across labs + exercises | ✅ Meilisearch, typo-tolerant, unified index |
 | FR-5 | Progress tracking (opened, completed, quiz score) | ✅ Per anon UUID + authed user |
 | FR-6 | Activity heatmap (GitHub-style) | ✅ |
 | FR-7 | Spaced repetition queue (SM-2 algorithm) | ✅ Flashcards |
@@ -112,4 +113,4 @@ Xem `docs/content-guidelines.md` (canonical):
 
 - Web terminal dùng WebContainer (StackBlitz) hay Docker sandbox tự host?
 - MongoDB replica set cho HA khi user base > 10k?
-- Rate-limit API (`/api/progress`, `/auth/session`) cần chưa?
+- Rate-limit cho `/api/progress` cần chưa? (`/auth/firebase/session` đã rate-limit 10 req/60s/IP)

@@ -66,20 +66,34 @@ server/
 ├── server.js               # Hono app entry, middleware chain
 ├── api/
 │   ├── labs-routes.js      # GET /api/labs, GET /api/labs/:slug (MongoDB)
-│   ├── search-routes.js    # GET /api/search (Meilisearch + <mark> highlights)
-│   ├── progress-routes.js  # GET/POST /api/progress
-│   └── leaderboard-routes.js
+│   ├── exercises-routes.js # GET /api/exercises, GET /api/exercises/:slug (MongoDB, public)
+│   ├── search-routes.js    # GET /api/search (Meilisearch + <mark> highlights, labs + exercises)
+│   ├── progress-routes.js  # GET/POST /api/progress, POST /api/progress/touch, POST /api/progress/migrate
+│   └── leaderboard-routes.js  # GET /api/leaderboard
 ├── auth/
 │   ├── firebase-admin.js   # firebase-admin SDK init (service account)
-│   ├── firebase-auth.js    # POST /auth/session, /auth/logout
+│   ├── firebase-auth.js    # POST /auth/firebase/session, POST /auth/logout
 │   └── session-middleware.js  # HttpOnly cookie verification
 ├── db/
-│   └── mongoose-models/    # MongoDB models (labs, progress, users)
+│   ├── models/
+│   │   ├── lab-model.js       # Lab schema + Meili post-save hook
+│   │   ├── exercise-model.js  # Exercise schema (independent)
+│   │   ├── user-model.js
+│   │   ├── progress-model.js
+│   │   ├── session-model.js
+│   │   ├── migration-batch-model.js  # Guest→authed progress merge idempotency
+│   │   └── index.js
+│   └── migrations/  # MongoDB migrations (not SQL)
 ├── scripts/
-│   └── update-lab-tcpdump.js   # Idempotent MongoDB content update for tcpdump sections (tryAtHome, misconceptions, tldr, walkthrough, quiz, flashcards)
+│   ├── update-lab-tcpdump.js
+│   ├── seed-victorialogs-lab.js
+│   ├── migrate-linux-labs-to-exercises.js
+│   └── sync-meili-index.js  # Bulk re-sync MongoDB → Meilisearch
 ├── lib/
-│   └── csp-middleware.js   # Content Security Policy
-└── ecosystem.config.cjs    # PM2 config (fork mode)
+│   ├── csp-middleware.js   # Content Security Policy
+│   ├── anon-uuid-cookie.js # Guest tracking
+│   └── ...
+└── ecosystem.config.cjs    # PM2 config (fork mode, NODE_ENV=production)
 ```
 
 ## Data Flow
@@ -99,11 +113,11 @@ Field `tldr[].why` và `walkthrough[].why` hỗ trợ HTML inline link — rende
 ## Key Patterns
 
 ### Diagram Registry
-`app/src/components/lab/diagrams/registry.ts` maps fixture `diagram.component` string → lazy React component. Unknown keys = safe no-op (console.warn). Playgrounds:
-- **VictoriaLogsPlayground** (new): 3-mode observability playground — kiến trúc animated, LogsQL evaluator, pipeline stepper
+`app/src/components/lab/diagrams/registry.ts` maps fixture `diagram.component` string → lazy React component. Unknown keys = safe no-op (console.warn). Registered playgrounds:
+- **VictoriaLogsPlayground** (`victorialogs-playground.tsx`): 3-mode observability — architecture flow (animated SVG, clickable single/cluster toggle), LogsQL mini-evaluator, pipeline stepper (5 steps ingest→stored→queried)
 - **DhcpPlayground**: DORA 4-bước visualizer + 2 sample pcap (conflict scenarios A/B)
 - **HttpPlayground**: 51 scenarios (auth, redirect, POST, streaming, etc.)
-- And others: ARP, DNS, ICMP, TCP/UDP, CIDR.
+- **IcmpPingPlayground**, **ArpPlayground**, **DnsPlayground**, **TcpUdpPlayground**, **SubnetCidrPlayground**, **TcpIpPacketJourneyPlayground**
 
 ### Feature Flag
 `VITE_ENABLE_DIAGRAM_PLAYGROUND` (build-time) + `?textMode=1` (runtime) — disable playground, fall back to text.
@@ -111,11 +125,15 @@ Field `tldr[].why` và `walkthrough[].why` hỗ trợ HTML inline link — rende
 ### SVG Export
 `export-utils.ts::exportSvg()` sanitizes via DOMPurify (`svg` + `svgFilters` profiles; blocks `script`/`foreignObject`/inline event handlers) before download.
 
+### Exercises System
+Independent collection (`exercises` in MongoDB, separate from labs). Each exercise: **Đề bài (brief) → Hướng dẫn (guide) + ảnh/video → Demo thực tế (demo screenshots)**. No quiz/flashcards/SM-2/Meili. Public (no auth gate). 3 Linux exercises: `syslog`, `linux-boot-process`, `linux-swap` moved from labs (2026-06-02/03). API: `GET /api/exercises` (catalog), `GET /api/exercises/:slug` (full content). FE: `/exercises` route + `/exercise/:slug` renderer. Model: `server/db/models/exercise-model.js`. Routes: `server/api/exercises-routes.js`.
+
 ### Auth Flow
 1. Client signs in with Google via Firebase Auth
-2. Client exchanges ID token → `POST /auth/session` → server sets HttpOnly cookie
+2. Client exchanges ID token → `POST /auth/firebase/session` → server sets HttpOnly cookie
 3. `session-middleware` verifies cookie on API calls, attaches `user` to context
 4. Guest users tracked by anonymous UUID cookie (progress still persists)
+5. On authed login, `POST /api/progress/migrate` merges guest progress → user bucket (idempotent via `migration-batch-model.js`)
 
 ## Dependencies (selected)
 

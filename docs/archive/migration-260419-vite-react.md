@@ -1,5 +1,7 @@
 # Migration: Vite+React SPA — 2026-04-19
 
+> **Status: COMPLETED & ARCHIVED.** Vite+React SPA là stack hiện tại; `labs/*.html` cũ đã gỡ. Doc này giữ làm hồ sơ lịch sử (runbook + lý do migrate), không còn là tài liệu vận hành. Stack/kiến trúc hiện tại: xem `docs/system-architecture.md`.
+
 Plan dir: `plans/dattqh/260419-1824-ui-migrate-vite-react/`
 
 ## What & Why

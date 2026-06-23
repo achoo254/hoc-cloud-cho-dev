@@ -51,40 +51,18 @@ Dark mode: `class` strategy (`.dark` on `<html>`). Never use `prefers-color-sche
 - Không import Radix trực tiếp vào feature code
 - Variant qua `class-variance-authority` (`cva`), không duplicate class string
 
-### Diagram Components
-- Lazy-loaded qua `registry.ts` — không import trực tiếp trong `lab-renderer.tsx`
-- Wrap trong `PlaygroundErrorBoundary` với text fallback
-- Component file < 200 LOC — split theo concern khi vượt
-
-### Lab Renderer
-- Pattern THINK/SEE/TRY IT cố định — không thêm phase mới tùy ý
-- Desktop playground + mobile text cùng source (fixture JSON), CSS switch
+### Lab Renderer & Diagram Components
+Xem `docs/code-standards.md` → **D3 vs Framer Motion** + **Lab Renderer Patterns** để biết chi tiết về THINK/SEE/TRY IT phase, lazy-loaded diagram registry, `PlaygroundErrorBoundary` fallback, desktop/mobile CSS switch.
 
 ## 5. Animation Rules
 
-### D3 vs Framer Motion Separation (CRITICAL)
+**D3 vs Framer Motion separation** (see `docs/code-standards.md`): D3 = math only (`scaleLinear()`, path generators). Framer Motion owns all DOM/SVG animation (`<motion.*>`, `AnimatePresence`).
 
-| Library | Allowed | Forbidden |
-|---------|---------|-----------|
-| `d3-scale`, `d3-shape` | `scaleLinear()`, path generators, layout math | `select()`, `.attr()`, `.style()`, direct DOM |
-| `framer-motion` | `<motion.*>`, `useAnimation`, `AnimatePresence` | Manual position/scale calc |
-
-**Rationale**: D3 DOM mutation conflicts với React reconciler.
-
-```ts
-// ✅ D3 math → Framer Motion DOM
-const xScale = scaleLinear().domain([0, n]).range([0, width])
-<motion.circle cx={xScale(idx)} animate={{ opacity: 1 }} />
-
-// ❌ Forbidden
-d3.select('circle').attr('cx', x)
-```
-
-### Motion principles
-- Respect `prefers-reduced-motion` — wrap long animations trong check
+**Motion principles**:
+- Respect `prefers-reduced-motion` — wrap long animations
 - Duration: UI micro (100–200ms), transition (200–400ms), playground step (500–1000ms)
-- Easing: default `ease-out` cho enter, `ease-in` cho exit
-- Stagger children trong list/grid animation
+- Easing: default `ease-out` enter, `ease-in` exit
+- Stagger children in list/grid
 
 ## 6. Iconography
 
@@ -111,21 +89,11 @@ d3.select('circle').attr('cx', x)
 
 ## 9. Forbidden Patterns
 
-- ❌ Hardcode HSL/hex color — dùng token
+- ❌ Hardcode HSL/hex — dùng Tailwind token (`--background`, `--foreground`, etc.)
 - ❌ Inline `style={{ color: '#...' }}` — dùng Tailwind class
-- ❌ Custom CSS file ngoài `globals.css` — trừ khi thật sự cần (CSS-in-JS **not used**)
-- ❌ `d3.select()` hoặc direct DOM mutation
-- ❌ Import Radix primitive trực tiếp (dùng shadcn wrapper)
-- ❌ Mix icon set ngoài Lucide
-- ❌ CSS-only animation cho playground (dùng Framer Motion để kiểm soát state)
-- ❌ Mobile-specific JS code path (CSS breakpoint only)
-
-## 10. Design Token References
-
-Khi thêm token/spacing mới, tham chiếu **inet-viui** MCP server (xem rule `~/.claude/rules/design-system-inet-viui.md`) — project token ưu tiên, inet-viui là fallback canonical.
-
-- Tra cứu: `search_tokens(query, type="colors|spacing|typography")`
-- Validate: `validate_token(type, value)`
-- Block/layout pattern: `search_blocks(query)` + `get_block(slug)`
-
-Cấm hardcode giá trị chưa tra cứu.
+- ❌ Custom CSS file ngoài `globals.css` — CSS-in-JS **not used**
+- ❌ `d3.select()` hoặc direct DOM mutation — D3 math only
+- ❌ Import Radix primitive trực tiếp — dùng `app/src/components/ui/` wrapper
+- ❌ Mix icon set ngoài Lucide React
+- ❌ CSS-only animation cho playground — Framer Motion for state control
+- ❌ Mobile-specific JS code — CSS breakpoint only (`hidden md:block`, `md:hidden`)

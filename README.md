@@ -22,6 +22,10 @@
 | 01-networking | `tcp-udp` | TCP vs UDP | 3-way handshake + connection comparison |
 | 02-observability | `victorialogs` | VictoriaLogs — Thu thập & truy vấn log | Architecture explorer + LogsQL evaluator + pipeline stepper |
 
+### Exercises (Bài tập)
+
+Ngoài labs còn collection **exercises** riêng (public) — bài thực hành Linux: `syslog`, `boot`, `swap`. Truy qua `/api/exercises`, search chung index Meilisearch với labs (phân biệt bằng field `type`).
+
 ## Tech Stack
 
 - **Frontend**: Vite 6, React 18, TypeScript, Tailwind CSS 3.4, shadcn/ui (Radix)
@@ -93,11 +97,16 @@ Xem `docs/content-guidelines.md` (tone, ngôi xưng, cite nguồn).
 | GET | `/healthz` | Health + DB status |
 | GET | `/api/labs` | Lab index (MongoDB) |
 | GET | `/api/labs/:slug` | Nội dung một lab (MongoDB) |
-| GET | `/api/search?q=<q>` | Meilisearch full-text search với highlight |
-| GET | `/api/progress` | Trả `{ uuid, progress: [...] }` theo session cookie |
-| POST | `/api/progress` | Upsert `{ lab_slug, opened_at?, completed_at?, quiz_score? }` |
+| GET | `/api/exercises` | Exercise index (MongoDB) |
+| GET | `/api/exercises/:slug` | Nội dung một exercise (MongoDB) |
+| GET | `/api/search?q=<q>` | Meilisearch full-text search (labs + exercises) với highlight |
+| GET | `/api/me` | Profile user hiện tại theo session |
+| GET | `/api/progress` | Trả `{ uuid, progress: [...] }` theo session/auth |
+| POST | `/api/progress` | Upsert tiến độ (cần auth) |
+| POST | `/api/progress/touch` | Bump `lastOpenedAt` khi mở lab |
+| POST | `/api/progress/migrate` | Merge tiến độ guest → authed (2-phase idempotent) |
 | GET | `/api/leaderboard` | Top users theo completion + streak |
-| POST | `/auth/session` | Đổi Firebase ID token → HttpOnly session cookie |
+| POST | `/auth/firebase/session` | Đổi Firebase ID token → HttpOnly session cookie |
 | POST | `/auth/logout` | Xoá session cookie |
 | GET | `/sse/reload` | Server-Sent Events (dev live-reload) |
 

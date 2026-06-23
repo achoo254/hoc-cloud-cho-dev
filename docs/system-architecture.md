@@ -13,7 +13,7 @@ Production: **https://hoc-cloud.inetdev.io.vn/**
 │  └──────┬───────┘  └──────┬───────┘  └─────────┬──────────┘    │
 │         │                 │                    │ ID token      │
 └─────────┼─────────────────┼────────────────────┼───────────────┘
-          │ /api/*          │ /api/progress      │ /auth/session
+          │ /api/*          │ /api/progress      │ /auth/firebase/session
           ▼                 ▼                    ▼
 ┌────────────────────────────────────────────────────────────────┐
 │               Nginx (VPS) — reverse proxy + static              │
@@ -66,7 +66,7 @@ GET /lab/dns
 ```
 Client: firebase.auth().signInWithPopup(GoogleProvider)
       → onAuthStateChanged fires → grab ID token
-      → POST /auth/session { idToken }
+      → POST /auth/firebase/session { idToken }
 Server: firebase-admin.verifyIdToken(idToken)
       → upsert user row (uid, email, displayName, photoURL)
       → set HttpOnly Secure SameSite=Lax session cookie (signed)
@@ -79,11 +79,11 @@ Subsequent requests include cookie → session-middleware attaches ctx.user
 ```
 GET /api/search?q=subnet
   → search-routes.js
-  → Meilisearch query (typo-tolerant, ranked)
-  → return [{ slug, title, snippet_with_<mark>_highlights }]
+  → Meilisearch query (type: labs|exercises, typo-tolerant, ranked)
+  → return [{ slug, title, type, snippet_with_<mark>_highlights }]
 ```
 
-Không còn offline fallback — Meilisearch là nguồn duy nhất. Khi API unreachable, UI hiển thị banner lỗi.
+**Meilisearch** là **nguồn duy nhất** cho search. Index `"labs"` chứa cả labs lẫn exercises (phân biệt qua field `type`). Auto-sync qua Mongoose post-save/delete hooks trên Lab + Exercise models. Offline fallback: **không có** — khi API unreachable, UI hiển thị banner lỗi.
 
 ### 4. Progress & Leaderboard
 
@@ -167,17 +167,14 @@ unopened  ──────────────────▶  opened  ─
 
 ### Migration (guest → authed)
 
-On successful login (`/auth/firebase/session`), the FE calls `POST /api/progress/migrate` with a UUID v4 `batchId` (persisted in localStorage for retry). BE reads the guest bucket via `userUuid` cookie and merges it into `userId` using `$min` on timestamps + `$setOnInsert` on identifiers — idempotent by construction.
+On successful login (`/auth/firebase/session`), FE calls `POST /api/progress/migrate` with UUID v4 `batchId` (persisted in localStorage for retry). BE reads guest bucket via `userUuid` cookie, merges into `userId` using MongoDB idempotent bulk ops (`$setOnInsert` + `$min` on timestamps).
 
-**2-phase batch record** (Mongo standalone, no transactions): a `MigrationBatch` doc guards the bulkWrite:
+**2-phase batch** (Mongo standalone, no transactions): `MigrationBatch` doc guards the bulkWrite:
+1. Insert batch `{ userId, batchId, status: 'pending' }` (unique constraint on userId + batchId)
+2. bulkWrite guest entries → user bucket (unordered, all ops idempotent)
+3. Update batch status: `'completed'` + timestamp + import count
 
-```
-1. Insert batch { userId, batchId, status: 'pending' }        ← unique (userId, batchId)
-2. bulkWrite guest entries → user bucket (unordered)
-3. Update batch status: 'completed' + completedAt + imported count
-```
-
-Replay semantics: duplicate `batchId` → read existing doc. `status === 'completed'` → `{ status: 'already_applied' }`. `status === 'pending'` → `{ status: 'in_progress' }` (crashed mid-flight or still running; FE retries after ~5s). Because the bulkWrite itself is idempotent (`$setOnInsert` + `$min`), re-running a pending batch is safe.
+**Replay semantics**: duplicate `batchId` → read existing doc. `status === 'completed'` → return `{ status: 'already_applied' }`. `status === 'pending'` → return `{ status: 'in_progress' }` (crashed mid-flight; FE retries ~5s). bulkWrite itself is safe to re-run (`$setOnInsert` + `$min` are idempotent).
 
 ## Deploy Pipeline
 
